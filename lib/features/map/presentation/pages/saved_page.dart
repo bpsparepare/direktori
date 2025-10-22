@@ -15,7 +15,7 @@ import '../widgets/map_view.dart';
 
 class SavedPage extends StatefulWidget {
   final MapController? mapController;
-  
+
   const SavedPage({super.key, this.mapController});
 
   @override
@@ -23,7 +23,7 @@ class SavedPage extends StatefulWidget {
 }
 
 class _SavedPageState extends State<SavedPage> {
-  final DraggableScrollableController _scrollController = 
+  final DraggableScrollableController _scrollController =
       DraggableScrollableController();
 
   @override
@@ -49,7 +49,11 @@ class _SavedPageState extends State<SavedPage> {
                   Align(
                     alignment: Alignment.bottomCenter,
                     child: Padding(
-                      padding: const EdgeInsets.only(bottom: 200.0, left: 12.0, right: 12.0),
+                      padding: const EdgeInsets.only(
+                        bottom: 200.0,
+                        left: 12.0,
+                        right: 12.0,
+                      ),
                       child: Card(
                         elevation: 6,
                         child: Padding(
@@ -77,9 +81,9 @@ class _SavedPageState extends State<SavedPage> {
                               ),
                               IconButton(
                                 icon: const Icon(Icons.close),
-                                onPressed: () => context
-                                    .read<MapBloc>()
-                                    .add(const PlaceCleared()),
+                                onPressed: () => context.read<MapBloc>().add(
+                                  const PlaceCleared(),
+                                ),
                               ),
                             ],
                           ),
@@ -87,7 +91,7 @@ class _SavedPageState extends State<SavedPage> {
                       ),
                     ),
                   ),
-                
+
                 // Draggable bottom sheet
                 DraggableScrollableSheet(
                   controller: _scrollController,
@@ -121,10 +125,13 @@ class _SavedPageState extends State<SavedPage> {
                               borderRadius: BorderRadius.circular(2),
                             ),
                           ),
-                          
+
                           // Header
                           const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 8,
+                            ),
                             child: Row(
                               children: [
                                 Icon(Icons.bookmark, color: Colors.blue),
@@ -139,30 +146,41 @@ class _SavedPageState extends State<SavedPage> {
                               ],
                             ),
                           ),
-                          
+
                           // Content
                           Expanded(
                             child: ListView(
                               controller: scrollController,
-                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
                               children: [
                                 const SizedBox(height: 16),
-                                ...state.places.map((place) => Card(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  child: ListTile(
-                                    leading: const Icon(Icons.place, color: Colors.red),
-                                    title: Text(place.name),
-                                    subtitle: Text(place.description),
-                                    onTap: () {
-                                      context.read<MapBloc>().add(PlaceSelected(place));
-                                      _scrollController.animateTo(
-                                        0.1,
-                                        duration: const Duration(milliseconds: 300),
-                                        curve: Curves.easeInOut,
-                                      );
-                                    },
+                                ...state.places.map(
+                                  (place) => Card(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    child: ListTile(
+                                      leading: const Icon(
+                                        Icons.place,
+                                        color: Colors.red,
+                                      ),
+                                      title: Text(place.name),
+                                      subtitle: Text(place.description),
+                                      onTap: () {
+                                        context.read<MapBloc>().add(
+                                          PlaceSelected(place),
+                                        );
+                                        _scrollController.animateTo(
+                                          0.1,
+                                          duration: const Duration(
+                                            milliseconds: 300,
+                                          ),
+                                          curve: Curves.easeInOut,
+                                        );
+                                      },
+                                    ),
                                   ),
-                                )),
+                                ),
                                 const SizedBox(height: 100),
                               ],
                             ),

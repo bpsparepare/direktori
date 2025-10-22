@@ -16,7 +16,7 @@ import '../../domain/entities/place.dart';
 
 class MapPage extends StatelessWidget {
   final MapController? mapController;
-  
+
   const MapPage({super.key, this.mapController});
 
   @override
@@ -46,9 +46,7 @@ class MapPage extends StatelessWidget {
                       context.read<MapBloc>().add(PlaceSelected(place));
                     },
                     onLongPress: (point) {
-                      context.read<MapBloc>().add(
-                        TemporaryMarkerAdded(point),
-                      );
+                      context.read<MapBloc>().add(TemporaryMarkerAdded(point));
                       _showContextMenu(context, point);
                     },
                     onPolygonSelected: (index) {
@@ -90,9 +88,9 @@ class MapPage extends StatelessWidget {
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.close),
-                                  onPressed: () => context
-                                      .read<MapBloc>()
-                                      .add(const PlaceCleared()),
+                                  onPressed: () => context.read<MapBloc>().add(
+                                    const PlaceCleared(),
+                                  ),
                                 ),
                               ],
                             ),

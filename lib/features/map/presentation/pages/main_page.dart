@@ -45,20 +45,21 @@ class _MainPageState extends State<MainPage> {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => MapBloc(
-        getInitialMapConfig: GetInitialMapConfig(MapRepositoryImpl()),
-        getPlaces: GetPlaces(MapRepositoryImpl()),
-        getFirstPolygonMeta: GetFirstPolygonMetaFromGeoJson(
-          MapRepositoryImpl(),
-        ),
-        getAllPolygonsMeta: GetAllPolygonsMetaFromGeoJson(
-          MapRepositoryImpl(),
-        ),
-      )
-        ..add(const MapInitRequested())
-        ..add(const PlacesRequested())
-        ..add(const PolygonRequested())
-        ..add(const PolygonsListRequested()),
+      create: (_) =>
+          MapBloc(
+              getInitialMapConfig: GetInitialMapConfig(MapRepositoryImpl()),
+              getPlaces: GetPlaces(MapRepositoryImpl()),
+              getFirstPolygonMeta: GetFirstPolygonMetaFromGeoJson(
+                MapRepositoryImpl(),
+              ),
+              getAllPolygonsMeta: GetAllPolygonsMetaFromGeoJson(
+                MapRepositoryImpl(),
+              ),
+            )
+            ..add(const MapInitRequested())
+            ..add(const PlacesRequested())
+            ..add(const PolygonRequested())
+            ..add(const PolygonsListRequested()),
       child: Scaffold(
         body: Stack(
           children: [
@@ -69,12 +70,12 @@ class _MainPageState extends State<MainPage> {
           ],
         ),
         bottomNavigationBar: BottomNavigationBar(
-            currentIndex: _selectedIndex,
-            onTap: (index) {
-              setState(() {
-                _selectedIndex = index;
-              });
-            },
+          currentIndex: _selectedIndex,
+          onTap: (index) {
+            setState(() {
+              _selectedIndex = index;
+            });
+          },
           type: BottomNavigationBarType.fixed,
           selectedItemColor: Colors.blue,
           unselectedItemColor: Colors.grey,
@@ -93,7 +94,7 @@ class _MainPageState extends State<MainPage> {
             ),
           ],
         ),
-       ),
-     );
-   }
- }
+      ),
+    );
+  }
+}

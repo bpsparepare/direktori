@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'compass_widget.dart';
 import '../../domain/entities/polygon_data.dart';
+import 'map_type.dart';
 
 class MapControls extends StatefulWidget {
   final MapController mapController;
@@ -16,6 +17,11 @@ class MapControls extends StatefulWidget {
   final List<PolygonData> polygonsMeta; // Add polygons metadata
   final Function(int)?
   onPolygonSelected; // Add callback for when polygon is selected
+  final MapType currentMapType; // Add current map type
+  final Function(MapType)? onMapTypeChanged; // Add map type change callback
+  final Function(double, double)? onOffsetChanged; // Add offset change callback
+  final double currentOffsetX; // Current X offset
+  final double currentOffsetY; // Current Y offset
 
   const MapControls({
     super.key,
@@ -27,6 +33,11 @@ class MapControls extends StatefulWidget {
     this.onPolygonSelection, // Add to constructor
     this.polygonsMeta = const [], // Add to constructor
     this.onPolygonSelected, // Add to constructor
+    required this.currentMapType, // Add to constructor
+    this.onMapTypeChanged, // Add to constructor
+    this.onOffsetChanged, // Add to constructor
+    this.currentOffsetX = 0.0, // Add to constructor
+    this.currentOffsetY = 0.0, // Add to constructor
   });
 
   @override
@@ -169,6 +180,136 @@ class _MapControlsState extends State<MapControls> {
       top: 100,
       child: Column(
         children: [
+          // Map Type Selector
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: PopupMenuButton<MapType>(
+              icon: const Icon(Icons.layers, color: Colors.black87),
+              tooltip: 'Pilih Jenis Peta',
+              onSelected: (MapType mapType) {
+                widget.onMapTypeChanged?.call(mapType);
+              },
+              itemBuilder: (BuildContext context) =>
+                  MapType.values.map((MapType mapType) {
+                    return PopupMenuItem<MapType>(
+                      value: mapType,
+                      child: Row(
+                        children: [
+                          Icon(
+                            widget.currentMapType == mapType
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_unchecked,
+                            color: widget.currentMapType == mapType
+                                ? Colors.blue
+                                : Colors.grey,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(mapType.name),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Offset Controls (only show for Esri satellite)
+          if (widget.currentMapType == MapType.satellite)
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: PopupMenuButton(
+                icon: const Icon(Icons.tune, color: Colors.black87),
+                tooltip: 'Sesuaikan Posisi Peta',
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    enabled: false,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Sesuaikan Posisi Peta',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        // X Offset Control
+                        Row(
+                          children: [
+                            const Text('X: '),
+                            Expanded(
+                              child: Slider(
+                                value: widget.currentOffsetX,
+                                min: -50.0,
+                                max: 50.0,
+                                divisions: 100,
+                                label: widget.currentOffsetX.toStringAsFixed(1),
+                                onChanged: (value) {
+                                  widget.onOffsetChanged?.call(
+                                    value,
+                                    widget.currentOffsetY,
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        // Y Offset Control
+                        Row(
+                          children: [
+                            const Text('Y: '),
+                            Expanded(
+                              child: Slider(
+                                value: widget.currentOffsetY,
+                                min: -50.0,
+                                max: 50.0,
+                                divisions: 100,
+                                label: widget.currentOffsetY.toStringAsFixed(1),
+                                onChanged: (value) {
+                                  widget.onOffsetChanged?.call(
+                                    widget.currentOffsetX,
+                                    value,
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        // Reset Button
+                        ElevatedButton(
+                          onPressed: () {
+                            widget.onOffsetChanged?.call(0.0, 0.0);
+                          },
+                          child: const Text('Reset'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 8),
+
           // Compass Widget
           CompassWidget(rotation: widget.rotation, onTap: _resetToNorth),
           const SizedBox(height: 8),

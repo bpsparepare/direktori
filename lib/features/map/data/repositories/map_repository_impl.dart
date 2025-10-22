@@ -14,6 +14,10 @@ class MapRepositoryImpl implements MapRepository {
     return const MapConfig(
       center: LatLng(-4.0328772052560335, 119.63160510345742),
       zoom: 13,
+      // Default offset untuk Esri satellite maps
+      // Nilai disesuaikan berdasarkan hasil debug: X: -4.6, Y: 15
+      defaultOffsetX: -32,
+      defaultOffsetY: 17.0,
     );
   }
 
