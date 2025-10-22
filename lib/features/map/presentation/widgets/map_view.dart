@@ -10,7 +10,6 @@ class MapView extends StatefulWidget {
   final List<Place> places;
   final List<LatLng> polygon;
   final String? polygonLabel;
-  final LatLng? temporaryMarker;
   final void Function(Place) onPlaceTap;
   final void Function(LatLng)? onLongPress;
 
@@ -20,7 +19,6 @@ class MapView extends StatefulWidget {
     required this.places,
     required this.polygon,
     this.polygonLabel,
-    this.temporaryMarker,
     required this.onPlaceTap,
     this.onLongPress,
   });
@@ -46,13 +44,12 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
-    _rotationAnimation = Tween<double>(
-      begin: 0,
-      end: 0,
-    ).animate(CurvedAnimation(
-      parent: _rotationAnimationController,
-      curve: Curves.easeInOut,
-    ));
+    _rotationAnimation = Tween<double>(begin: 0, end: 0).animate(
+      CurvedAnimation(
+        parent: _rotationAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
   }
 
   @override
@@ -62,13 +59,12 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   }
 
   void _animateToNorth() {
-    _rotationAnimation = Tween<double>(
-      begin: _rotation,
-      end: 0.0,
-    ).animate(CurvedAnimation(
-      parent: _rotationAnimationController,
-      curve: Curves.easeInOut,
-    ));
+    _rotationAnimation = Tween<double>(begin: _rotation, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _rotationAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
 
     _rotationAnimationController.addListener(() {
       final newRotation = _rotationAnimation.value;
@@ -104,32 +100,26 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
 
   void _fitPolygonToBounds(List<LatLng> points) {
     if (points.isEmpty) return;
-    
+
     // Hitung bounding box dari polygon
     double minLat = points.first.latitude;
     double maxLat = points.first.latitude;
     double minLng = points.first.longitude;
     double maxLng = points.first.longitude;
-    
+
     for (final point in points) {
       if (point.latitude < minLat) minLat = point.latitude;
       if (point.latitude > maxLat) maxLat = point.latitude;
       if (point.longitude < minLng) minLng = point.longitude;
       if (point.longitude > maxLng) maxLng = point.longitude;
     }
-    
+
     // Buat LatLngBounds dan fit ke bounds dengan padding
-    final bounds = LatLngBounds(
-      LatLng(minLat, minLng),
-      LatLng(maxLat, maxLng),
-    );
-    
+    final bounds = LatLngBounds(LatLng(minLat, minLng), LatLng(maxLat, maxLng));
+
     // Fit to bounds dengan padding untuk memberikan ruang di sekitar polygon
     _mapController.fitCamera(
-      CameraFit.bounds(
-        bounds: bounds,
-        padding: const EdgeInsets.all(50.0),
-      ),
+      CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50.0)),
     );
   }
 
@@ -159,7 +149,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final centroid = _centroid(widget.polygon);
     final double fontSize = _scaledFontSize();
-    final double labelWidth = widget.polygonLabel != null ? _scaledWidth(widget.polygonLabel!, fontSize) : 120;
+    final double labelWidth = widget.polygonLabel != null
+        ? _scaledWidth(widget.polygonLabel!, fontSize)
+        : 120;
     final double labelHeight = _scaledHeight(fontSize);
 
     return Stack(
@@ -191,9 +183,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               userAgentPackageName: 'com.example.direktori',
               maxZoom: 19,
               subdomains: const ['a', 'b', 'c'],
-              additionalOptions: const {
-                'crossOrigin': 'anonymous',
-              },
+              additionalOptions: const {'crossOrigin': 'anonymous'},
               tileBuilder: (context, tileWidget, tile) {
                 return tileWidget;
               },
@@ -209,7 +199,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                   ),
                 ],
               ),
-            if (widget.polygon.isNotEmpty && widget.polygonLabel != null && centroid != null)
+            if (widget.polygon.isNotEmpty &&
+                widget.polygonLabel != null &&
+                centroid != null)
               MarkerLayer(
                 markers: [
                   Marker(
@@ -279,36 +271,11 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                       decoration: BoxDecoration(
                         color: Colors.blue.withOpacity(0.3),
                         shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.blue,
-                          width: 3,
-                        ),
+                        border: Border.all(color: Colors.blue, width: 3),
                       ),
                       child: const Icon(
                         Icons.my_location,
                         color: Colors.blue,
-                        size: 24,
-                      ),
-                    ),
-                  ),
-                // Temporary marker for long press
-                if (widget.temporaryMarker != null)
-                  Marker(
-                    point: widget.temporaryMarker!,
-                    width: 40,
-                    height: 40,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.8),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.orange,
-                          width: 2,
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.place,
-                        color: Colors.white,
                         size: 24,
                       ),
                     ),

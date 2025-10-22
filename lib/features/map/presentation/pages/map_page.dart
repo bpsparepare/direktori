@@ -46,11 +46,10 @@ class MapPage extends StatelessWidget {
                 return Stack(
                   children: [
                     MapView(
-                      config: state.config!,
+                      config: config,
                       places: state.places,
                       polygon: state.polygon,
                       polygonLabel: state.polygonLabel,
-                      temporaryMarker: state.temporaryMarker,
                       onPlaceTap: (p) =>
                           context.read<MapBloc>().add(PlaceSelected(p)),
                       onLongPress: (point) => _showContextMenu(context, point),
@@ -371,9 +370,6 @@ class MapPage extends StatelessWidget {
   }
 
   void _showContextMenu(BuildContext context, LatLng point) {
-    // Set temporary marker
-    context.read<MapBloc>().add(TemporaryMarkerSet(point));
-    
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -398,17 +394,14 @@ class MapPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            
+
             // Title
             const Text(
               'Pilih Aksi',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
-            
+
             // Menu options
             ListTile(
               leading: const Icon(Icons.info, color: Colors.blue),
@@ -437,22 +430,19 @@ class MapPage extends StatelessWidget {
                 _showNavigasiDialog(context, point);
               },
             ),
-            
+
             const SizedBox(height: 20),
           ],
         ),
       ),
-    ).whenComplete(() {
-      // Clear temporary marker when bottom sheet is closed
-      context.read<MapBloc>().add(const TemporaryMarkerCleared());
-    });
+    );
   }
 
   void _showInfoDialog(BuildContext context, LatLng point) {
     // Convert decimal coordinates to DMS format
     final String latDMS = _convertToDMS(point.latitude, true);
     final String lngDMS = _convertToDMS(point.longitude, false);
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -469,7 +459,7 @@ class MapPage extends StatelessWidget {
             Text('Latitude: ${point.latitude.toStringAsFixed(6)}'),
             Text('Longitude: ${point.longitude.toStringAsFixed(6)}'),
             const SizedBox(height: 16),
-            
+
             const Text(
               'Koordinat DMS:',
               style: TextStyle(fontWeight: FontWeight.bold),
@@ -478,7 +468,7 @@ class MapPage extends StatelessWidget {
             Text('Latitude: $latDMS'),
             Text('Longitude: $lngDMS'),
             const SizedBox(height: 16),
-            
+
             const Text(
               'SLS Terpilih:',
               style: TextStyle(fontWeight: FontWeight.bold),
@@ -515,13 +505,9 @@ class MapPage extends StatelessWidget {
           ),
           if (context.mounted)
             TextButton(
-              onPressed: () async {
+              onPressed: () {
                 Navigator.pop(context);
-                // Add a small delay to ensure dialog is closed
-                await Future.delayed(const Duration(milliseconds: 100));
-                if (context.mounted) {
-                  _selectPolygonAtPoint(context, point);
-                }
+                _selectPolygonAtPoint(context, point);
               },
               child: const Text('Pilih SLS'),
             ),
@@ -533,27 +519,31 @@ class MapPage extends StatelessWidget {
   String _convertToDMS(double decimal, bool isLatitude) {
     final bool isNegative = decimal < 0;
     final double absDecimal = decimal.abs();
-    
+
     final int degrees = absDecimal.floor();
     final double minutesDecimal = (absDecimal - degrees) * 60;
     final int minutes = minutesDecimal.floor();
     final double seconds = (minutesDecimal - minutes) * 60;
-    
+
     String direction;
     if (isLatitude) {
       direction = isNegative ? 'S' : 'N';
     } else {
       direction = isNegative ? 'W' : 'E';
     }
-    
+
     return '${degrees}° ${minutes}\' ${seconds.toStringAsFixed(2)}" $direction';
   }
 
-  Future<String?> _findPolygonAtPoint(LatLng point, BuildContext context) async {
+  Future<String?> _findPolygonAtPoint(
+    LatLng point,
+    BuildContext context,
+  ) async {
     try {
       final bloc = context.read<MapBloc>();
-      final polygons = bloc.state.polygonsMeta; // Gunakan data yang sudah ada di state
-      
+      final polygons =
+          bloc.state.polygonsMeta; // Gunakan data yang sudah ada di state
+
       for (final polygon in polygons) {
         if (_isPointInPolygon(point, polygon.points)) {
           return '${polygon.name} (${polygon.idsls})';
@@ -568,9 +558,13 @@ class MapPage extends StatelessWidget {
   bool _isPointInPolygon(LatLng point, List<LatLng> polygon) {
     int intersectCount = 0;
     for (int j = 0, i = 1; i < polygon.length; j = i++) {
-      if (((polygon[i].latitude > point.latitude) != (polygon[j].latitude > point.latitude)) &&
-          (point.longitude < (polygon[j].longitude - polygon[i].longitude) * 
-           (point.latitude - polygon[i].latitude) / (polygon[j].latitude - polygon[i].latitude) + polygon[i].longitude)) {
+      if (((polygon[i].latitude > point.latitude) !=
+              (polygon[j].latitude > point.latitude)) &&
+          (point.longitude <
+              (polygon[j].longitude - polygon[i].longitude) *
+                      (point.latitude - polygon[i].latitude) /
+                      (polygon[j].latitude - polygon[i].latitude) +
+                  polygon[i].longitude)) {
         intersectCount++;
       }
     }
@@ -580,18 +574,15 @@ class MapPage extends StatelessWidget {
   void _selectPolygonAtPoint(BuildContext context, LatLng point) async {
     try {
       final bloc = context.read<MapBloc>();
-      final polygons = bloc.state.polygonsMeta; // Gunakan data yang sudah ada di state
-      
-      debugPrint('_selectPolygonAtPoint: Checking ${polygons.length} polygons for point $point');
-      
+      final polygons =
+          bloc.state.polygonsMeta; // Gunakan data yang sudah ada di state
+
       for (int i = 0; i < polygons.length; i++) {
         final polygon = polygons[i];
         if (_isPointInPolygon(point, polygon.points)) {
-          debugPrint('_selectPolygonAtPoint: Found polygon at index $i: ${polygon.name}');
-          
           // Select the polygon by index seperti pilih polygon biasa
           bloc.add(PolygonSelectedByIndex(i));
-          
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('SLS ${polygon.name} telah dipilih'),
@@ -601,8 +592,7 @@ class MapPage extends StatelessWidget {
           return;
         }
       }
-      
-      debugPrint('_selectPolygonAtPoint: No polygon found at point $point');
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Tidak ada SLS di lokasi ini'),
@@ -610,10 +600,9 @@ class MapPage extends StatelessWidget {
         ),
       );
     } catch (e) {
-      debugPrint('_selectPolygonAtPoint: Error occurred: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Terjadi kesalahan saat memilih SLS: $e'),
+        const SnackBar(
+          content: Text('Terjadi kesalahan saat memilih SLS'),
           backgroundColor: Colors.red,
         ),
       );
@@ -623,18 +612,14 @@ class MapPage extends StatelessWidget {
   void _showTambahDirektoriDialog(BuildContext context, LatLng point) {
     // TODO: Implement tambah direktori functionality
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Fitur Tambah Direktori akan segera hadir'),
-      ),
+      const SnackBar(content: Text('Fitur Tambah Direktori akan segera hadir')),
     );
   }
 
   void _showNavigasiDialog(BuildContext context, LatLng point) {
     // TODO: Implement navigasi functionality
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Fitur Navigasi akan segera hadir'),
-      ),
+      const SnackBar(content: Text('Fitur Navigasi akan segera hadir')),
     );
   }
 }

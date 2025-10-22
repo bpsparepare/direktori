@@ -43,18 +43,22 @@ class _MapControlsState extends State<MapControls> {
 
       // Cek permission
       LocationPermission permission = await Geolocator.checkPermission();
-      
+
       if (permission == LocationPermission.denied) {
         // Request permission
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          _showLocationError('Izin lokasi ditolak. Silakan berikan izin untuk menggunakan fitur ini.');
+          _showLocationError(
+            'Izin lokasi ditolak. Silakan berikan izin untuk menggunakan fitur ini.',
+          );
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
-        _showLocationError('Izin lokasi ditolak permanen. Silakan aktifkan di pengaturan aplikasi.');
+        _showLocationError(
+          'Izin lokasi ditolak permanen. Silakan aktifkan di pengaturan aplikasi.',
+        );
         // Buka pengaturan aplikasi
         await Geolocator.openAppSettings();
         return;
@@ -90,7 +94,7 @@ class _MapControlsState extends State<MapControls> {
       }
     } catch (e) {
       String errorMessage = 'Gagal mendapatkan lokasi';
-      
+
       if (e.toString().contains('location_service_disabled')) {
         errorMessage = 'Layanan lokasi tidak aktif. Silakan aktifkan GPS.';
       } else if (e.toString().contains('permission_denied')) {
@@ -100,7 +104,7 @@ class _MapControlsState extends State<MapControls> {
       } else {
         errorMessage = 'Gagal mendapatkan lokasi: ${e.toString()}';
       }
-      
+
       _showLocationError(errorMessage);
     } finally {
       if (mounted) {
@@ -114,10 +118,7 @@ class _MapControlsState extends State<MapControls> {
   void _showLocationError(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
       );
     }
   }
@@ -152,12 +153,9 @@ class _MapControlsState extends State<MapControls> {
       child: Column(
         children: [
           // Compass Widget
-          CompassWidget(
-            rotation: widget.rotation,
-            onTap: _resetToNorth,
-          ),
+          CompassWidget(rotation: widget.rotation, onTap: _resetToNorth),
           const SizedBox(height: 8),
-          
+
           // Current Location Button
           Container(
             decoration: BoxDecoration(
@@ -184,7 +182,7 @@ class _MapControlsState extends State<MapControls> {
             ),
           ),
           const SizedBox(height: 8),
-          
+
           // Zoom In Button
           Container(
             decoration: BoxDecoration(
@@ -205,7 +203,7 @@ class _MapControlsState extends State<MapControls> {
             ),
           ),
           const SizedBox(height: 4),
-          
+
           // Zoom Out Button
           Container(
             decoration: BoxDecoration(

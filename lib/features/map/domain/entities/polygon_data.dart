@@ -7,5 +7,11 @@ class PolygonData {
   final String? desa; // nmdesa
   final String? idsls; // idsls for sorting
 
-  const PolygonData({required this.points, this.name, this.kecamatan, this.desa, this.idsls});
+  const PolygonData({
+    required this.points,
+    this.name,
+    this.kecamatan,
+    this.desa,
+    this.idsls,
+  });
 }

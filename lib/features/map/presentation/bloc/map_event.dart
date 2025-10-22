@@ -1,5 +1,4 @@
 import 'package:equatable/equatable.dart';
-import 'package:latlong2/latlong.dart';
 import '../../domain/entities/place.dart';
 import '../../domain/entities/polygon_data.dart';
 
@@ -37,7 +36,9 @@ class PolygonRequested extends MapEvent {
 
 class PolygonsListRequested extends MapEvent {
   final String assetPath;
-  const PolygonsListRequested({this.assetPath = 'assets/geojson/final_sls.geojson'});
+  const PolygonsListRequested({
+    this.assetPath = 'assets/geojson/final_sls.geojson',
+  });
   @override
   List<Object?> get props => [assetPath];
 }
@@ -54,15 +55,4 @@ class PolygonSelected extends MapEvent {
   const PolygonSelected(this.polygon);
   @override
   List<Object?> get props => [polygon];
-}
-
-class TemporaryMarkerSet extends MapEvent {
-  final LatLng? position;
-  const TemporaryMarkerSet(this.position);
-  @override
-  List<Object?> get props => [position];
-}
-
-class TemporaryMarkerCleared extends MapEvent {
-  const TemporaryMarkerCleared();
 }

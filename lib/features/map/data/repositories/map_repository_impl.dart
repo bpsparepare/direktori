@@ -54,12 +54,16 @@ class MapRepositoryImpl implements MapRepository {
       rethrow;
     }
     final dynamic data = json.decode(jsonStr);
-    if (data is! Map || data['features'] is! List || (data['features'] as List).isEmpty) {
+    if (data is! Map ||
+        data['features'] is! List ||
+        (data['features'] as List).isEmpty) {
       debugPrint('GeoJSON: no features found in $cleanPath');
       return <LatLng>[];
     }
-    final Map<String, dynamic> firstFeature = (data['features'] as List).first as Map<String, dynamic>;
-    final Map<String, dynamic>? geometry = firstFeature['geometry'] as Map<String, dynamic>?;
+    final Map<String, dynamic> firstFeature =
+        (data['features'] as List).first as Map<String, dynamic>;
+    final Map<String, dynamic>? geometry =
+        firstFeature['geometry'] as Map<String, dynamic>?;
     if (geometry == null) {
       debugPrint('GeoJSON: geometry is null in first feature');
       return <LatLng>[];
@@ -80,7 +84,9 @@ class MapRepositoryImpl implements MapRepository {
         return <LatLng>[];
       }
     } else if (type == 'Polygon') {
-      if (coordinates is List && coordinates.isNotEmpty && coordinates[0] is List) {
+      if (coordinates is List &&
+          coordinates.isNotEmpty &&
+          coordinates[0] is List) {
         ring = coordinates[0] as List;
       } else {
         debugPrint('GeoJSON: invalid coordinates for Polygon');
@@ -99,7 +105,9 @@ class MapRepositoryImpl implements MapRepository {
         points.add(LatLng(lat, lon));
       }
     }
-    debugPrint('GeoJSON: loaded first polygon with ${points.length} points from $cleanPath');
+    debugPrint(
+      'GeoJSON: loaded first polygon with ${points.length} points from $cleanPath',
+    );
     return points;
   }
 
@@ -115,21 +123,46 @@ class MapRepositoryImpl implements MapRepository {
       rethrow;
     }
     final dynamic data = json.decode(jsonStr);
-    if (data is! Map || data['features'] is! List || (data['features'] as List).isEmpty) {
+    if (data is! Map ||
+        data['features'] is! List ||
+        (data['features'] as List).isEmpty) {
       debugPrint('GeoJSON(meta): no features found in $cleanPath');
-      return const PolygonData(points: <LatLng>[], name: null, kecamatan: null, desa: null, idsls: null);
+      return const PolygonData(
+        points: <LatLng>[],
+        name: null,
+        kecamatan: null,
+        desa: null,
+        idsls: null,
+      );
     }
-    final Map<String, dynamic> firstFeature = (data['features'] as List).first as Map<String, dynamic>;
-    final Map<String, dynamic>? properties = firstFeature['properties'] as Map<String, dynamic>?;
-    final String? name = properties != null ? properties['nmsls'] as String? : null;
-    final String? kec = properties != null ? properties['nmkec'] as String? : null;
-    final String? desa = properties != null ? properties['nmdesa'] as String? : null;
-    final String? idsls = properties != null ? properties['idsls'] as String? : null;
+    final Map<String, dynamic> firstFeature =
+        (data['features'] as List).first as Map<String, dynamic>;
+    final Map<String, dynamic>? properties =
+        firstFeature['properties'] as Map<String, dynamic>?;
+    final String? name = properties != null
+        ? properties['nmsls'] as String?
+        : null;
+    final String? kec = properties != null
+        ? properties['nmkec'] as String?
+        : null;
+    final String? desa = properties != null
+        ? properties['nmdesa'] as String?
+        : null;
+    final String? idsls = properties != null
+        ? properties['idsls'] as String?
+        : null;
 
-    final Map<String, dynamic>? geometry = firstFeature['geometry'] as Map<String, dynamic>?;
+    final Map<String, dynamic>? geometry =
+        firstFeature['geometry'] as Map<String, dynamic>?;
     if (geometry == null) {
       debugPrint('GeoJSON(meta): geometry is null in first feature');
-      return PolygonData(points: const <LatLng>[], name: name, kecamatan: kec, desa: desa, idsls: idsls);
+      return PolygonData(
+        points: const <LatLng>[],
+        name: name,
+        kecamatan: kec,
+        desa: desa,
+        idsls: idsls,
+      );
     }
     final String? type = geometry['type'] as String?;
     final dynamic coordinates = geometry['coordinates'];
@@ -144,18 +177,38 @@ class MapRepositoryImpl implements MapRepository {
         ring = (coordinates[0] as List)[0] as List;
       } else {
         debugPrint('GeoJSON(meta): invalid coordinates for MultiPolygon');
-        return PolygonData(points: const <LatLng>[], name: name, kecamatan: kec, desa: desa, idsls: idsls);
+        return PolygonData(
+          points: const <LatLng>[],
+          name: name,
+          kecamatan: kec,
+          desa: desa,
+          idsls: idsls,
+        );
       }
     } else if (type == 'Polygon') {
-      if (coordinates is List && coordinates.isNotEmpty && coordinates[0] is List) {
+      if (coordinates is List &&
+          coordinates.isNotEmpty &&
+          coordinates[0] is List) {
         ring = coordinates[0] as List;
       } else {
         debugPrint('GeoJSON(meta): invalid coordinates for Polygon');
-        return PolygonData(points: const <LatLng>[], name: name, kecamatan: kec, desa: desa, idsls: idsls);
+        return PolygonData(
+          points: const <LatLng>[],
+          name: name,
+          kecamatan: kec,
+          desa: desa,
+          idsls: idsls,
+        );
       }
     } else {
       debugPrint('GeoJSON(meta): unsupported geometry type: $type');
-      return PolygonData(points: const <LatLng>[], name: name, kecamatan: kec, desa: desa, idsls: idsls);
+      return PolygonData(
+        points: const <LatLng>[],
+        name: name,
+        kecamatan: kec,
+        desa: desa,
+        idsls: idsls,
+      );
     }
 
     final List<LatLng> points = <LatLng>[];
@@ -166,12 +219,22 @@ class MapRepositoryImpl implements MapRepository {
         points.add(LatLng(lat, lon));
       }
     }
-    debugPrint('GeoJSON(meta): loaded first polygon with ${points.length} points and name "$name" from $cleanPath');
-    return PolygonData(points: points, name: name, kecamatan: kec, desa: desa, idsls: idsls);
+    debugPrint(
+      'GeoJSON(meta): loaded first polygon with ${points.length} points and name "$name" from $cleanPath',
+    );
+    return PolygonData(
+      points: points,
+      name: name,
+      kecamatan: kec,
+      desa: desa,
+      idsls: idsls,
+    );
   }
 
   @override
-  Future<List<PolygonData>> getAllPolygonsMetaFromGeoJson(String assetPath) async {
+  Future<List<PolygonData>> getAllPolygonsMetaFromGeoJson(
+    String assetPath,
+  ) async {
     final String cleanPath = assetPath.trim().replaceAll(RegExp(r'^"|\"$'), '');
     debugPrint('GeoJSON(list): attempting to load asset: $cleanPath');
     String jsonStr;
@@ -200,15 +263,33 @@ class MapRepositoryImpl implements MapRepository {
     for (final dynamic f in features) {
       if (f is! Map<String, dynamic>) continue;
       final Map<String, dynamic> feature = f;
-      final Map<String, dynamic>? properties = feature['properties'] as Map<String, dynamic>?;
-      final String? name = properties != null ? properties['nmsls'] as String? : null;
-      final String? kec = properties != null ? properties['nmkec'] as String? : null;
-      final String? desa = properties != null ? properties['nmdesa'] as String? : null;
-      final String? idsls = properties != null ? properties['idsls'] as String? : null;
+      final Map<String, dynamic>? properties =
+          feature['properties'] as Map<String, dynamic>?;
+      final String? name = properties != null
+          ? properties['nmsls'] as String?
+          : null;
+      final String? kec = properties != null
+          ? properties['nmkec'] as String?
+          : null;
+      final String? desa = properties != null
+          ? properties['nmdesa'] as String?
+          : null;
+      final String? idsls = properties != null
+          ? properties['idsls'] as String?
+          : null;
 
-      final Map<String, dynamic>? geometry = feature['geometry'] as Map<String, dynamic>?;
+      final Map<String, dynamic>? geometry =
+          feature['geometry'] as Map<String, dynamic>?;
       if (geometry == null) {
-        results.add(PolygonData(points: const <LatLng>[], name: name, kecamatan: kec, desa: desa, idsls: idsls));
+        results.add(
+          PolygonData(
+            points: const <LatLng>[],
+            name: name,
+            kecamatan: kec,
+            desa: desa,
+            idsls: idsls,
+          ),
+        );
         continue;
       }
       final String? type = geometry['type'] as String?;
@@ -224,14 +305,24 @@ class MapRepositoryImpl implements MapRepository {
           ring = (coordinates[0] as List)[0] as List;
         }
       } else if (type == 'Polygon') {
-        if (coordinates is List && coordinates.isNotEmpty && coordinates[0] is List) {
+        if (coordinates is List &&
+            coordinates.isNotEmpty &&
+            coordinates[0] is List) {
           ring = coordinates[0] as List;
         }
       }
 
       if (ring == null) {
         debugPrint('GeoJSON(list): invalid geometry for a feature, type=$type');
-        results.add(PolygonData(points: const <LatLng>[], name: name, kecamatan: kec, desa: desa, idsls: idsls));
+        results.add(
+          PolygonData(
+            points: const <LatLng>[],
+            name: name,
+            kecamatan: kec,
+            desa: desa,
+            idsls: idsls,
+          ),
+        );
         continue;
       }
 
@@ -243,10 +334,20 @@ class MapRepositoryImpl implements MapRepository {
           points.add(LatLng(lat, lon));
         }
       }
-      results.add(PolygonData(points: points, name: name, kecamatan: kec, desa: desa, idsls: idsls));
+      results.add(
+        PolygonData(
+          points: points,
+          name: name,
+          kecamatan: kec,
+          desa: desa,
+          idsls: idsls,
+        ),
+      );
     }
 
-    debugPrint('GeoJSON(list): loaded ${results.length} polygons with names from $cleanPath');
+    debugPrint(
+      'GeoJSON(list): loaded ${results.length} polygons with names from $cleanPath',
+    );
     return results;
   }
 }

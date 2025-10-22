@@ -1,11 +1,11 @@
-import 'package:bloc/bloc.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'map_event.dart';
+import 'map_state.dart';
 import '../../domain/usecases/get_initial_map_config.dart';
 import '../../domain/usecases/get_places.dart';
 import '../../domain/usecases/get_first_polygon_meta_from_geojson.dart';
 import '../../domain/usecases/get_all_polygons_meta_from_geojson.dart';
-import 'map_event.dart';
-import 'map_state.dart';
 
 class MapBloc extends Bloc<MapEvent, MapState> {
   final GetInitialMapConfig getInitialMapConfig;
@@ -21,14 +21,12 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   }) : super(const MapState()) {
     on<MapInitRequested>(_onInit);
     on<PlacesRequested>(_onPlacesRequested);
+    on<PlaceSelected>(_onPlaceSelected);
+    on<PlaceCleared>(_onPlaceCleared);
     on<PolygonRequested>(_onPolygonRequested);
     on<PolygonsListRequested>(_onPolygonsListRequested);
     on<PolygonSelectedByIndex>(_onPolygonSelectedByIndex);
     on<PolygonSelected>(_onPolygonSelected);
-    on<PlaceSelected>(_onPlaceSelected);
-    on<PlaceCleared>(_onPlaceCleared);
-    on<TemporaryMarkerSet>(_onTemporaryMarkerSet);
-    on<TemporaryMarkerCleared>(_onTemporaryMarkerCleared);
   }
 
   Future<void> _onInit(MapInitRequested event, Emitter<MapState> emit) async {
@@ -120,10 +118,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     );
   }
 
-  void _onPolygonSelected(
-    PolygonSelected event,
-    Emitter<MapState> emit,
-  ) {
+  void _onPolygonSelected(PolygonSelected event, Emitter<MapState> emit) {
     emit(
       state.copyWith(
         polygon: event.polygon.points,
@@ -139,13 +134,5 @@ class MapBloc extends Bloc<MapEvent, MapState> {
 
   void _onPlaceCleared(PlaceCleared event, Emitter<MapState> emit) {
     emit(state.copyWith(selectedPlace: null));
-  }
-
-  void _onTemporaryMarkerSet(TemporaryMarkerSet event, Emitter<MapState> emit) {
-    emit(state.copyWith(temporaryMarker: event.position));
-  }
-
-  void _onTemporaryMarkerCleared(TemporaryMarkerCleared event, Emitter<MapState> emit) {
-    emit(state.copyWith(temporaryMarker: null));
   }
 }
