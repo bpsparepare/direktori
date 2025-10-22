@@ -15,6 +15,7 @@ class MapState extends Equatable {
   final String? polygonLabel;
   final List<PolygonData> polygonsMeta;
   final PolygonData? selectedPolygonMeta;
+  final LatLng? temporaryMarker; // Marker sementara untuk long press
   final String? error;
 
   const MapState({
@@ -26,6 +27,7 @@ class MapState extends Equatable {
     this.polygonLabel,
     this.polygonsMeta = const [],
     this.selectedPolygonMeta,
+    this.temporaryMarker,
     this.error,
   });
 
@@ -38,6 +40,7 @@ class MapState extends Equatable {
     String? polygonLabel,
     List<PolygonData>? polygonsMeta,
     PolygonData? selectedPolygonMeta,
+    LatLng? temporaryMarker,
     String? error,
   }) {
     return MapState(
@@ -49,10 +52,22 @@ class MapState extends Equatable {
       polygonLabel: polygonLabel ?? this.polygonLabel,
       polygonsMeta: polygonsMeta ?? this.polygonsMeta,
       selectedPolygonMeta: selectedPolygonMeta ?? this.selectedPolygonMeta,
+      temporaryMarker: temporaryMarker ?? this.temporaryMarker,
       error: error ?? this.error,
     );
   }
 
   @override
-  List<Object?> get props => [status, config, places, selectedPlace, polygon, polygonLabel, polygonsMeta, selectedPolygonMeta, error];
+  List<Object?> get props => [
+    status,
+    config,
+    places,
+    selectedPlace,
+    polygon,
+    polygonLabel,
+    polygonsMeta,
+    selectedPolygonMeta,
+    temporaryMarker,
+    error,
+  ];
 }

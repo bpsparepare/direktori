@@ -28,5 +28,9 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSLocationUsageDescription</key>
+	<string>Aplikasi ini memerlukan akses lokasi untuk menampilkan posisi Anda di peta.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Aplikasi ini memerlukan akses lokasi untuk menampilkan posisi Anda di peta.</string>
 </dict>
 </plist>
