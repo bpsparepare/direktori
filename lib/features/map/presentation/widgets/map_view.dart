@@ -16,6 +16,7 @@ class MapView extends StatefulWidget {
   final void Function(Place) onPlaceTap;
   final void Function(LatLng)? onLongPress;
   final void Function(int)? onPolygonSelected;
+  final MapController? mapController; // Add optional MapController parameter
 
   const MapView({
     super.key,
@@ -28,6 +29,7 @@ class MapView extends StatefulWidget {
     required this.onPlaceTap,
     this.onLongPress,
     this.onPolygonSelected,
+    this.mapController, // Add to constructor
   });
 
   @override
@@ -46,7 +48,8 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _zoom = widget.config.zoom;
-    _mapController = MapController();
+    // Use provided MapController or create new one
+    _mapController = widget.mapController ?? MapController();
     _rotationAnimationController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,

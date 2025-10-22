@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
@@ -14,115 +15,101 @@ import '../widgets/map_controls.dart';
 import '../../domain/entities/place.dart';
 
 class MapPage extends StatelessWidget {
-  const MapPage({super.key});
+  final MapController? mapController;
+  
+  const MapPage({super.key, this.mapController});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Direktori Map')),
-      body: BlocProvider(
-        create: (_) =>
-            MapBloc(
-                getInitialMapConfig: GetInitialMapConfig(MapRepositoryImpl()),
-                getPlaces: GetPlaces(MapRepositoryImpl()),
-                getFirstPolygonMeta: GetFirstPolygonMetaFromGeoJson(
-                  MapRepositoryImpl(),
-                ),
-                getAllPolygonsMeta: GetAllPolygonsMetaFromGeoJson(
-                  MapRepositoryImpl(),
-                ),
-              )
-              ..add(const MapInitRequested())
-              ..add(const PlacesRequested())
-              ..add(const PolygonRequested())
-              ..add(const PolygonsListRequested()),
-        child: BlocBuilder<MapBloc, MapState>(
-          builder: (context, state) {
-            switch (state.status) {
-              case MapStatus.loading:
-                return const Center(child: CircularProgressIndicator());
-              case MapStatus.failure:
-                return Center(child: Text(state.error ?? 'Terjadi kesalahan'));
-              case MapStatus.success:
-                final config = state.config!;
-                return Stack(
-                  children: [
-                    MapView(
-                      config: config,
-                      places: state.places,
-                      polygon: state.polygon,
-                      polygonLabel: state.polygonLabel,
-                      temporaryMarker: state.temporaryMarker,
-                      polygonsMeta: state.polygonsMeta,
-                      onPlaceTap: (place) {
-                        context.read<MapBloc>().add(PlaceSelected(place));
-                      },
-                      onLongPress: (point) {
-                        context.read<MapBloc>().add(
-                          TemporaryMarkerAdded(point),
-                        );
-                        _showContextMenu(context, point);
-                      },
-                      onPolygonSelected: (index) {
-                        context.read<MapBloc>().add(
-                          PolygonSelectedByIndex(index),
-                        );
-                      },
-                    ),
-                    if (state.selectedPlace != null)
-                      Align(
-                        alignment: Alignment.bottomCenter,
-                        child: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Card(
-                            elevation: 6,
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Icon(Icons.place, color: Colors.red),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          state.selectedPlace!.name,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                          ),
+    return BlocBuilder<MapBloc, MapState>(
+      builder: (context, state) {
+        switch (state.status) {
+          case MapStatus.loading:
+            return const Center(child: CircularProgressIndicator());
+          case MapStatus.failure:
+            return Center(child: Text(state.error ?? 'Terjadi kesalahan'));
+          case MapStatus.success:
+            final config = state.config!;
+            return Scaffold(
+              appBar: AppBar(title: const Text('Direktori Map')),
+              body: Stack(
+                children: [
+                  MapView(
+                    config: config,
+                    places: state.places,
+                    polygon: state.polygon,
+                    polygonLabel: state.polygonLabel,
+                    temporaryMarker: state.temporaryMarker,
+                    polygonsMeta: state.polygonsMeta,
+                    mapController: mapController, // Pass shared MapController
+                    onPlaceTap: (place) {
+                      context.read<MapBloc>().add(PlaceSelected(place));
+                    },
+                    onLongPress: (point) {
+                      context.read<MapBloc>().add(
+                        TemporaryMarkerAdded(point),
+                      );
+                      _showContextMenu(context, point);
+                    },
+                    onPolygonSelected: (index) {
+                      context.read<MapBloc>().add(
+                        PolygonSelectedByIndex(index),
+                      );
+                    },
+                  ),
+                  if (state.selectedPlace != null)
+                    Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Card(
+                          elevation: 6,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.place, color: Colors.red),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        state.selectedPlace!.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
                                         ),
-                                        const SizedBox(height: 4),
-                                        Text(state.selectedPlace!.description),
-                                      ],
-                                    ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(state.selectedPlace!.description),
+                                    ],
                                   ),
-                                  IconButton(
-                                    icon: const Icon(Icons.close),
-                                    onPressed: () => context
-                                        .read<MapBloc>()
-                                        .add(const PlaceCleared()),
-                                  ),
-                                ],
-                              ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close),
+                                  onPressed: () => context
+                                      .read<MapBloc>()
+                                      .add(const PlaceCleared()),
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ),
+                    ),
 
-                    // Info polygon terpilih: nmsls, nmkec, nmdesa
-                  ],
-                );
-              case MapStatus.initial:
-              default:
-                return const SizedBox.shrink();
-            }
-          },
-        ),
-      ),
+                  // Info polygon terpilih: nmsls, nmkec, nmdesa
+                ],
+              ),
+            );
+          case MapStatus.initial:
+          default:
+            return const SizedBox.shrink();
+        }
+      },
     );
   }
 
