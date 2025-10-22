@@ -10,6 +10,8 @@ import '../../domain/usecases/get_places.dart';
 import '../../domain/usecases/get_first_polygon_meta_from_geojson.dart';
 import '../../domain/usecases/get_all_polygons_meta_from_geojson.dart';
 import '../widgets/map_view.dart';
+import '../widgets/map_controls.dart';
+import '../../domain/entities/place.dart';
 
 class MapPage extends StatelessWidget {
   const MapPage({super.key});
@@ -50,9 +52,22 @@ class MapPage extends StatelessWidget {
                       places: state.places,
                       polygon: state.polygon,
                       polygonLabel: state.polygonLabel,
-                      onPlaceTap: (p) =>
-                          context.read<MapBloc>().add(PlaceSelected(p)),
-                      onLongPress: (point) => _showContextMenu(context, point),
+                      temporaryMarker: state.temporaryMarker,
+                      polygonsMeta: state.polygonsMeta,
+                      onPlaceTap: (place) {
+                        context.read<MapBloc>().add(PlaceSelected(place));
+                      },
+                      onLongPress: (point) {
+                        context.read<MapBloc>().add(
+                          TemporaryMarkerAdded(point),
+                        );
+                        _showContextMenu(context, point);
+                      },
+                      onPolygonSelected: (index) {
+                        context.read<MapBloc>().add(
+                          PolygonSelectedByIndex(index),
+                        );
+                      },
                     ),
                     if (state.selectedPlace != null)
                       Align(
@@ -97,266 +112,8 @@ class MapPage extends StatelessWidget {
                           ),
                         ),
                       ),
+
                     // Info polygon terpilih: nmsls, nmkec, nmdesa
-                    if (state.selectedPolygonMeta != null)
-                      Positioned(
-                        left: 16,
-                        bottom: state.selectedPlace != null ? 96 : 16,
-                        child: Card(
-                          elevation: 4,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.label,
-                                      size: 18,
-                                      color: Colors.blueAccent,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      state.selectedPolygonMeta!.name ?? '-',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Kecamatan: ${state.selectedPolygonMeta!.kecamatan ?? '-'}',
-                                ),
-                                Text(
-                                  'Desa/Kelurahan: ${state.selectedPolygonMeta!.desa ?? '-'}',
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    // FAB: pilih polygon
-                    Positioned(
-                      right: 16,
-                      bottom: state.selectedPlace != null ? 96 : 16,
-                      child: FloatingActionButton.extended(
-                        onPressed: () async {
-                          final bloc = context.read<MapBloc>();
-                          final list = bloc.state.polygonsMeta;
-                          await showModalBottomSheet(
-                            context: context,
-                            isScrollControlled:
-                                true, // Memungkinkan modal full screen
-                            useSafeArea: true, // Menggunakan safe area
-                            builder: (_) {
-                              String query = '';
-                              return StatefulBuilder(
-                                builder: (ctx, setModalState) {
-                                  final filtered =
-                                      list.where((p) {
-                                        final q = query.toLowerCase();
-                                        final n = (p.name ?? '').toLowerCase();
-                                        final kc = (p.kecamatan ?? '')
-                                            .toLowerCase();
-                                        final ds = (p.desa ?? '').toLowerCase();
-                                        return n.contains(q) ||
-                                            kc.contains(q) ||
-                                            ds.contains(q);
-                                      }).toList()..sort((a, b) {
-                                        // Sort by idsls field
-                                        final aIdsls = a.idsls ?? '';
-                                        final bIdsls = b.idsls ?? '';
-                                        return aIdsls.compareTo(bIdsls);
-                                      });
-                                  return DraggableScrollableSheet(
-                                    initialChildSize:
-                                        0.9, // Mulai dengan 90% tinggi layar
-                                    minChildSize:
-                                        0.5, // Minimum 50% tinggi layar
-                                    maxChildSize:
-                                        0.95, // Maximum 95% tinggi layar
-                                    expand: false,
-                                    builder: (context, scrollController) {
-                                      return Container(
-                                        decoration: const BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.vertical(
-                                            top: Radius.circular(20),
-                                          ),
-                                        ),
-                                        child: Column(
-                                          children: [
-                                            // Handle bar untuk drag
-                                            Container(
-                                              width: 40,
-                                              height: 4,
-                                              margin:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 8,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey[300],
-                                                borderRadius:
-                                                    BorderRadius.circular(2),
-                                              ),
-                                            ),
-                                            // Header
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 16,
-                                                    vertical: 8,
-                                                  ),
-                                              child: Row(
-                                                children: [
-                                                  const Icon(
-                                                    Icons.search,
-                                                    color: Colors.grey,
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  const Text(
-                                                    'Pilih Polygon',
-                                                    style: TextStyle(
-                                                      fontSize: 18,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                  const Spacer(),
-                                                  IconButton(
-                                                    onPressed: () =>
-                                                        Navigator.pop(context),
-                                                    icon: const Icon(
-                                                      Icons.close,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            // Search field
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 16,
-                                                    vertical: 8,
-                                                  ),
-                                              child: TextField(
-                                                autofocus:
-                                                    false, // Auto focus untuk UX yang lebih baik
-                                                decoration: InputDecoration(
-                                                  prefixIcon: const Icon(
-                                                    Icons.search,
-                                                  ),
-                                                  hintText:
-                                                      'Cari nmsls / nmkec / nmdesa',
-                                                  border: OutlineInputBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          12,
-                                                        ),
-                                                  ),
-                                                  filled: true,
-                                                  fillColor: Colors.grey[50],
-                                                ),
-                                                onChanged: (v) => setModalState(
-                                                  () => query = v,
-                                                ),
-                                              ),
-                                            ),
-                                            // Results list
-                                            Expanded(
-                                              child: ListView.builder(
-                                                controller:
-                                                    scrollController, // Menggunakan scroll controller
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                    ),
-                                                itemCount: filtered.length,
-                                                itemBuilder: (ctx2, i) {
-                                                  final item = filtered[i];
-                                                  final idx = list.indexOf(
-                                                    item,
-                                                  );
-                                                  final name =
-                                                      item.name ??
-                                                      'Polygon ${idx + 1}';
-                                                  final subtitle =
-                                                      '${item.kecamatan ?? '-'} • ${item.desa ?? '-'}';
-                                                  return Card(
-                                                    margin:
-                                                        const EdgeInsets.symmetric(
-                                                          vertical: 2,
-                                                          horizontal: 8,
-                                                        ),
-                                                    child: ListTile(
-                                                      leading: Container(
-                                                        padding:
-                                                            const EdgeInsets.all(
-                                                              8,
-                                                            ),
-                                                        decoration: BoxDecoration(
-                                                          color:
-                                                              Colors.blue[50],
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                8,
-                                                              ),
-                                                        ),
-                                                        child: Icon(
-                                                          Icons.polyline,
-                                                          color:
-                                                              Colors.blue[700],
-                                                        ),
-                                                      ),
-                                                      title: Text(
-                                                        name,
-                                                        style: const TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.w500,
-                                                        ),
-                                                      ),
-                                                      subtitle: Text(subtitle),
-                                                      trailing: const Icon(
-                                                        Icons.arrow_forward_ios,
-                                                        size: 16,
-                                                      ),
-                                                      onTap: () {
-                                                        Navigator.of(
-                                                          ctx2,
-                                                        ).pop();
-                                                        bloc.add(
-                                                          PolygonSelectedByIndex(
-                                                            idx,
-                                                          ),
-                                                        );
-                                                      },
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  );
-                                },
-                              );
-                            },
-                          );
-                        },
-                        icon: const Icon(Icons.select_all),
-                        label: const Text('Pilih Polygon'),
-                      ),
-                    ),
                   ],
                 );
               case MapStatus.initial:
@@ -369,9 +126,9 @@ class MapPage extends StatelessWidget {
     );
   }
 
-  void _showContextMenu(BuildContext context, LatLng point) {
+  void _showContextMenu(BuildContext parentContext, LatLng point) {
     showModalBottomSheet(
-      context: context,
+      context: parentContext,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
@@ -409,7 +166,12 @@ class MapPage extends StatelessWidget {
               subtitle: const Text('Lihat informasi koordinat dan SLS'),
               onTap: () {
                 Navigator.pop(context);
-                _showInfoDialog(context, point);
+                // Ambil MapBloc dari context yang memiliki akses ke provider
+                final mapBloc = parentContext.read<MapBloc>();
+                parentContext.read<MapBloc>().add(
+                  const TemporaryMarkerRemoved(),
+                );
+                _showInfoDialog(parentContext, point, mapBloc);
               },
             ),
             ListTile(
@@ -418,6 +180,9 @@ class MapPage extends StatelessWidget {
               subtitle: const Text('Tambah direktori baru'),
               onTap: () {
                 Navigator.pop(context);
+                parentContext.read<MapBloc>().add(
+                  const TemporaryMarkerRemoved(),
+                );
                 _showTambahDirektoriDialog(context, point);
               },
             ),
@@ -427,6 +192,9 @@ class MapPage extends StatelessWidget {
               subtitle: const Text('Navigasi ke lokasi'),
               onTap: () {
                 Navigator.pop(context);
+                parentContext.read<MapBloc>().add(
+                  const TemporaryMarkerRemoved(),
+                );
                 _showNavigasiDialog(context, point);
               },
             ),
@@ -438,14 +206,17 @@ class MapPage extends StatelessWidget {
     );
   }
 
-  void _showInfoDialog(BuildContext context, LatLng point) {
+  void _showInfoDialog(BuildContext context, LatLng point, MapBloc mapBloc) {
     // Convert decimal coordinates to DMS format
     final String latDMS = _convertToDMS(point.latitude, true);
     final String lngDMS = _convertToDMS(point.longitude, false);
 
+    // Use the passed MapBloc instance
+    final state = mapBloc.state;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Informasi Koordinat'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -474,43 +245,62 @@ class MapPage extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
-            FutureBuilder<String?>(
-              future: _findPolygonAtPoint(point, context),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Row(
-                    children: [
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      SizedBox(width: 8),
-                      Text('Mencari SLS...'),
-                    ],
-                  );
-                } else if (snapshot.hasData && snapshot.data != null) {
-                  return Text('SLS: ${snapshot.data}');
-                } else {
-                  return const Text('Tidak ada SLS di lokasi ini');
+            Builder(
+              builder: (builderContext) {
+                String? polygonInfo;
+                for (final polygon in state.polygonsMeta) {
+                  if (_isPointInPolygon(point, polygon.points)) {
+                    polygonInfo = '${polygon.name} (${polygon.idsls})';
+                    break;
+                  }
                 }
+
+                return polygonInfo != null
+                    ? Text('SLS: $polygonInfo')
+                    : const Text('Tidak ada SLS di lokasi ini');
               },
             ),
           ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              Navigator.of(context).pop();
+              context.read<MapBloc>().add(const TemporaryMarkerRemoved());
+            },
             child: const Text('Tutup'),
           ),
-          if (context.mounted)
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _selectPolygonAtPoint(context, point);
-              },
-              child: const Text('Pilih SLS'),
-            ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              context.read<MapBloc>().add(const TemporaryMarkerRemoved());
+              // Cari polygon di state yang sudah ada
+              for (int i = 0; i < state.polygonsMeta.length; i++) {
+                final polygon = state.polygonsMeta[i];
+                if (_isPointInPolygon(point, polygon.points)) {
+                  // Select polygon menggunakan mapBloc yang sudah diambil
+                  mapBloc.add(PolygonSelectedByIndex(i));
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('SLS ${polygon.name} telah dipilih'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                  return;
+                }
+              }
+
+              // Jika tidak ditemukan
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Tidak ada SLS di lokasi ini'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            },
+            child: const Text('Pilih SLS'),
+          ),
         ],
       ),
     );
@@ -544,13 +334,21 @@ class MapPage extends StatelessWidget {
       final polygons =
           bloc.state.polygonsMeta; // Gunakan data yang sudah ada di state
 
+      print(
+        'DEBUG: _findPolygonAtPoint called with point: ${point.latitude}, ${point.longitude}',
+      );
+      print('DEBUG: Total polygons in state for find: ${polygons.length}');
+
       for (final polygon in polygons) {
         if (_isPointInPolygon(point, polygon.points)) {
+          print('DEBUG: Found polygon in _findPolygonAtPoint: ${polygon.name}');
           return '${polygon.name} (${polygon.idsls})';
         }
       }
+      print('DEBUG: No polygon found in _findPolygonAtPoint');
       return null;
     } catch (e) {
+      print('DEBUG: Error in _findPolygonAtPoint: $e');
       return null;
     }
   }
@@ -577,9 +375,15 @@ class MapPage extends StatelessWidget {
       final polygons =
           bloc.state.polygonsMeta; // Gunakan data yang sudah ada di state
 
+      print(
+        'DEBUG: _selectPolygonAtPoint called with point: ${point.latitude}, ${point.longitude}',
+      );
+      print('DEBUG: Total polygons in state: ${polygons.length}');
+
       for (int i = 0; i < polygons.length; i++) {
         final polygon = polygons[i];
         if (_isPointInPolygon(point, polygon.points)) {
+          print('DEBUG: Found polygon at index $i: ${polygon.name}');
           // Select the polygon by index seperti pilih polygon biasa
           bloc.add(PolygonSelectedByIndex(i));
 
@@ -593,6 +397,7 @@ class MapPage extends StatelessWidget {
         }
       }
 
+      print('DEBUG: No polygon found at point');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Tidak ada SLS di lokasi ini'),
@@ -600,6 +405,7 @@ class MapPage extends StatelessWidget {
         ),
       );
     } catch (e) {
+      print('DEBUG: Error in _selectPolygonAtPoint: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Terjadi kesalahan saat memilih SLS'),

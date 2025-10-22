@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../domain/entities/map_config.dart';
 import '../../domain/entities/place.dart';
+import '../../domain/entities/polygon_data.dart';
 import 'map_controls.dart';
 
 class MapView extends StatefulWidget {
@@ -10,8 +11,11 @@ class MapView extends StatefulWidget {
   final List<Place> places;
   final List<LatLng> polygon;
   final String? polygonLabel;
+  final LatLng? temporaryMarker;
+  final List<PolygonData> polygonsMeta;
   final void Function(Place) onPlaceTap;
   final void Function(LatLng)? onLongPress;
+  final void Function(int)? onPolygonSelected;
 
   const MapView({
     super.key,
@@ -19,8 +23,11 @@ class MapView extends StatefulWidget {
     required this.places,
     required this.polygon,
     this.polygonLabel,
+    this.temporaryMarker,
+    this.polygonsMeta = const [],
     required this.onPlaceTap,
     this.onLongPress,
+    this.onPolygonSelected,
   });
 
   @override
@@ -90,12 +97,50 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
 
   LatLng? _centroid(List<LatLng> pts) {
     if (pts.isEmpty) return null;
-    double sumLat = 0, sumLon = 0;
-    for (final p in pts) {
-      sumLat += p.latitude;
-      sumLon += p.longitude;
+    if (pts.length == 1) return pts.first;
+    
+    // Implementasi geometric centroid untuk polygon
+    // Menggunakan algoritma yang memperhitungkan area polygon
+    double area = 0.0;
+    double centroidX = 0.0;
+    double centroidY = 0.0;
+    
+    // Pastikan polygon tertutup
+    List<LatLng> points = List.from(pts);
+    if (points.first.latitude != points.last.latitude || 
+        points.first.longitude != points.last.longitude) {
+      points.add(points.first);
     }
-    return LatLng(sumLat / pts.length, sumLon / pts.length);
+    
+    // Hitung area dan centroid menggunakan shoelace formula
+    for (int i = 0; i < points.length - 1; i++) {
+      double x0 = points[i].longitude;
+      double y0 = points[i].latitude;
+      double x1 = points[i + 1].longitude;
+      double y1 = points[i + 1].latitude;
+      
+      double a = x0 * y1 - x1 * y0;
+      area += a;
+      centroidX += (x0 + x1) * a;
+      centroidY += (y0 + y1) * a;
+    }
+    
+    area *= 0.5;
+    
+    // Jika area terlalu kecil, fallback ke arithmetic mean
+    if (area.abs() < 1e-10) {
+      double sumLat = 0, sumLon = 0;
+      for (final p in pts) {
+        sumLat += p.latitude;
+        sumLon += p.longitude;
+      }
+      return LatLng(sumLat / pts.length, sumLon / pts.length);
+    }
+    
+    centroidX /= (6.0 * area);
+    centroidY /= (6.0 * area);
+    
+    return LatLng(centroidY, centroidX);
   }
 
   void _fitPolygonToBounds(List<LatLng> points) {
@@ -265,19 +310,31 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                 if (_currentLocation != null)
                   Marker(
                     point: _currentLocation!,
-                    width: 50,
-                    height: 50,
+                    width: _getMarkerSize(),
+                    height: _getMarkerSize(),
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.blue.withOpacity(0.3),
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.blue, width: 3),
+                        border: Border.all(color: Colors.blue, width: 2),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.my_location,
                         color: Colors.blue,
-                        size: 24,
+                        size: _getIconSize(),
                       ),
+                    ),
+                  ),
+                // Temporary marker for long press
+                if (widget.temporaryMarker != null)
+                  Marker(
+                    point: widget.temporaryMarker!,
+                    width: 40,
+                    height: 40,
+                    child: const Icon(
+                      Icons.place,
+                      color: Colors.orange,
+                      size: 32,
                     ),
                   ),
               ],
@@ -289,6 +346,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           mapController: _mapController,
           initialCenter: widget.config.center,
           rotation: _rotation,
+          polygonsMeta: widget.polygonsMeta,
           onResetPosition: () {
             // Animate rotation to north smoothly
             _animateToNorth();
@@ -299,8 +357,25 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               _currentLocation = location;
             });
           },
+          onPolygonSelected: widget.onPolygonSelected,
         ),
       ],
     );
+  }
+
+  // Helper methods for responsive marker sizing
+  double _getMarkerSize() {
+    // Base size is 30, scales with zoom level
+    // Minimum size: 20, Maximum size: 60
+    double baseSize = 30.0;
+    double scaleFactor = (_zoom / 13.0); // 13 is the default zoom
+    double size = baseSize * scaleFactor;
+    return size.clamp(20.0, 60.0);
+  }
+
+  double _getIconSize() {
+    // Icon size is proportional to marker size
+    double markerSize = _getMarkerSize();
+    return (markerSize * 0.6).clamp(12.0, 36.0);
   }
 }

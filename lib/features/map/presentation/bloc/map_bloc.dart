@@ -27,6 +27,8 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     on<PolygonsListRequested>(_onPolygonsListRequested);
     on<PolygonSelectedByIndex>(_onPolygonSelectedByIndex);
     on<PolygonSelected>(_onPolygonSelected);
+    on<TemporaryMarkerAdded>(_onTemporaryMarkerAdded);
+    on<TemporaryMarkerRemoved>(_onTemporaryMarkerRemoved);
   }
 
   Future<void> _onInit(MapInitRequested event, Emitter<MapState> emit) async {
@@ -60,10 +62,19 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       debugPrint(
         'BLoC: polygon points loaded = ${meta.points.length}, label = ${meta.name}',
       );
+      
+      // Buat label yang lebih informatif dengan nmsls, nmkec, dan nmdesa
+      String label = meta.name ?? 'Polygon';
+      if (meta.kecamatan != null || meta.desa != null) {
+        final kecInfo = meta.kecamatan ?? '-';
+        final desaInfo = meta.desa ?? '-';
+        label = '$label\nKec: $kecInfo\nDesa: $desaInfo';
+      }
+      
       emit(
         state.copyWith(
           polygon: meta.points,
-          polygonLabel: meta.name,
+          polygonLabel: label,
           selectedPolygonMeta: meta,
         ),
       );
@@ -86,7 +97,15 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       var selMeta = state.selectedPolygonMeta;
       if (selPoints.isEmpty && list.isNotEmpty) {
         selPoints = list.first.points;
-        selLabel = list.first.name;
+        
+        // Buat label yang lebih informatif untuk polygon pertama
+        String label = list.first.name ?? 'Polygon';
+        if (list.first.kecamatan != null || list.first.desa != null) {
+          final kecInfo = list.first.kecamatan ?? '-';
+          final desaInfo = list.first.desa ?? '-';
+          label = '$label\nKec: $kecInfo\nDesa: $desaInfo';
+        }
+        selLabel = label;
         selMeta = list.first;
       }
       emit(
@@ -109,20 +128,37 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   ) {
     if (event.index < 0 || event.index >= state.polygonsMeta.length) return;
     final sel = state.polygonsMeta[event.index];
+    
+    // Buat label yang lebih informatif dengan nmsls, nmkec, dan nmdesa
+    String label = sel.name ?? 'Polygon ${event.index + 1}';
+    if (sel.kecamatan != null || sel.desa != null) {
+      final kecInfo = sel.kecamatan ?? '-';
+      final desaInfo = sel.desa ?? '-';
+      label = '$label\nKec: $kecInfo\nDesa: $desaInfo';
+    }
+    
     emit(
       state.copyWith(
         polygon: sel.points,
-        polygonLabel: sel.name,
+        polygonLabel: label,
         selectedPolygonMeta: sel,
       ),
     );
   }
 
   void _onPolygonSelected(PolygonSelected event, Emitter<MapState> emit) {
+    // Buat label yang lebih informatif dengan nmsls, nmkec, dan nmdesa
+    String label = event.polygon.name ?? 'Polygon';
+    if (event.polygon.kecamatan != null || event.polygon.desa != null) {
+      final kecInfo = event.polygon.kecamatan ?? '-';
+      final desaInfo = event.polygon.desa ?? '-';
+      label = '$label\nKec: $kecInfo\nDesa: $desaInfo';
+    }
+    
     emit(
       state.copyWith(
         polygon: event.polygon.points,
-        polygonLabel: event.polygon.name,
+        polygonLabel: label,
         selectedPolygonMeta: event.polygon,
       ),
     );
@@ -134,5 +170,13 @@ class MapBloc extends Bloc<MapEvent, MapState> {
 
   void _onPlaceCleared(PlaceCleared event, Emitter<MapState> emit) {
     emit(state.copyWith(selectedPlace: null));
+  }
+
+  void _onTemporaryMarkerAdded(TemporaryMarkerAdded event, Emitter<MapState> emit) {
+    emit(state.copyWith(temporaryMarker: event.position));
+  }
+
+  void _onTemporaryMarkerRemoved(TemporaryMarkerRemoved event, Emitter<MapState> emit) {
+    emit(state.copyWith(temporaryMarker: null));
   }
 }

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'features/map/presentation/pages/map_page.dart';
+import 'features/map/presentation/pages/main_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -15,7 +15,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
       ),
-      home: const MapPage(),
+      home: const MainPage(),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:latlong2/latlong.dart';
 import '../../domain/entities/place.dart';
 import '../../domain/entities/polygon_data.dart';
 
@@ -55,4 +56,15 @@ class PolygonSelected extends MapEvent {
   const PolygonSelected(this.polygon);
   @override
   List<Object?> get props => [polygon];
+}
+
+class TemporaryMarkerAdded extends MapEvent {
+  final LatLng position;
+  const TemporaryMarkerAdded(this.position);
+  @override
+  List<Object?> get props => [position];
+}
+
+class TemporaryMarkerRemoved extends MapEvent {
+  const TemporaryMarkerRemoved();
 }

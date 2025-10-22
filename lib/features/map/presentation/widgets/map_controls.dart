@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'compass_widget.dart';
+import '../../domain/entities/polygon_data.dart';
 
 class MapControls extends StatefulWidget {
   final MapController mapController;
@@ -11,6 +12,10 @@ class MapControls extends StatefulWidget {
   final LatLng? initialCenter;
   final double rotation;
   final Function(LatLng)? onLocationUpdate; // Add location update callback
+  final VoidCallback? onPolygonSelection; // Add polygon selection callback
+  final List<PolygonData> polygonsMeta; // Add polygons metadata
+  final Function(int)?
+  onPolygonSelected; // Add callback for when polygon is selected
 
   const MapControls({
     super.key,
@@ -19,6 +24,9 @@ class MapControls extends StatefulWidget {
     this.initialCenter,
     required this.rotation,
     this.onLocationUpdate, // Add to constructor
+    this.onPolygonSelection, // Add to constructor
+    this.polygonsMeta = const [], // Add to constructor
+    this.onPolygonSelected, // Add to constructor
   });
 
   @override
@@ -27,6 +35,15 @@ class MapControls extends StatefulWidget {
 
 class _MapControlsState extends State<MapControls> {
   bool _isLoadingLocation = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-detect location when widget is initialized
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _getCurrentLocation();
+    });
+  }
 
   Future<void> _getCurrentLocation() async {
     setState(() {
@@ -223,8 +240,208 @@ class _MapControlsState extends State<MapControls> {
               tooltip: 'Perkecil',
             ),
           ),
+          const SizedBox(height: 8),
+
+          // Pilih Polygon FAB
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: _showPolygonSelection,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.select_all, color: Colors.blue, size: 20),
+                      // SizedBox(width: 6),
+                      // Text(
+                      //   'Pilih Polygon',
+                      //   style: TextStyle(
+                      //     color: Colors.blue,
+                      //     fontSize: 12,
+                      //     fontWeight: FontWeight.w500,
+                      //   ),
+                      // ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  void _showPolygonSelection() async {
+    if (widget.polygonsMeta.isEmpty) return;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true, // Memungkinkan modal full screen
+      useSafeArea: true, // Menggunakan safe area
+      builder: (modalContext) {
+        String query = '';
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final filtered =
+                widget.polygonsMeta.where((p) {
+                  final q = query.toLowerCase();
+                  final n = (p.name ?? '').toLowerCase();
+                  final kc = (p.kecamatan ?? '').toLowerCase();
+                  final ds = (p.desa ?? '').toLowerCase();
+                  return n.contains(q) || kc.contains(q) || ds.contains(q);
+                }).toList()..sort((a, b) {
+                  // Sort by idsls field
+                  final aIdsls = a.idsls ?? '';
+                  final bIdsls = b.idsls ?? '';
+                  return aIdsls.compareTo(bIdsls);
+                });
+            return DraggableScrollableSheet(
+              initialChildSize: 0.9, // Mulai dengan 90% tinggi layar
+              minChildSize: 0.5, // Minimum 50% tinggi layar
+              maxChildSize: 0.95, // Maximum 95% tinggi layar
+              expand: false,
+              builder: (context, scrollController) {
+                return Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      // Handle bar untuk drag
+                      Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      // Header
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.search, color: Colors.grey),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Pilih Polygon',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              onPressed: () => Navigator.pop(modalContext),
+                              icon: const Icon(Icons.close),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Search field
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: TextField(
+                          autofocus:
+                              false, // Auto focus untuk UX yang lebih baik
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(Icons.search),
+                            hintText: 'Cari nmsls / nmkec / nmdesa',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey[50],
+                          ),
+                          onChanged: (v) => setModalState(() => query = v),
+                        ),
+                      ),
+                      // Results list
+                      Expanded(
+                        child: ListView.builder(
+                          controller:
+                              scrollController, // Menggunakan scroll controller
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          itemCount: filtered.length,
+                          itemBuilder: (ctx2, i) {
+                            final item = filtered[i];
+                            final idx = widget.polygonsMeta.indexOf(item);
+                            final name = item.name ?? 'Polygon ${idx + 1}';
+                            final subtitle =
+                                'Kec: ${item.kecamatan ?? '-'} • Desa: ${item.desa ?? '-'}';
+                            return Card(
+                              margin: const EdgeInsets.symmetric(
+                                vertical: 2,
+                                horizontal: 8,
+                              ),
+                              child: ListTile(
+                                leading: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue[50],
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    Icons.polyline,
+                                    color: Colors.blue[700],
+                                  ),
+                                ),
+                                title: Text(
+                                  name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                subtitle: Text(subtitle),
+                                trailing: const Icon(
+                                  Icons.arrow_forward_ios,
+                                  size: 16,
+                                ),
+                                onTap: () {
+                                  Navigator.of(modalContext).pop();
+                                  widget.onPolygonSelected?.call(idx);
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }
