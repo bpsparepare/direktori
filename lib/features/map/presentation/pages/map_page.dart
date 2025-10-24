@@ -31,7 +31,7 @@ class MapPage extends StatelessWidget {
           case MapStatus.success:
             final config = state.config!;
             return Scaffold(
-              appBar: AppBar(title: const Text('Direktori Map')),
+              // appBar: AppBar(title: const Text('Direktori Map')),
               body: Stack(
                 children: [
                   MapView(

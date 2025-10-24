@@ -206,21 +206,21 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   double _getDynamicOffsetX(double baseOffsetX, double zoomLevel) {
     // Base zoom level where the offset was calibrated (assuming zoom 13)
     const double baseZoomLevel = 13.0;
-    
+
     // Scale factor: offset decreases as zoom increases
     // This is because at higher zoom levels, the same pixel offset represents a smaller geographic distance
     double scaleFactor = baseZoomLevel / zoomLevel;
-    
+
     return baseOffsetX * scaleFactor;
   }
 
   double _getDynamicOffsetY(double baseOffsetY, double zoomLevel) {
     // Base zoom level where the offset was calibrated (assuming zoom 13)
     const double baseZoomLevel = 13.0;
-    
+
     // Scale factor: offset decreases as zoom increases
     double scaleFactor = baseZoomLevel / zoomLevel;
-    
+
     return baseOffsetY * scaleFactor;
   }
 
@@ -259,7 +259,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           children: [
             TileLayer(
               urlTemplate: _currentMapType.urlTemplate,
-              userAgentPackageName: 'com.example.direktori',
+              userAgentPackageName: 'id.bpsparepare.direktori',
               maxZoom: _currentMapType.maxZoom.toDouble(),
               subdomains: _currentMapType.subdomains,
               additionalOptions: const {'crossOrigin': 'anonymous'},
@@ -270,7 +270,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                   // Calculate dynamic offset based on current zoom level
                   double dynamicOffsetX = _getDynamicOffsetX(_offsetX, _zoom);
                   double dynamicOffsetY = _getDynamicOffsetY(_offsetY, _zoom);
-                  
+
                   return Transform.translate(
                     offset: Offset(dynamicOffsetX, dynamicOffsetY),
                     child: tileWidget,

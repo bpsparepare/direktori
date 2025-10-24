@@ -1,13 +1,18 @@
 import 'dart:convert';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:latlong2/latlong.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/map_config.dart';
 import '../../domain/entities/place.dart';
 import '../../domain/repositories/map_repository.dart';
 import '../../domain/entities/polygon_data.dart';
+import '../models/direktori_model.dart';
+import '../../../../core/config/supabase_config.dart';
 import 'package:flutter/foundation.dart';
 
 class MapRepositoryImpl implements MapRepository {
+  final SupabaseClient _supabaseClient = SupabaseConfig.client;
+
   @override
   Future<MapConfig> getInitialConfig() async {
     // Pusat peta di Parepare
@@ -23,7 +28,76 @@ class MapRepositoryImpl implements MapRepository {
 
   @override
   Future<List<Place>> getPlaces() async {
-    // Dummy data titik tempat di Parepare
+    try {
+      // Query data direktori dari Supabase dengan join ke tabel wilayah
+      final response = await _supabaseClient
+          .from('direktori')
+          .select('''
+            *,
+            wilayah!inner(
+              nm_prov,
+              nm_kab,
+              nm_kec,
+              nm_desa,
+              nm_sls,
+              alamat_lengkap
+            )
+          ''')
+          .eq('status_perusahaan', 'Aktif') // Hanya ambil yang aktif
+          .not('lat', 'is', null) // Hanya yang punya koordinat
+          .not('long', 'is', null)
+          .limit(100); // Batasi untuk performa
+
+      if (response.isEmpty) {
+        debugPrint('MapRepository: No data found in direktori table');
+        return _getFallbackPlaces();
+      }
+
+      // Konversi response ke DirektoriModel lalu ke Place
+      final List<Place> places = [];
+      
+      for (final item in response) {
+        try {
+          // Flatten data wilayah ke level utama untuk kemudahan parsing
+          final Map<String, dynamic> flattenedData = Map<String, dynamic>.from(item);
+          
+          if (item['wilayah'] != null && item['wilayah'] is Map) {
+            final wilayahData = item['wilayah'] as Map<String, dynamic>;
+            flattenedData.addAll(wilayahData);
+          }
+          
+          final direktori = DirektoriModel.fromJson(flattenedData);
+          
+          // Hanya tambahkan jika memiliki koordinat yang valid
+          if (direktori.hasValidCoordinates) {
+            places.add(direktori.toPlace());
+          }
+        } catch (e) {
+          debugPrint('MapRepository: Error parsing direktori item: $e');
+          // Skip item yang error, lanjutkan ke item berikutnya
+          continue;
+        }
+      }
+
+      debugPrint('MapRepository: Successfully loaded ${places.length} places from Supabase');
+      
+      // Jika tidak ada data yang valid, return fallback
+      if (places.isEmpty) {
+        debugPrint('MapRepository: No valid places found, using fallback data');
+        return _getFallbackPlaces();
+      }
+      
+      return places;
+      
+    } catch (e) {
+      debugPrint('MapRepository: Error fetching places from Supabase: $e');
+      // Jika ada error, return dummy data sebagai fallback
+      return _getFallbackPlaces();
+    }
+  }
+
+  /// Fallback data jika Supabase tidak tersedia atau error
+  List<Place> _getFallbackPlaces() {
     return const [
       Place(
         id: 'p1',
