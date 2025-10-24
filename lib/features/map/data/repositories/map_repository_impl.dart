@@ -34,18 +34,11 @@ class MapRepositoryImpl implements MapRepository {
           .from('direktori')
           .select('''
             *,
-            wilayah!inner(
-              nm_prov,
-              nm_kab,
-              nm_kec,
-              nm_desa,
-              nm_sls,
-              alamat_lengkap
-            )
+            wilayah(*)
           ''')
-          .eq('status_perusahaan', 'Aktif') // Hanya ambil yang aktif
-          .not('lat', 'is', null) // Hanya yang punya koordinat
-          .not('long', 'is', null)
+          .eq('keberadaan_usaha', 1) // hanya ambil yang aktif (asumsi: 1)
+          .not('latitude', 'is', null) // hanya yang punya koordinat baru
+          .not('longitude', 'is', null)
           .limit(100); // Batasi untuk performa
 
       if (response.isEmpty) {

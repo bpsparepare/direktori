@@ -31,15 +31,15 @@ DROP TABLE IF EXISTS wilayah CASCADE;
 
 -- Buat tabel wilayah jika belum ada
 CREATE TABLE IF NOT EXISTS wilayah (
-    -- ID SLS sebagai Primary Key (13 digit)
-    id_sls VARCHAR(13) PRIMARY KEY,
+    -- ID SLS sebagai Primary Key (14 digit)
+    id_sls VARCHAR(14) PRIMARY KEY,
     
     -- Kode Wilayah (untuk kompatibilitas dan index)
     kd_prov CHAR(2) NOT NULL,
     kd_kab CHAR(2) NOT NULL,
     kd_kec CHAR(3) NOT NULL,
     kd_desa CHAR(3) NOT NULL,
-    kd_sls CHAR(3) NOT NULL,
+    kd_sls CHAR(4) NOT NULL,
     
     -- Nama Wilayah
     nm_prov VARCHAR(100) NOT NULL,
@@ -74,8 +74,13 @@ CREATE TABLE IF NOT EXISTS direktori (
     nama_usaha VARCHAR(255) NOT NULL,
     alamat TEXT,
     
-    -- Relasi ke Wilayah (SIMPLE - hanya id_sls)
-    id_sls VARCHAR(13) NOT NULL,
+    -- Relasi ke Wilayah: bisa SLS atau level kabupaten
+    id_sls VARCHAR(14),
+    kd_prov CHAR(2),
+    kd_kab CHAR(2),
+    kd_kec CHAR(3),
+    kd_desa CHAR(3),
+    kd_sls CHAR(4),
     
     -- Status dan Kategori
     keberadaan_usaha INTEGER CHECK (
@@ -117,7 +122,14 @@ CREATE TABLE IF NOT EXISTS direktori (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    -- Foreign Key ke tabel wilayah (SIMPLE)
+    -- Constraint konsistensi wilayah minimal
+    CONSTRAINT chk_direktori_wilayah_minimal CHECK (
+        (id_sls IS NULL AND kd_prov IS NOT NULL AND kd_kab IS NOT NULL)
+        OR
+        (id_sls IS NOT NULL AND kd_prov IS NOT NULL AND kd_kab IS NOT NULL AND kd_kec IS NOT NULL AND kd_desa IS NOT NULL AND kd_sls IS NOT NULL AND id_sls = kd_prov || kd_kab || kd_kec || kd_desa || kd_sls)
+    ),
+    
+    -- Foreign Key ke tabel wilayah (opsional: hanya jika id_sls diisi)
     FOREIGN KEY (id_sls) REFERENCES wilayah(id_sls)
 );
 
@@ -128,6 +140,32 @@ CREATE TABLE IF NOT EXISTS direktori (
 -- Tambahkan kolom baru ke tabel direktori jika belum ada
 DO $$
 BEGIN
+    -- Ubah id_sls menjadi nullable jika saat ini NOT NULL
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='direktori' AND column_name='id_sls' AND is_nullable = 'NO') THEN
+        ALTER TABLE direktori ALTER COLUMN id_sls DROP NOT NULL;
+    END IF;
+
+    -- kd_prov
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='direktori' AND column_name='kd_prov') THEN
+        ALTER TABLE direktori ADD COLUMN kd_prov CHAR(2);
+    END IF;
+    -- kd_kab
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='direktori' AND column_name='kd_kab') THEN
+        ALTER TABLE direktori ADD COLUMN kd_kab CHAR(2);
+    END IF;
+    -- kd_kec
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='direktori' AND column_name='kd_kec') THEN
+        ALTER TABLE direktori ADD COLUMN kd_kec CHAR(3);
+    END IF;
+    -- kd_desa
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='direktori' AND column_name='kd_desa') THEN
+        ALTER TABLE direktori ADD COLUMN kd_desa CHAR(3);
+    END IF;
+    -- kd_sls
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='direktori' AND column_name='kd_sls') THEN
+        ALTER TABLE direktori ADD COLUMN kd_sls CHAR(4);
+    END IF;
+
     -- nama_komersial_usaha
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='direktori' AND column_name='nama_komersial_usaha') THEN
         ALTER TABLE direktori ADD COLUMN nama_komersial_usaha VARCHAR(255);
@@ -220,6 +258,15 @@ BEGIN
             sektor_institusi IN (1, 2, 3, 4, 5)
         );
     END IF;
+
+    -- Tambahkan constraint konsistensi wilayah minimal jika belum ada
+    IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name='direktori' AND constraint_name='chk_direktori_wilayah_minimal') THEN
+        ALTER TABLE direktori ADD CONSTRAINT chk_direktori_wilayah_minimal CHECK (
+            (id_sls IS NULL AND kd_prov IS NOT NULL AND kd_kab IS NOT NULL)
+            OR
+            (id_sls IS NOT NULL AND kd_prov IS NOT NULL AND kd_kab IS NOT NULL AND kd_kec IS NOT NULL AND kd_desa IS NOT NULL AND kd_sls IS NOT NULL AND id_sls = kd_prov || kd_kab || kd_kec || kd_desa || kd_sls)
+        );
+    END IF;
 END $$;
 
 -- ========================================
@@ -238,6 +285,7 @@ CREATE INDEX IF NOT EXISTS idx_wilayah_search ON wilayah USING gin(to_tsvector('
 -- Index untuk tabel direktori
 CREATE INDEX IF NOT EXISTS idx_direktori_id_sbr ON direktori(id_sbr);
 CREATE INDEX IF NOT EXISTS idx_direktori_id_sls ON direktori(id_sls);
+CREATE INDEX IF NOT EXISTS idx_direktori_kab ON direktori(kd_prov, kd_kab);
 CREATE INDEX IF NOT EXISTS idx_direktori_status ON direktori(keberadaan_usaha);
 CREATE INDEX IF NOT EXISTS idx_direktori_skala ON direktori(skala_usaha);
 CREATE INDEX IF NOT EXISTS idx_direktori_koordinat ON direktori(latitude, longitude);
@@ -267,22 +315,58 @@ CREATE TRIGGER update_direktori_updated_at BEFORE UPDATE ON direktori FOR EACH R
 -- ========================================
 
 -- View direktori dengan nama wilayah (SIMPLE JOIN)
-CREATE VIEW v_direktori_lengkap AS
+CREATE OR REPLACE VIEW v_direktori_lengkap AS
 SELECT 
-    d.*,
-    w.kd_prov,
-    w.kd_kab,
-    w.kd_kec,
-    w.kd_desa,
-    w.kd_sls,
-    w.nm_prov,
-    w.nm_kab,
+    -- Kolom direktori (tanpa kd_ untuk hindari duplikasi)
+    d.id,
+    d.id_sbr,
+    d.nama_usaha,
+    d.alamat,
+    d.id_sls,
+    d.keberadaan_usaha,
+    d.kegiatan_usaha,
+    d.skala_usaha,
+    d.keterangan,
+    d.nib,
+    d.latitude,
+    d.longitude,
+    d.url_gambar,
+    d.kode_pos,
+    d.jenis_perusahaan,
+    d.pemilik,
+    d.nik_pemilik,
+    d.nohp_pemilik,
+    d.tenaga_kerja,
+    d.created_at,
+    d.updated_at,
+    d.nama_komersial_usaha,
+    d.nomor_telepon,
+    d.nomor_whatsapp,
+    d.email,
+    d.website,
+    d.sumber_data,
+    d.jenis_kepemilikan_usaha,
+    d.bentuk_badan_hukum_usaha,
+    d.tahun_berdiri,
+    d.jaringan_usaha,
+    d.sektor_institusi,
+    -- Kolom wilayah terselesaikan (coalesce)
+    COALESCE(d.kd_prov, w.kd_prov) AS kd_prov,
+    COALESCE(d.kd_kab, w.kd_kab) AS kd_kab,
+    COALESCE(d.kd_kec, w.kd_kec) AS kd_kec,
+    COALESCE(d.kd_desa, w.kd_desa) AS kd_desa,
+    COALESCE(d.kd_sls, w.kd_sls) AS kd_sls,
+    COALESCE(w.nm_prov, vk.nm_prov) AS nm_prov,
+    COALESCE(w.nm_kab, vk.nm_kab) AS nm_kab,
     w.nm_kec,
     w.nm_desa,
     w.nm_sls,
     w.alamat_lengkap
 FROM direktori d
-JOIN wilayah w ON d.id_sls = w.id_sls;
+LEFT JOIN wilayah w ON d.id_sls = w.id_sls
+LEFT JOIN (
+    SELECT DISTINCT kd_prov, kd_kab, nm_prov, nm_kab FROM wilayah
+) vk ON d.id_sls IS NULL AND d.kd_prov = vk.kd_prov AND d.kd_kab = vk.kd_kab;
 
 -- ========================================
 -- FUNCTION HELPER UNTUK DROPDOWN
@@ -337,7 +421,7 @@ $$ LANGUAGE plpgsql;
 
 -- Function untuk mendapatkan daftar SLS berdasarkan desa
 CREATE FUNCTION get_daftar_sls(p_kd_prov CHAR(2), p_kd_kab CHAR(2), p_kd_kec CHAR(3), p_kd_desa CHAR(3))
-RETURNS TABLE(kd_sls CHAR(3), nm_sls VARCHAR(100), id_sls VARCHAR(13)) AS $$
+RETURNS TABLE(kd_sls CHAR(4), nm_sls VARCHAR(100), id_sls VARCHAR(14)) AS $$
 BEGIN
     RETURN QUERY
     SELECT w.kd_sls, w.nm_sls, w.id_sls
@@ -353,17 +437,18 @@ $$ LANGUAGE plpgsql;
 
 -- Data wilayah (dari Excel Anda)
 INSERT INTO wilayah (id_sls, kd_prov, kd_kab, kd_kec, kd_desa, kd_sls, nm_prov, nm_kab, nm_kec, nm_desa, nm_sls) VALUES 
-('7371010001001', '73', '71', '010', '001', '001', 'Sulawesi Selatan', 'Parepare', 'Bacukiki', 'Lumpue', 'Lumpue I'),
-('7371010001002', '73', '71', '010', '001', '002', 'Sulawesi Selatan', 'Parepare', 'Bacukiki', 'Lumpue', 'Lumpue II'),
-('7371010002001', '73', '71', '010', '002', '001', 'Sulawesi Selatan', 'Parepare', 'Bacukiki', 'Bacukiki', 'Bacukiki I'),
-('7371020001001', '73', '71', '020', '001', '001', 'Sulawesi Selatan', 'Parepare', 'Ujung', 'Labukkang', 'Labukkang I'),
-('7371020002001', '73', '71', '020', '002', '001', 'Sulawesi Selatan', 'Parepare', 'Ujung', 'Ujung Bulu', 'Ujung Bulu I'),
-('7371030001001', '73', '71', '030', '001', '001', 'Sulawesi Selatan', 'Parepare', 'Soreang', 'Bukit Harapan', 'Bukit Harapan I')
+('73710100010001', '73', '71', '010', '001', '0001', 'Sulawesi Selatan', 'Parepare', 'Bacukiki', 'Lumpue', 'Lumpue I'),
+('73710100010002', '73', '71', '010', '001', '0002', 'Sulawesi Selatan', 'Parepare', 'Bacukiki', 'Lumpue', 'Lumpue II'),
+('73710100020001', '73', '71', '010', '002', '0001', 'Sulawesi Selatan', 'Parepare', 'Bacukiki', 'Bacukiki', 'Bacukiki I'),
+('73710200010001', '73', '71', '020', '001', '0001', 'Sulawesi Selatan', 'Parepare', 'Ujung', 'Labukkang', 'Labukkang I'),
+('73710200020001', '73', '71', '020', '002', '0001', 'Sulawesi Selatan', 'Parepare', 'Ujung', 'Ujung Bulu', 'Ujung Bulu I'),
+('73710300010001', '73', '71', '030', '001', '0001', 'Sulawesi Selatan', 'Parepare', 'Soreang', 'Bukit Harapan', 'Bukit Harapan I')
 ON CONFLICT (id_sls) DO NOTHING;
 
 -- Data direktori (dengan kolom baru)
 INSERT INTO direktori (
     id_sbr, nama_usaha, alamat, id_sls,
+    kd_prov, kd_kab, kd_kec, kd_desa, kd_sls,
     keberadaan_usaha, kegiatan_usaha, skala_usaha, keterangan, nib,
     latitude, longitude, url_gambar, kode_pos, jenis_perusahaan,
     pemilik, nik_pemilik, nohp_pemilik, tenaga_kerja,
@@ -372,7 +457,8 @@ INSERT INTO direktori (
     tahun_berdiri, jaringan_usaha, sektor_institusi
 ) VALUES 
 (
-    'SBR001', 'Toko Sembako Berkah', 'Jl. Merdeka No. 123', '7371010001001',
+    'SBR001', 'Toko Sembako Berkah', 'Jl. Merdeka No. 123', '73710100010001',
+    '73', '71', '010', '001', '0001',
     1,
     '[{"kegiatan_usaha": "Perdagangan Eceran", "kategori": "Perdagangan", "kbli": "47111"}]'::jsonb,
     'mikro', 'tambahan', '1234567890123456',
@@ -382,7 +468,8 @@ INSERT INTO direktori (
     2, 12, 2015, 1, 2
 ),
 (
-    'SBR002', 'Warung Makan Sederhana', 'Jl. Ahmad Yani No. 45', '7371020001001',
+    'SBR002', 'Warung Makan Sederhana', 'Jl. Ahmad Yani No. 45', '73710200010001',
+    '73', '71', '020', '001', '0001',
     1,
     '[{"kegiatan_usaha": "Penyediaan Makanan dan Minuman", "kategori": "Akomodasi dan Penyediaan Makan Minum", "kbli": "56101"}]'::jsonb,
     'mikro', 'tambahan', '2345678901234567',
