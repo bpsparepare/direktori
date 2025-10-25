@@ -42,17 +42,23 @@ class MapState extends Equatable {
     PolygonData? selectedPolygonMeta,
     LatLng? temporaryMarker,
     String? error,
+    bool clearSelectedPlace = false,
+    bool clearTemporaryMarker = false,
   }) {
     return MapState(
       status: status ?? this.status,
       config: config ?? this.config,
       places: places ?? this.places,
-      selectedPlace: selectedPlace ?? this.selectedPlace,
+      selectedPlace: clearSelectedPlace
+          ? null
+          : (selectedPlace ?? this.selectedPlace),
       polygon: polygon ?? this.polygon,
       polygonLabel: polygonLabel ?? this.polygonLabel,
       polygonsMeta: polygonsMeta ?? this.polygonsMeta,
       selectedPolygonMeta: selectedPolygonMeta ?? this.selectedPolygonMeta,
-      temporaryMarker: temporaryMarker ?? this.temporaryMarker,
+      temporaryMarker: clearTemporaryMarker
+          ? null
+          : (temporaryMarker ?? this.temporaryMarker),
       error: error ?? this.error,
     );
   }

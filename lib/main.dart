@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'core/config/supabase_config.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';

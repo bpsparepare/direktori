@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-
+import 'package:url_launcher/url_launcher.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
-import '../../data/repositories/map_repository_impl.dart';
+import '../../domain/entities/place.dart';
 import '../../domain/usecases/get_initial_map_config.dart';
 import '../../domain/usecases/get_places.dart';
 import '../../domain/usecases/get_first_polygon_meta_from_geojson.dart';
@@ -79,10 +79,30 @@ class _SavedPageState extends State<SavedPage> {
                                   ],
                                 ),
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.close),
-                                onPressed: () => context.read<MapBloc>().add(
-                                  const PlaceCleared(),
+                              // Improved close button with larger touch target
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(24),
+                                ),
+                                child: IconButton(
+                                  icon: const Icon(Icons.close),
+                                  iconSize: 20,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 48,
+                                    minHeight: 48,
+                                  ),
+                                  onPressed: () {
+                                    print(
+                                      'DEBUG: Close button pressed',
+                                    ); // Debug log
+                                    context.read<MapBloc>().add(
+                                      const PlaceCleared(),
+                                    );
+                                  },
                                 ),
                               ),
                             ],

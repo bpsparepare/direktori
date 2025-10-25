@@ -1,0 +1,156 @@
+# 📋 PANDUAN IMPORT DATA BPS KE SUPABASE
+
+## 🎯 Overview
+File ini berisi panduan lengkap untuk mengimpor data BPS dari `importbps.csv` ke tabel `direktori` di Supabase menggunakan SQL yang sudah digenerate.
+
+## 📁 File yang Dihasilkan
+- **`full_import_bps.sql`** - File SQL siap pakai (1.6 MB, 6,137 baris)
+- **`generate_full_import.py`** - Script Python untuk regenerate SQL jika diperlukan
+
+## 🔍 Data Summary
+- **Total Records**: 6,051 usaha
+- **Wilayah**: Sulawesi Selatan (73) - Parepare (72)
+- **Format**: SQL INSERT statements siap eksekusi
+
+## 🚀 Cara Import di Supabase SQL Editor
+
+### Step 1: Buka Supabase Dashboard
+1. Login ke [Supabase Dashboard](https://app.supabase.com)
+2. Pilih project Anda
+3. Klik **SQL Editor** di sidebar kiri
+
+### Step 2: Upload & Execute SQL File
+1. Klik **New Query** atau **+** untuk query baru
+2. Copy seluruh isi file `full_import_bps.sql`
+3. Paste ke SQL Editor
+4. Klik **Run** untuk eksekusi
+
+### Step 3: Monitor Progress
+- Import akan memakan waktu beberapa menit
+- Jangan tutup browser selama proses import
+- Tunggu hingga muncul pesan "Success" atau error
+
+## 📊 Mapping Kolom CSV ke Database
+
+### ✅ Kolom yang Berhasil Dimapping
+| CSV Column | Database Column | Keterangan |
+|------------|-----------------|------------|
+| `idsbr` | `id_sbr` | ID unik usaha |
+| `nama_usaha` | `nama_usaha` | Nama usaha |
+| `nama_komersial_usaha` | `nama_komersial_usaha` | Nama komersial |
+| `alamat` | `alamat` | Alamat lengkap |
+| `nama_sls` | `nama_sls` | Nama SLS |
+| `kdprov` | `kd_prov` | Kode provinsi (padded 2 digit) |
+| `kdkab` | `kd_kab` | Kode kabupaten (padded 2 digit) |
+| `kdkec` | `kd_kec` | Kode kecamatan (padded 3 digit) |
+| `kddesa` | `kd_desa` | Kode desa (padded 3 digit) |
+| `keberadaan_usaha` | `keberadaan_usaha` | Status keberadaan (integer) |
+| `nomor_telepon` | `nomor_telepon` | Nomor telepon |
+| `nomor_whatsapp` | `nomor_whatsapp` | Nomor WhatsApp |
+| `email` | `email` | Email usaha |
+| `website` | `website` | Website usaha |
+| `latitude` | `latitude` | Koordinat latitude |
+| `longitude` | `longitude` | Koordinat longitude |
+| `kodepos` | `kode_pos` | Kode pos |
+
+### 🔧 Kolom Database dengan Default Values
+| Database Column | Default Value | Keterangan |
+|-----------------|---------------|------------|
+| `kd_sls` | `NULL` | Tidak mandatory |
+| `id_sls` | `NULL` | Tidak mandatory |
+| `sumber_data` | `'BPS'` | Identifier sumber |
+| `kegiatan_usaha` | JSON default | Kategori belum dikategorikan |
+| `skala_usaha` | `'mikro'` | Default skala |
+
+## 🔍 Validasi Hasil Import
+
+Setelah import selesai, jalankan query validasi berikut:
+
+```sql
+-- Cek total data BPS yang berhasil diimpor
+SELECT 'Total BPS records imported' as info, COUNT(*) as count 
+FROM direktori 
+WHERE sumber_data = 'BPS';
+
+-- Cek data dengan koordinat
+SELECT 'Records with coordinates' as info, COUNT(*) as count 
+FROM direktori 
+WHERE sumber_data = 'BPS' 
+  AND latitude IS NOT NULL 
+  AND longitude IS NOT NULL;
+
+-- Cek distribusi per wilayah
+SELECT 
+    kd_prov,
+    kd_kab,
+    kd_kec,
+    kd_desa,
+    COUNT(*) as jumlah_usaha
+FROM direktori 
+WHERE sumber_data = 'BPS'
+GROUP BY kd_prov, kd_kab, kd_kec, kd_desa
+ORDER BY kd_prov, kd_kab, kd_kec, kd_desa;
+
+-- Sample data yang berhasil diimpor
+SELECT 
+    id_sbr,
+    nama_usaha,
+    alamat,
+    CONCAT(kd_prov, kd_kab, kd_kec, kd_desa) as kode_wilayah,
+    nomor_telepon,
+    email,
+    created_at
+FROM direktori 
+WHERE sumber_data = 'BPS'
+ORDER BY created_at DESC
+LIMIT 10;
+```
+
+## ⚠️ Troubleshooting
+
+### Error: "duplicate key value violates unique constraint"
+- Berarti ada data dengan `id_sbr` yang sama sudah ada di database
+- Solusi: Hapus data BPS lama atau gunakan `ON CONFLICT` clause
+
+### Error: "column does not exist"
+- Pastikan tabel `direktori` memiliki semua kolom yang diperlukan
+- Cek apakah kolom `nama_sls` sudah ditambahkan ke database
+
+### Error: "invalid input syntax"
+- Ada data yang tidak sesuai format
+- Cek log error untuk baris yang bermasalah
+
+### Import Terlalu Lama
+- File berukuran 1.6 MB dengan 6,051 records
+- Normal memakan waktu 2-5 menit tergantung koneksi
+- Jangan refresh browser selama proses
+
+## 🔄 Regenerate SQL (Jika Diperlukan)
+
+Jika perlu memodifikasi mapping atau ada perubahan CSV:
+
+```bash
+cd /path/to/sql/folder
+python3 generate_full_import.py
+```
+
+Script akan:
+1. Membaca `../import/importbps.csv`
+2. Generate ulang `full_import_bps.sql`
+3. Menampilkan progress dan statistik
+
+## 📈 Expected Results
+
+Setelah import berhasil:
+- **6,051 records** baru di tabel `direktori`
+- Semua data memiliki `sumber_data = 'BPS'`
+- Data terdistribusi di wilayah Parepare (kode 7372)
+- Koordinat tersedia untuk sebagian data
+- Semua field mandatory terisi dengan benar
+
+## 🎉 Selesai!
+
+Data BPS Anda sekarang sudah berhasil diimpor ke Supabase dan siap digunakan dalam aplikasi direktori usaha.
+
+---
+*Generated by BPS Import Tool - Ready for Supabase SQL Editor*

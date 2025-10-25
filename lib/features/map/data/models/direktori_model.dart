@@ -22,7 +22,7 @@ class DirektoriModel {
   final int? tenagaKerja;
   final DateTime? createdAt;
   final DateTime? updatedAt;
-  
+
   // Kolom baru yang ditambahkan
   final String? namaKomersialUsaha;
   final String? nomorTelepon;
@@ -30,20 +30,21 @@ class DirektoriModel {
   final String? email;
   final String? website;
   final String? sumberData;
-  
+
   // Koordinat baru (mengganti lat/long)
   final double? latitude;
   final double? longitude;
-  
+
   // Field baru sesuai permintaan user
   final int? keberadaanUsaha; // 1-10
   final int? jenisKepemilikanUsaha; // 1-4
   final int? bentukBadanHukumUsaha; // 1-12, 99
-  final String? deskripsiBadanUsahaLainnya; // untuk bentuk_badan_hukum_usaha = 99
+  final String?
+  deskripsiBadanUsahaLainnya; // untuk bentuk_badan_hukum_usaha = 99
   final int? tahunBerdiri;
   final int? jaringanUsaha; // 1-6
   final int? sektorInstitusi; // 1-5
-  
+
   // Data wilayah (dari join dengan tabel wilayah)
   final String? nmProv;
   final String? nmKab;
@@ -51,6 +52,13 @@ class DirektoriModel {
   final String? nmDesa;
   final String? nmSls;
   final String? alamatLengkap;
+
+  // Kode wilayah (untuk input manual)
+  final String? kdProv;
+  final String? kdKab;
+  final String? kdKec;
+  final String? kdDesa;
+  final String? kdSls;
 
   const DirektoriModel({
     required this.id,
@@ -98,6 +106,12 @@ class DirektoriModel {
     this.nmDesa,
     this.nmSls,
     this.alamatLengkap,
+    // Kode wilayah
+    this.kdProv,
+    this.kdKab,
+    this.kdKec,
+    this.kdDesa,
+    this.kdSls,
   });
 
   factory DirektoriModel.fromJson(Map<String, dynamic> json) {
@@ -106,7 +120,7 @@ class DirektoriModel {
     if (json['kegiatan_usaha'] != null) {
       if (json['kegiatan_usaha'] is List) {
         kegiatanUsahaList = List<Map<String, dynamic>>.from(
-          json['kegiatan_usaha'].map((x) => Map<String, dynamic>.from(x))
+          json['kegiatan_usaha'].map((x) => Map<String, dynamic>.from(x)),
         );
       }
     }
@@ -121,8 +135,8 @@ class DirektoriModel {
       skalaUsaha: json['skala_usaha'],
       keterangan: json['keterangan'],
       nib: json['nib'],
-      lat: json['lat']?.toDouble() ?? json['latitude']?.toDouble(),
-      long: json['long']?.toDouble() ?? json['longitude']?.toDouble(),
+      lat: json['latitude']?.toDouble() ?? json['lat']?.toDouble(),
+      long: json['longitude']?.toDouble() ?? json['long']?.toDouble(),
       urlGambar: json['url_gambar'],
       kodePos: json['kode_pos'],
       jenisPerusahaan: json['jenis_perusahaan'],
@@ -130,11 +144,11 @@ class DirektoriModel {
       nikPemilik: json['nik_pemilik'],
       nohpPemilik: json['nohp_pemilik'],
       tenagaKerja: json['tenaga_kerja']?.toInt(),
-      createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at']) 
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
           : null,
-      updatedAt: json['updated_at'] != null 
-          ? DateTime.parse(json['updated_at']) 
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'])
           : null,
       // Kolom baru
       namaKomersialUsaha: json['nama_komersial_usaha'],
@@ -159,8 +173,14 @@ class DirektoriModel {
       nmKab: json['nm_kab'],
       nmKec: json['nm_kec'],
       nmDesa: json['nm_desa'],
-      nmSls: json['nm_sls'],
+      nmSls: json['nama_sls'],
       alamatLengkap: json['alamat_lengkap'],
+      // Kode wilayah
+      kdProv: json['kd_prov'],
+      kdKab: json['kd_kab'],
+      kdKec: json['kd_kec'],
+      kdDesa: json['kd_desa'],
+      kdSls: json['kd_sls'],
     );
   }
 
@@ -175,8 +195,8 @@ class DirektoriModel {
       'skala_usaha': skalaUsaha,
       'keterangan': keterangan,
       'nib': nib,
-      'lat': lat,
-      'long': long,
+      'latitude': latitude ?? lat,
+      'longitude': longitude ?? long,
       'url_gambar': urlGambar,
       'kode_pos': kodePos,
       'jenis_perusahaan': jenisPerusahaan,
@@ -209,8 +229,14 @@ class DirektoriModel {
       'nm_kab': nmKab,
       'nm_kec': nmKec,
       'nm_desa': nmDesa,
-      'nm_sls': nmSls,
+      'nama_sls': nmSls,
       'alamat_lengkap': alamatLengkap,
+      // Kode wilayah
+      'kd_prov': kdProv,
+      'kd_kab': kdKab,
+      'kd_kec': kdKec,
+      'kd_desa': kdDesa,
+      'kd_sls': kdSls,
     };
   }
 
@@ -218,11 +244,11 @@ class DirektoriModel {
   Place toPlace() {
     // Buat deskripsi yang informatif
     String description = _buildDescription();
-    
+
     // Gunakan koordinat jika tersedia, prioritas latitude/longitude baru
     LatLng position = LatLng(
       latitude ?? lat ?? -4.0328772052560335, // Default lat Parepare
-      longitude ?? long ?? 119.63160510345742,  // Default long Parepare
+      longitude ?? long ?? 119.63160510345742, // Default long Parepare
     );
 
     return Place(
@@ -235,60 +261,63 @@ class DirektoriModel {
 
   String _buildDescription() {
     List<String> descriptionParts = [];
-    
+
     // Nama komersial (jika berbeda dari nama usaha)
-    if (namaKomersialUsaha != null && namaKomersialUsaha!.isNotEmpty && 
+    if (namaKomersialUsaha != null &&
+        namaKomersialUsaha!.isNotEmpty &&
         namaKomersialUsaha != namaUsaha) {
       descriptionParts.add('🏪 Nama Komersial: $namaKomersialUsaha');
     }
-    
+
     // Alamat
     if (alamat != null && alamat!.isNotEmpty) {
       descriptionParts.add('📍 $alamat');
     }
-    
+
     // Wilayah
     if (alamatLengkap != null && alamatLengkap!.isNotEmpty) {
       descriptionParts.add('🏘️ $alamatLengkap');
     }
-    
+
     // Kontak
     if (nomorTelepon != null && nomorTelepon!.isNotEmpty) {
       descriptionParts.add('📞 Telepon: $nomorTelepon');
     }
-    
+
     if (nomorWhatsapp != null && nomorWhatsapp!.isNotEmpty) {
       descriptionParts.add('📱 WhatsApp: $nomorWhatsapp');
     }
-    
+
     if (email != null && email!.isNotEmpty) {
       descriptionParts.add('📧 Email: $email');
     }
-    
+
     if (website != null && website!.isNotEmpty) {
       descriptionParts.add('🌐 Website: $website');
     }
-    
+
     // Status (using keberadaanUsaha)
     if (keberadaanUsaha != null) {
-      descriptionParts.add('📊 Status: ${_getKeberadaanUsahaText(keberadaanUsaha!)}');
+      descriptionParts.add(
+        '📊 Status: ${_getKeberadaanUsahaText(keberadaanUsaha!)}',
+      );
     }
-    
+
     // Skala usaha
     if (skalaUsaha != null && skalaUsaha!.isNotEmpty) {
       descriptionParts.add('🏢 Skala: ${skalaUsaha!.toUpperCase()}');
     }
-    
+
     // Pemilik
     if (pemilik != null && pemilik!.isNotEmpty) {
       descriptionParts.add('👤 Pemilik: $pemilik');
     }
-    
+
     // Tenaga kerja
     if (tenagaKerja != null && tenagaKerja! > 0) {
       descriptionParts.add('👥 Tenaga Kerja: $tenagaKerja orang');
     }
-    
+
     // Kegiatan usaha (ambil yang pertama jika ada)
     if (kegiatanUsaha.isNotEmpty) {
       final kegiatan = kegiatanUsaha.first;
@@ -296,52 +325,58 @@ class DirektoriModel {
         descriptionParts.add('💼 ${kegiatan['kegiatan_usaha']}');
       }
     }
-    
+
     // Sumber data
     if (sumberData != null && sumberData!.isNotEmpty) {
       descriptionParts.add('📋 Sumber: $sumberData');
     }
-    
+
     // Tahun berdiri
     if (tahunBerdiri != null && tahunBerdiri! > 0) {
       descriptionParts.add('📅 Tahun Berdiri: $tahunBerdiri');
     }
-    
+
     // Status keberadaan usaha
     if (keberadaanUsaha != null) {
       String statusKeberadaan = _getKeberadaanUsahaText(keberadaanUsaha!);
       descriptionParts.add('🏪 Status: $statusKeberadaan');
     }
-    
+
     // Jenis kepemilikan
     if (jenisKepemilikanUsaha != null) {
-      String jenisKepemilikan = _getJenisKepemilikanText(jenisKepemilikanUsaha!);
+      String jenisKepemilikan = _getJenisKepemilikanText(
+        jenisKepemilikanUsaha!,
+      );
       descriptionParts.add('🏛️ Kepemilikan: $jenisKepemilikan');
     }
-    
+
     // Bentuk badan hukum
     if (bentukBadanHukumUsaha != null) {
-      String bentukBadanHukum = _getBentukBadanHukumText(bentukBadanHukumUsaha!);
+      String bentukBadanHukum = _getBentukBadanHukumText(
+        bentukBadanHukumUsaha!,
+      );
       descriptionParts.add('⚖️ Badan Hukum: $bentukBadanHukum');
-      
+
       // Deskripsi tambahan jika bentuk badan hukum adalah "Lainnya"
-      if (bentukBadanHukumUsaha == 99 && deskripsiBadanUsahaLainnya != null && deskripsiBadanUsahaLainnya!.isNotEmpty) {
+      if (bentukBadanHukumUsaha == 99 &&
+          deskripsiBadanUsahaLainnya != null &&
+          deskripsiBadanUsahaLainnya!.isNotEmpty) {
         descriptionParts.add('   └─ $deskripsiBadanUsahaLainnya');
       }
     }
-    
+
     // Jaringan usaha
     if (jaringanUsaha != null) {
       String jaringan = _getJaringanUsahaText(jaringanUsaha!);
       descriptionParts.add('🌐 Jaringan: $jaringan');
     }
-    
+
     // Sektor institusi
     if (sektorInstitusi != null) {
       String sektor = _getSektorInstitusiText(sektorInstitusi!);
       descriptionParts.add('🏢 Sektor: $sektor');
     }
-    
+
     return descriptionParts.join('\n');
   }
 
@@ -350,83 +385,129 @@ class DirektoriModel {
     // Prioritas koordinat baru, fallback ke koordinat lama
     double? currentLat = latitude ?? lat;
     double? currentLong = longitude ?? long;
-    
-    return currentLat != null && currentLong != null && 
-           currentLat >= -90 && currentLat <= 90 && 
-           currentLong >= -180 && currentLong <= 180;
+
+    return currentLat != null &&
+        currentLong != null &&
+        currentLat >= -90 &&
+        currentLat <= 90 &&
+        currentLong >= -180 &&
+        currentLong <= 180;
   }
 
   /// Check apakah direktori aktif
   bool get isActive {
     return keberadaanUsaha == 1; // 1 = Aktif
   }
-  
+
   // Helper methods untuk mengkonversi kode ke teks
   String _getKeberadaanUsahaText(int kode) {
     switch (kode) {
-      case 1: return 'Aktif';
-      case 2: return 'Tutup Sementara';
-      case 3: return 'Belum Beroperasi/Berproduksi';
-      case 4: return 'Tutup';
-      case 5: return 'Alih Usaha';
-      case 6: return 'Tidak Ditemukan';
-      case 7: return 'Aktif Pindah';
-      case 8: return 'Aktif Nonrespon';
-      case 9: return 'Duplikat';
-      case 10: return 'Salah Kode Wilayah';
-      default: return 'Tidak Diketahui';
+      case 1:
+        return 'Aktif';
+      case 2:
+        return 'Tutup Sementara';
+      case 3:
+        return 'Belum Beroperasi/Berproduksi';
+      case 4:
+        return 'Tutup';
+      case 5:
+        return 'Alih Usaha';
+      case 6:
+        return 'Tidak Ditemukan';
+      case 7:
+        return 'Aktif Pindah';
+      case 8:
+        return 'Aktif Nonrespon';
+      case 9:
+        return 'Duplikat';
+      case 10:
+        return 'Salah Kode Wilayah';
+      default:
+        return 'Tidak Diketahui';
     }
   }
-  
+
   String _getJenisKepemilikanText(int kode) {
     switch (kode) {
-      case 1: return 'BUMN';
-      case 2: return 'Non BUMN';
-      case 3: return 'BUMD';
-      case 4: return 'BUMDes';
-      default: return 'Tidak Diketahui';
+      case 1:
+        return 'BUMN';
+      case 2:
+        return 'Non BUMN';
+      case 3:
+        return 'BUMD';
+      case 4:
+        return 'BUMDes';
+      default:
+        return 'Tidak Diketahui';
     }
   }
-  
+
   String _getBentukBadanHukumText(int kode) {
     switch (kode) {
-      case 1: return 'Perseroan (PT/ PT Persero..)';
-      case 2: return 'Yayasan';
-      case 3: return 'Koperasi';
-      case 4: return 'Dana Pensiun';
-      case 5: return 'Perum/Perumda';
-      case 6: return 'BUM Desa';
-      case 7: return 'CV';
-      case 8: return 'Firma';
-      case 9: return 'Persekutuan Perdata (Maatschap)';
-      case 10: return 'Kantor Perwakilan Luar Negeri';
-      case 11: return 'Badan Usaha Luar Negeri';
-      case 12: return 'Usaha Orang Perseorangan';
-      case 99: return 'Lainnya';
-      default: return 'Tidak Diketahui';
+      case 1:
+        return 'Perseroan (PT/ PT Persero..)';
+      case 2:
+        return 'Yayasan';
+      case 3:
+        return 'Koperasi';
+      case 4:
+        return 'Dana Pensiun';
+      case 5:
+        return 'Perum/Perumda';
+      case 6:
+        return 'BUM Desa';
+      case 7:
+        return 'CV';
+      case 8:
+        return 'Firma';
+      case 9:
+        return 'Persekutuan Perdata (Maatschap)';
+      case 10:
+        return 'Kantor Perwakilan Luar Negeri';
+      case 11:
+        return 'Badan Usaha Luar Negeri';
+      case 12:
+        return 'Usaha Orang Perseorangan';
+      case 99:
+        return 'Lainnya';
+      default:
+        return 'Tidak Diketahui';
     }
   }
-  
+
   String _getJaringanUsahaText(int kode) {
     switch (kode) {
-      case 1: return 'Tunggal';
-      case 2: return 'Kantor Pusat';
-      case 3: return 'Kantor Cabang';
-      case 4: return 'Perwakilan';
-      case 5: return 'Pabrik/Unit Kegiatan';
-      case 6: return 'Unit Pembantu/Penunjang';
-      default: return 'Tidak Diketahui';
+      case 1:
+        return 'Tunggal';
+      case 2:
+        return 'Kantor Pusat';
+      case 3:
+        return 'Kantor Cabang';
+      case 4:
+        return 'Perwakilan';
+      case 5:
+        return 'Pabrik/Unit Kegiatan';
+      case 6:
+        return 'Unit Pembantu/Penunjang';
+      default:
+        return 'Tidak Diketahui';
     }
   }
-  
+
   String _getSektorInstitusiText(int kode) {
     switch (kode) {
-      case 1: return 'S11 – Korporasi Finansial';
-      case 2: return 'S12 – Korporasi Non Finansial';
-      case 3: return 'S13 – Pemerintahan Umum';
-      case 4: return 'S14 – Rumah Tangga';
-      case 5: return 'S15 – LNPRT';
-      default: return 'Tidak Diketahui';
+      case 1:
+        return 'S11 – Korporasi Finansial';
+      case 2:
+        return 'S12 – Korporasi Non Finansial';
+      case 3:
+        return 'S13 – Pemerintahan Umum';
+      case 4:
+        return 'S14 – Rumah Tangga';
+      case 5:
+        return 'S15 – LNPRT';
+      default:
+        return 'Tidak Diketahui';
     }
   }
 

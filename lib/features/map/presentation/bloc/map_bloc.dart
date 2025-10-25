@@ -62,7 +62,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       debugPrint(
         'BLoC: polygon points loaded = ${meta.points.length}, label = ${meta.name}',
       );
-      
+
       // Buat label yang lebih informatif dengan nmsls, nmkec, dan nmdesa
       String label = meta.name ?? 'Polygon';
       if (meta.kecamatan != null || meta.desa != null) {
@@ -70,7 +70,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         final desaInfo = meta.desa ?? '-';
         label = '$label\nKec: $kecInfo\nDesa: $desaInfo';
       }
-      
+
       emit(
         state.copyWith(
           polygon: meta.points,
@@ -97,7 +97,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       var selMeta = state.selectedPolygonMeta;
       if (selPoints.isEmpty && list.isNotEmpty) {
         selPoints = list.first.points;
-        
+
         // Buat label yang lebih informatif untuk polygon pertama
         String label = list.first.name ?? 'Polygon';
         if (list.first.kecamatan != null || list.first.desa != null) {
@@ -128,7 +128,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   ) {
     if (event.index < 0 || event.index >= state.polygonsMeta.length) return;
     final sel = state.polygonsMeta[event.index];
-    
+
     // Buat label yang lebih informatif dengan nmsls, nmkec, dan nmdesa
     String label = sel.name ?? 'Polygon ${event.index + 1}';
     if (sel.kecamatan != null || sel.desa != null) {
@@ -136,7 +136,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       final desaInfo = sel.desa ?? '-';
       label = '$label\nKec: $kecInfo\nDesa: $desaInfo';
     }
-    
+
     emit(
       state.copyWith(
         polygon: sel.points,
@@ -154,7 +154,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       final desaInfo = event.polygon.desa ?? '-';
       label = '$label\nKec: $kecInfo\nDesa: $desaInfo';
     }
-    
+
     emit(
       state.copyWith(
         polygon: event.polygon.points,
@@ -169,14 +169,21 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   }
 
   void _onPlaceCleared(PlaceCleared event, Emitter<MapState> emit) {
-    emit(state.copyWith(selectedPlace: null));
+    print('DEBUG: _onPlaceCleared called'); // Debug log
+    emit(state.copyWith(clearSelectedPlace: true));
   }
 
-  void _onTemporaryMarkerAdded(TemporaryMarkerAdded event, Emitter<MapState> emit) {
+  void _onTemporaryMarkerAdded(
+    TemporaryMarkerAdded event,
+    Emitter<MapState> emit,
+  ) {
     emit(state.copyWith(temporaryMarker: event.position));
   }
 
-  void _onTemporaryMarkerRemoved(TemporaryMarkerRemoved event, Emitter<MapState> emit) {
-    emit(state.copyWith(temporaryMarker: null));
+  void _onTemporaryMarkerRemoved(
+    TemporaryMarkerRemoved event,
+    Emitter<MapState> emit,
+  ) {
+    emit(state.copyWith(clearTemporaryMarker: true));
   }
 }

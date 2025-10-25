@@ -27,6 +27,80 @@ class MapRepositoryImpl implements MapRepository {
   }
 
   @override
+  Future<List<DirektoriModel>> searchDirectoriesWithoutCoordinates(
+    String query,
+  ) async {
+    try {
+      final response = await _supabaseClient
+          .from('direktori')
+          .select('*, wilayah(*)')
+          .eq('keberadaan_usaha', 1) // 1 = Aktif
+          .or('latitude.is.null,longitude.is.null,lat.is.null,long.is.null')
+          .ilike('nama_usaha', '%$query%')
+          .limit(20);
+
+      return (response as List)
+          .map((json) => DirektoriModel.fromJson(json))
+          .toList();
+    } catch (e) {
+      print('Error searching directories without coordinates: $e');
+      return [];
+    }
+  }
+
+  @override
+  Future<bool> updateDirectoryCoordinates(
+    String id,
+    double lat,
+    double lng,
+  ) async {
+    try {
+      await _supabaseClient
+          .from('direktori')
+          .update({
+            'latitude': lat,
+            'longitude': lng,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', id);
+      return true;
+    } catch (e) {
+      print('Error updating directory coordinates: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> insertDirectory(DirektoriModel directory) async {
+    try {
+      await _supabaseClient.from('direktori').insert({
+        'id_sbr': directory.idSbr, // Menambahkan id_sbr yang hilang
+        'nama_usaha': directory.namaUsaha,
+        'alamat': directory.alamat,
+        'pemilik': directory.pemilik,
+        'nomor_telepon': directory.nomorTelepon,
+        'latitude': directory.latitude ?? directory.lat,
+        'longitude': directory.longitude ?? directory.long,
+        'id_sls': directory.idSls,
+        'kd_prov': directory.kdProv,
+        'kd_kab': directory.kdKab,
+        'kd_kec': directory.kdKec,
+        'kd_desa': directory.kdDesa,
+        'kd_sls': directory.kdSls,
+        'kode_pos': directory.kodePos,
+        'nama_sls': directory.nmSls, // Menambahkan nama_sls
+        'keberadaan_usaha': 1, // 1 = Aktif
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+      return true;
+    } catch (e) {
+      print('Error inserting directory: $e');
+      return false;
+    }
+  }
+
+  @override
   Future<List<Place>> getPlaces() async {
     try {
       // Query data direktori dari Supabase dengan join ke tabel wilayah
@@ -48,19 +122,21 @@ class MapRepositoryImpl implements MapRepository {
 
       // Konversi response ke DirektoriModel lalu ke Place
       final List<Place> places = [];
-      
+
       for (final item in response) {
         try {
           // Flatten data wilayah ke level utama untuk kemudahan parsing
-          final Map<String, dynamic> flattenedData = Map<String, dynamic>.from(item);
-          
+          final Map<String, dynamic> flattenedData = Map<String, dynamic>.from(
+            item,
+          );
+
           if (item['wilayah'] != null && item['wilayah'] is Map) {
             final wilayahData = item['wilayah'] as Map<String, dynamic>;
             flattenedData.addAll(wilayahData);
           }
-          
+
           final direktori = DirektoriModel.fromJson(flattenedData);
-          
+
           // Hanya tambahkan jika memiliki koordinat yang valid
           if (direktori.hasValidCoordinates) {
             places.add(direktori.toPlace());
@@ -72,16 +148,17 @@ class MapRepositoryImpl implements MapRepository {
         }
       }
 
-      debugPrint('MapRepository: Successfully loaded ${places.length} places from Supabase');
-      
+      debugPrint(
+        'MapRepository: Successfully loaded ${places.length} places from Supabase',
+      );
+
       // Jika tidak ada data yang valid, return fallback
       if (places.isEmpty) {
         debugPrint('MapRepository: No valid places found, using fallback data');
         return _getFallbackPlaces();
       }
-      
+
       return places;
-      
     } catch (e) {
       debugPrint('MapRepository: Error fetching places from Supabase: $e');
       // Jika ada error, return dummy data sebagai fallback
