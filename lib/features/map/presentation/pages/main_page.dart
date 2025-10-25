@@ -9,6 +9,7 @@ import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
 import '../../data/repositories/map_repository_impl.dart';
 import '../../domain/entities/place.dart';
+import '../../data/models/direktori_model.dart';
 import '../../domain/usecases/get_initial_map_config.dart';
 import '../../domain/usecases/get_places.dart';
 import '../../domain/usecases/get_first_polygon_meta_from_geojson.dart';
@@ -28,6 +29,7 @@ class _MainPageState extends State<MainPage> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   List<Place> _searchResults = [];
+  List<DirektoriModel> _directoryResults = [];
   List<Place> _allPlaces = [];
 
   @override
@@ -43,22 +45,36 @@ class _MainPageState extends State<MainPage> {
     _allPlaces = await repository.getPlaces();
   }
 
-  void _performSearch(String query) {
+  void _performSearch(String query) async {
     if (query.isEmpty) {
       setState(() {
         _searchResults = [];
+        _directoryResults = [];
       });
       return;
     }
 
+    // Search places with coordinates
+    final placesWithCoordinates = _allPlaces
+        .where(
+          (place) =>
+              place.name.toLowerCase().contains(query.toLowerCase()) ||
+              place.description.toLowerCase().contains(query.toLowerCase()),
+        )
+        .toList();
+
+    // Search directories without coordinates
+    List<DirektoriModel> directoriesWithoutCoordinates = [];
+    try {
+      final repository = MapRepositoryImpl();
+      directoriesWithoutCoordinates = await repository.searchDirectoriesWithoutCoordinates(query);
+    } catch (e) {
+      print('Error searching directories without coordinates: $e');
+    }
+
     setState(() {
-      _searchResults = _allPlaces
-          .where(
-            (place) =>
-                place.name.toLowerCase().contains(query.toLowerCase()) ||
-                place.description.toLowerCase().contains(query.toLowerCase()),
-          )
-          .toList();
+      _searchResults = placesWithCoordinates;
+      _directoryResults = directoriesWithoutCoordinates;
     });
 
     // Show bottom sheet with results
@@ -110,7 +126,7 @@ class _MainPageState extends State<MainPage> {
               ),
               // Search results
               Expanded(
-                child: _searchResults.isEmpty
+                child: (_searchResults.isEmpty && _directoryResults.isEmpty)
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -133,31 +149,89 @@ class _MainPageState extends State<MainPage> {
                       )
                     : ListView.builder(
                         controller: scrollController,
-                        itemCount: _searchResults.length,
+                        itemCount: _searchResults.length + _directoryResults.length,
                         itemBuilder: (context, index) {
-                          final place = _searchResults[index];
-                          return ListTile(
-                            leading: const Icon(
-                              Icons.location_on,
-                              color: Colors.red,
-                            ),
-                            title: Text(place.name),
-                            subtitle: Text(place.description),
-                            onTap: () {
-                              // Close bottom sheet and navigate to location
-                              Navigator.pop(context);
-                              _sharedMapController.move(place.position, 15.0);
-                              // Switch to map tab if not already there
-                              if (_selectedIndex != 0) {
-                                setState(() {
-                                  _selectedIndex = 0;
-                                });
-                              }
-                              // Clear search and unfocus
-                              _searchController.clear();
-                              _searchFocusNode.unfocus();
-                            },
-                          );
+                          // Show places with coordinates first
+                          if (index < _searchResults.length) {
+                            final place = _searchResults[index];
+                            return ListTile(
+                              leading: const Icon(
+                                Icons.location_on,
+                                color: Colors.red,
+                              ),
+                              title: Text(place.name),
+                              subtitle: Text(place.description),
+                              trailing: const Icon(
+                                Icons.map,
+                                color: Colors.green,
+                                size: 16,
+                              ),
+                              onTap: () {
+                                // Close bottom sheet and navigate to location
+                                Navigator.pop(context);
+                                _sharedMapController.move(place.position, 15.0);
+                                // Switch to map tab if not already there
+                                if (_selectedIndex != 0) {
+                                  setState(() {
+                                    _selectedIndex = 0;
+                                  });
+                                }
+                                // Clear search and unfocus
+                                _searchController.clear();
+                                _searchFocusNode.unfocus();
+                              },
+                            );
+                          } else {
+                            // Show directories without coordinates
+                            final directoryIndex = index - _searchResults.length;
+                            final directory = _directoryResults[directoryIndex];
+                            return ListTile(
+                              leading: const Icon(
+                                Icons.business,
+                                color: Colors.orange,
+                              ),
+                              title: Text(directory.namaUsaha),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (directory.alamat != null)
+                                    Text(
+                                      directory.alamat!,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  Text(
+                                    'ID SLS: ${directory.idSls} • Tanpa koordinat',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              trailing: const Icon(
+                                Icons.location_off,
+                                color: Colors.grey,
+                                size: 16,
+                              ),
+                              onTap: () {
+                                // Close bottom sheet
+                                Navigator.pop(context);
+                                // Show info that this place has no coordinates
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      '${directory.namaUsaha} belum memiliki koordinat. Anda dapat menambahkan koordinat melalui peta.',
+                                    ),
+                                    backgroundColor: Colors.orange,
+                                    duration: const Duration(seconds: 3),
+                                  ),
+                                );
+                                // Clear search and unfocus
+                                _searchController.clear();
+                                _searchFocusNode.unfocus();
+                              },
+                            );
+                          }
                         },
                       ),
               ),
@@ -183,145 +257,125 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) =>
-          MapBloc(
-              getInitialMapConfig: GetInitialMapConfig(MapRepositoryImpl()),
-              getPlaces: GetPlaces(MapRepositoryImpl()),
-              getFirstPolygonMeta: GetFirstPolygonMetaFromGeoJson(
-                MapRepositoryImpl(),
+    return Scaffold(
+      body: Stack(
+        children: [
+          // Base map layer - always MapPage to maintain consistent map
+          MapPage(mapController: _sharedMapController),
+          // Overlay content based on selected tab
+          if (_selectedIndex != 0) _buildOverlayContent(),
+          // Floating search bar with avatar (Google Maps style)
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 16,
+            left: 16,
+            right: 16,
+            child: Container(
+              height: 56,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-              getAllPolygonsMeta: GetAllPolygonsMetaFromGeoJson(
-                MapRepositoryImpl(),
-              ),
-            )
-            ..add(const MapInitRequested())
-            ..add(const PlacesRequested())
-            ..add(const PolygonRequested())
-            ..add(const PolygonsListRequested()),
-      child: Scaffold(
-        body: Stack(
-          children: [
-            // Base map layer - always MapPage to maintain consistent map
-            MapPage(mapController: _sharedMapController),
-            // Overlay content based on selected tab
-            if (_selectedIndex != 0) _buildOverlayContent(),
-            // Floating search bar with avatar (Google Maps style)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 16,
-              left: 16,
-              right: 16,
-              child: Container(
-                height: 56,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    // Search TextField
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: TextField(
-                          controller: _searchController,
-                          focusNode: _searchFocusNode,
-                          decoration: const InputDecoration(
-                            hintText: 'Cari tempat...',
-                            hintStyle: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 16,
-                            ),
-                            border: InputBorder.none,
-                            prefixIcon: Icon(
-                              Icons.search,
-                              color: Colors.grey,
-                              size: 24,
-                            ),
+              child: Row(
+                children: [
+                  // Search TextField
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: TextField(
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        decoration: const InputDecoration(
+                          hintText: 'Cari tempat...',
+                          hintStyle: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 16,
                           ),
-                          style: const TextStyle(fontSize: 16),
-                          onSubmitted: (value) {
-                            if (value.trim().isNotEmpty) {
-                              _performSearch(value.trim());
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                    // Avatar with popup menu
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: PopupMenuButton<String>(
-                        icon: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: Colors.blue,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.account_circle,
-                            color: Colors.white,
+                          border: InputBorder.none,
+                          prefixIcon: Icon(
+                            Icons.search,
+                            color: Colors.grey,
                             size: 24,
                           ),
                         ),
-                        onSelected: (value) {
-                          if (value == 'logout') {
-                            _showLogoutDialog(context);
+                        style: const TextStyle(fontSize: 16),
+                        onSubmitted: (value) {
+                          if (value.trim().isNotEmpty) {
+                            _performSearch(value.trim());
                           }
                         },
-                        itemBuilder: (BuildContext context) => [
-                          const PopupMenuItem<String>(
-                            value: 'logout',
-                            child: Row(
-                              children: [
-                                Icon(Icons.logout, color: Colors.red),
-                                SizedBox(width: 8),
-                                Text('Logout'),
-                              ],
-                            ),
-                          ),
-                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  // Avatar with popup menu
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: PopupMenuButton<String>(
+                      icon: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.blue,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.account_circle,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      onSelected: (value) {
+                        if (value == 'logout') {
+                          _showLogoutDialog(context);
+                        }
+                      },
+                      itemBuilder: (BuildContext context) => [
+                        const PopupMenuItem<String>(
+                          value: 'logout',
+                          child: Row(
+                            children: [
+                              Icon(Icons.logout, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text('Logout'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _selectedIndex,
-          onTap: (index) {
-            setState(() {
-              _selectedIndex = index;
-            });
-          },
-          type: BottomNavigationBarType.fixed,
-          selectedItemColor: Colors.blue,
-          unselectedItemColor: Colors.grey,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.explore),
-              label: 'Jelajah',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.bookmark),
-              label: 'Disimpan',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.add_circle_outline),
-              label: 'Kontribusi',
-            ),
-          ],
-        ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: Colors.blue,
+        unselectedItemColor: Colors.grey,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Jelajah'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bookmark),
+            label: 'Disimpan',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.add_circle_outline),
+            label: 'Kontribusi',
+          ),
+        ],
       ),
     );
   }

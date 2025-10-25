@@ -240,6 +240,141 @@ class MapPage extends StatelessWidget {
                                             ),
                                           ),
                                         ),
+                                        const SizedBox(width: 12),
+                                        // Update Regional Data button
+                                        Expanded(
+                                          child: ElevatedButton.icon(
+                                            onPressed: () async {
+                                              final place =
+                                                  state.selectedPlace!;
+                                              _updateRegionalData(
+                                                context,
+                                                place,
+                                              );
+                                            },
+                                            icon: const Icon(
+                                              Icons.location_city,
+                                              size: 18,
+                                            ),
+                                            label: const Text(
+                                              'Update Regional',
+                                            ),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.orange,
+                                              foregroundColor: Colors.white,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 16,
+                                                    vertical: 12,
+                                                  ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        // Delete or mark closed button
+                                        Expanded(
+                                          child: ElevatedButton.icon(
+                                            onPressed: () async {
+                                              final place =
+                                                  state.selectedPlace!;
+                                              final confirmed = await showDialog<bool>(
+                                                context: context,
+                                                builder: (ctx) => AlertDialog(
+                                                  title: const Text(
+                                                    'Konfirmasi Hapus/Tutup',
+                                                  ),
+                                                  content: const Text(
+                                                    'Jika id_sbr = 0 (belum approve) akan dihapus. Jika sudah memiliki id_sbr, status keberadaan akan diubah menjadi kode 4 (Tutup). Lanjutkan?',
+                                                  ),
+                                                  actions: [
+                                                    TextButton(
+                                                      onPressed: () =>
+                                                          Navigator.of(
+                                                            ctx,
+                                                          ).pop(false),
+                                                      child: const Text(
+                                                        'Batal',
+                                                      ),
+                                                    ),
+                                                    ElevatedButton(
+                                                      onPressed: () =>
+                                                          Navigator.of(
+                                                            ctx,
+                                                          ).pop(true),
+                                                      child: const Text(
+                                                        'Lanjut',
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                              if (confirmed != true) return;
+                                              try {
+                                                final repository =
+                                                    MapRepositoryImpl();
+                                                final success = await repository
+                                                    .deleteOrCloseDirectoryById(
+                                                      place.id,
+                                                    );
+                                                if (success) {
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                        'Berhasil menghapus/menutup sesuai status',
+                                                      ),
+                                                      backgroundColor:
+                                                          Colors.green,
+                                                    ),
+                                                  );
+                                                  // Refresh data dan tutup card
+                                                  context.read<MapBloc>().add(
+                                                    const PlacesRequested(),
+                                                  );
+                                                  context.read<MapBloc>().add(
+                                                    const PlaceCleared(),
+                                                  );
+                                                } else {
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                        'Operasi gagal',
+                                                      ),
+                                                      backgroundColor:
+                                                          Colors.red,
+                                                    ),
+                                                  );
+                                                }
+                                              } catch (e) {
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text('Error: $e'),
+                                                    backgroundColor: Colors.red,
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                            icon: const Icon(
+                                              Icons.delete_forever,
+                                              size: 18,
+                                            ),
+                                            label: const Text('Hapus/Tutup'),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.red,
+                                              foregroundColor: Colors.white,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 16,
+                                                    vertical: 12,
+                                                  ),
+                                            ),
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -318,7 +453,48 @@ class MapPage extends StatelessWidget {
                 parentContext.read<MapBloc>().add(
                   const TemporaryMarkerRemoved(),
                 );
-                _showTambahDirektoriDialog(context, point);
+                
+                // Calculate region data before calling the method
+                String idSls = '';
+                String? namaSls;
+                String? kodePos;
+                String kdProv = '';
+                String kdKab = '';
+                String kdKec = '';
+                String kdDesa = '';
+                String kdSls = '';
+                String? alamatFromGeocode;
+
+                final polygons = parentContext.read<MapBloc>().state.polygonsMeta;
+                for (final polygon in polygons) {
+                  if (_isPointInPolygon(point, polygon.points)) {
+                    idSls = polygon.idsls ?? '';
+                    namaSls = polygon.name;
+                    kodePos = polygon.kodePos;
+                    break;
+                  }
+                }
+                if (idSls.isNotEmpty && idSls.length >= 14) {
+                  kdProv = idSls.substring(0, 2);
+                  kdKab = idSls.substring(2, 4);
+                  kdKec = idSls.substring(4, 7);
+                  kdDesa = idSls.substring(7, 10);
+                  kdSls = idSls.substring(10, 14);
+                }
+
+                _showAddDirektoriForm(
+                  context,
+                  point,
+                  idSls,
+                  kdProv,
+                  kdKab,
+                  kdKec,
+                  kdDesa,
+                  kdSls,
+                  namaSls,
+                  kodePos,
+                  alamatFromGeocode,
+                );
               },
             ),
             ListTile(
@@ -590,7 +766,47 @@ class MapPage extends StatelessWidget {
               subtitle: const Text('Buat entri direktori baru di lokasi ini'),
               onTap: () {
                 Navigator.pop(context);
-                _showAddDirektoriForm(context, point);
+                // Calculate region data before calling the method
+                String idSls = '';
+                String? namaSls;
+                String? kodePos;
+                String kdProv = '';
+                String kdKab = '';
+                String kdKec = '';
+                String kdDesa = '';
+                String kdSls = '';
+                String? alamatFromGeocode;
+
+                final polygons = context.read<MapBloc>().state.polygonsMeta;
+                for (final polygon in polygons) {
+                  if (_isPointInPolygon(point, polygon.points)) {
+                    idSls = polygon.idsls ?? '';
+                    namaSls = polygon.name;
+                    kodePos = polygon.kodePos;
+                    break;
+                  }
+                }
+                if (idSls.isNotEmpty && idSls.length >= 14) {
+                  kdProv = idSls.substring(0, 2);
+                  kdKab = idSls.substring(2, 4);
+                  kdKec = idSls.substring(4, 7);
+                  kdDesa = idSls.substring(7, 10);
+                  kdSls = idSls.substring(10, 14);
+                }
+
+                _showAddDirektoriForm(
+                  context,
+                  point,
+                  idSls,
+                  kdProv,
+                  kdKab,
+                  kdKec,
+                  kdDesa,
+                  kdSls,
+                  namaSls,
+                  kodePos,
+                  alamatFromGeocode,
+                );
               },
             ),
             ListTile(
@@ -619,230 +835,319 @@ class MapPage extends StatelessWidget {
     );
   }
 
-  void _showAddDirektoriForm(BuildContext context, LatLng point) {
-    final TextEditingController namaUsahaController = TextEditingController();
-    final TextEditingController alamatController = TextEditingController();
-    final TextEditingController pemilikController = TextEditingController();
-    final TextEditingController nomorTeleponController =
-        TextEditingController();
+  void _showAddDirektoriForm(
+    BuildContext context,
+    LatLng point,
+    String idSls,
+    String kdProv,
+    String kdKab,
+    String kdKec,
+    String kdDesa,
+    String kdSls,
+    String? namaSls,
+    String? kodePos,
+    String? alamatFromGeocode,
+  ) {
+    final namaUsahaController = TextEditingController();
+    final alamatController = TextEditingController();
+    final pemilikController = TextEditingController();
+    final nomorTeleponController = TextEditingController();
 
-    // Store the ScaffoldMessenger and MapBloc references before showing dialog
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final mapBloc = context.read<MapBloc>();
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Tambah Direktori Baru'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Koordinat (read-only)
-              const Text(
-                'Koordinat:',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text('Latitude: ${point.latitude.toStringAsFixed(6)}'),
-              Text('Longitude: ${point.longitude.toStringAsFixed(6)}'),
-              const SizedBox(height: 16),
-
-              // Nama Usaha (required)
-              TextField(
-                controller: namaUsahaController,
-                decoration: const InputDecoration(
-                  labelText: 'Nama Usaha *',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Alamat
-              TextField(
-                controller: alamatController,
-                decoration: const InputDecoration(
-                  labelText: 'Alamat',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 12),
-
-              // Pemilik
-              TextField(
-                controller: pemilikController,
-                decoration: const InputDecoration(
-                  labelText: 'Pemilik',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Nomor Telepon
-              TextField(
-                controller: nomorTeleponController,
-                decoration: const InputDecoration(
-                  labelText: 'Nomor Telepon',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.phone,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (namaUsahaController.text.trim().isEmpty) {
-                scaffoldMessenger.showSnackBar(
-                  const SnackBar(
-                    content: Text('Nama usaha harus diisi'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-
-              // Store MapBloc reference before closing dialog
-              // final mapBloc = context.read<MapBloc>(); // Moved to top of method
-              
-              Navigator.of(dialogContext).pop();
-              _saveDirektori(
-                context,
-                point,
-                namaUsahaController.text.trim(),
-                alamatController.text.trim(),
-                pemilikController.text.trim(),
-                nomorTeleponController.text.trim(),
-                scaffoldMessenger,
-                mapBloc,
-              );
-            },
-            child: const Text('Simpan'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSelectExistingDirektori(BuildContext context, LatLng point) {
-    final TextEditingController searchController = TextEditingController();
+    // Variables for autocomplete functionality
     List<DirektoriModel> searchResults = [];
-    bool isLoading = false;
+    bool isSearching = false;
+    bool showSuggestions = false;
 
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Pilih Direktori untuk Update Koordinat'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 400,
+        builder: (context, setState) => Dialog(
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.9,
+            height: MediaQuery.of(context).size.height * 0.8,
+            padding: const EdgeInsets.all(24),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Koordinat yang akan diset
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Koordinat yang akan diset:',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                // Header with close button
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Tambah Direktori Baru',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                       ),
-                      const SizedBox(height: 4),
-                      Text('Latitude: ${point.latitude.toStringAsFixed(6)}'),
-                      Text('Longitude: ${point.longitude.toStringAsFixed(6)}'),
-                    ],
-                  ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
 
-                // Search field
-                TextField(
-                  controller: searchController,
-                  decoration: const InputDecoration(
-                    labelText: 'Cari nama usaha',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                  onChanged: (query) {
-                    if (query.length >= 3) {
-                      _searchDirectories(query, setState, (results, loading) {
-                        searchResults = results;
-                        isLoading = loading;
-                      }, context);
-                    } else {
-                      setState(() {
-                        searchResults = [];
-                        isLoading = false;
-                      });
-                    }
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Results
+                // Content in scrollable area
                 Expanded(
-                  child: isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : searchResults.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'Ketik minimal 3 karakter untuk mencari direktori',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        )
-                      : ListView.builder(
-                          itemCount: searchResults.length,
-                          itemBuilder: (context, index) {
-                            final directory = searchResults[index];
-                            return ListTile(
-                              title: Text(directory.namaUsaha),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (directory.alamat != null)
-                                    Text(directory.alamat!),
-                                  Text(
-                                    'ID SLS: ${directory.idSls}',
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                              trailing: const Icon(Icons.arrow_forward_ios),
-                              onTap: () {
-                                Navigator.of(dialogContext).pop();
-                                _updateDirectoryCoordinates(
-                                  context,
-                                  directory,
-                                  point,
-                                );
-                              },
-                            );
-                          },
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Koordinat:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
                         ),
+                        const SizedBox(height: 4),
+                        Text('Latitude: ${point.latitude.toStringAsFixed(6)}'),
+                        Text(
+                          'Longitude: ${point.longitude.toStringAsFixed(6)}',
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Informasi Wilayah:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
+                        Text('idsls: ${idSls.isNotEmpty ? idSls : "-"}'),
+                        Text('kode_pos: ${kodePos ?? "-"}'),
+                        const SizedBox(height: 16),
+
+                        // Business name field with autocomplete
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextField(
+                              controller: namaUsahaController,
+                              decoration: const InputDecoration(
+                                labelText: 'Nama Usaha *',
+                                border: OutlineInputBorder(),
+                                suffixIcon: Icon(Icons.search),
+                              ),
+                              onChanged: (query) {
+                                if (query.length >= 3) {
+                                  setState(() {
+                                    isSearching = true;
+                                    showSuggestions = true;
+                                  });
+                                  _searchDirectories(query, setState, (
+                                    results,
+                                    loading,
+                                  ) {
+                                    searchResults = results;
+                                    isSearching = loading;
+                                  }, context);
+                                } else {
+                                  setState(() {
+                                    searchResults = [];
+                                    isSearching = false;
+                                    showSuggestions = false;
+                                  });
+                                }
+                              },
+                            ),
+
+                            // Suggestions dropdown
+                            if (showSuggestions &&
+                                (isSearching || searchResults.isNotEmpty))
+                              Container(
+                                margin: const EdgeInsets.only(top: 4),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                  borderRadius: BorderRadius.circular(4),
+                                  color: Colors.white,
+                                ),
+                                constraints: const BoxConstraints(
+                                  maxHeight: 200,
+                                ),
+                                child: isSearching
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(16),
+                                        child: Center(
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                    ),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Mencari...'),
+                                            ],
+                                          ),
+                                        ),
+                                      )
+                                    : searchResults.isEmpty
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(16),
+                                        child: Text(
+                                          'Tidak ada usaha yang ditemukan',
+                                          style: TextStyle(color: Colors.grey),
+                                        ),
+                                      )
+                                    : ListView.separated(
+                                        shrinkWrap: true,
+                                        itemCount: searchResults.length,
+                                        separatorBuilder: (context, index) =>
+                                            const Divider(height: 1),
+                                        itemBuilder: (context, index) {
+                                          final directory =
+                                              searchResults[index];
+                                          return ListTile(
+                                            dense: true,
+                                            title: Text(
+                                              directory.namaUsaha,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            subtitle: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                if (directory.alamat != null)
+                                                  Text(
+                                                    directory.alamat!,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                Text(
+                                                  'ID SLS: ${directory.idSls}',
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            trailing: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                TextButton(
+                                                  onPressed: () {
+                                                    // Option 1: Use existing business for coordinate update
+                                                    Navigator.of(
+                                                      dialogContext,
+                                                    ).pop();
+                                                    _updateDirectoryCoordinates(
+                                                      context,
+                                                      directory,
+                                                      point,
+                                                    );
+                                                  },
+                                                  child: const Text(
+                                                    'Update Koordinat',
+                                                  ),
+                                                ),
+                                                TextButton(
+                                                  onPressed: () {
+                                                    // Option 2: Use name as template for new business
+                                                    namaUsahaController.text =
+                                                        directory.namaUsaha;
+                                                    setState(() {
+                                                      showSuggestions = false;
+                                                    });
+                                                  },
+                                                  child: const Text(
+                                                    'Gunakan Nama',
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Hanya nama usaha yang wajib. Bidang lain di-skip.',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Bottom buttons
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: const Text('Batal'),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () async {
+                        final namaUsaha = namaUsahaController.text.trim();
+                        if (namaUsaha.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Nama usaha harus diisi'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+
+                        // Show confirmation dialog
+                        final confirmed = await showDialog<bool>(
+                          context: dialogContext,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Konfirmasi'),
+                            content: Text(
+                              'Apakah Anda yakin ingin menyimpan direktori "$namaUsaha"?',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(false),
+                                child: const Text('Batal'),
+                              ),
+                              ElevatedButton(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(true),
+                                child: const Text('Simpan'),
+                              ),
+                            ],
+                          ),
+                        );
+
+                        if (confirmed == true) {
+                          Navigator.of(dialogContext).pop();
+                          final scaffoldMessenger = ScaffoldMessenger.of(
+                            context,
+                          );
+                          final mapBloc = context.read<MapBloc>();
+
+                          await _saveDirektori(
+                            context,
+                            point,
+                            namaUsaha,
+                            alamatController.text.trim(),
+                            pemilikController.text.trim(),
+                            nomorTeleponController.text.trim(),
+                            scaffoldMessenger,
+                            mapBloc,
+                          );
+                        }
+                      },
+                      child: const Text('Simpan'),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Batal'),
-            ),
-          ],
         ),
       ),
     );
@@ -884,7 +1189,41 @@ class MapPage extends StatelessWidget {
     DirektoriModel directory,
     LatLng point,
   ) async {
-    // Show confirmation dialog
+    // Save references before async operations
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final mapBloc = context.read<MapBloc>();
+
+    // Calculate regional data from coordinates
+    String idSls = '';
+    String? kodePos;
+    String? namaSls;
+    String kdProv = '';
+    String kdKab = '';
+    String kdKec = '';
+    String kdDesa = '';
+    String kdSls = '';
+
+    // Find polygon at point to get regional data
+    final polygons = mapBloc.state.polygonsMeta;
+    for (final polygon in polygons) {
+      if (_isPointInPolygon(point, polygon.points)) {
+        idSls = polygon.idsls ?? '';
+        namaSls = polygon.name;
+        kodePos = polygon.kodePos;
+
+        // Extract regional codes from idSls
+        if (idSls.isNotEmpty && idSls.length >= 14) {
+          kdProv = idSls.substring(0, 2);
+          kdKab = idSls.substring(2, 4);
+          kdKec = idSls.substring(4, 7);
+          kdDesa = idSls.substring(7, 10);
+          kdSls = idSls.substring(10, 14);
+        }
+        break;
+      }
+    }
+
+    // Show confirmation dialog with regional info
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -897,6 +1236,16 @@ class MapPage extends StatelessWidget {
             const SizedBox(height: 8),
             Text('Latitude: ${point.latitude.toStringAsFixed(6)}'),
             Text('Longitude: ${point.longitude.toStringAsFixed(6)}'),
+            if (idSls.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Data Regional:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text('ID SLS: $idSls'),
+              if (namaSls != null) Text('Nama SLS: $namaSls'),
+              if (kodePos != null) Text('Kode Pos: $kodePos'),
+            ],
           ],
         ),
         actions: [
@@ -915,26 +1264,35 @@ class MapPage extends StatelessWidget {
     if (confirmed == true) {
       try {
         final repository = MapRepositoryImpl();
-        final success = await repository.updateDirectoryCoordinates(
-          directory.id,
-          point.latitude,
-          point.longitude,
-        );
+        final success = await repository
+            .updateDirectoryCoordinatesWithRegionalData(
+              directory.id,
+              point.latitude,
+              point.longitude,
+              idSls,
+              kdProv,
+              kdKab,
+              kdKec,
+              kdDesa,
+              kdSls,
+              kodePos,
+              namaSls,
+            );
 
         if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          scaffoldMessenger.showSnackBar(
             SnackBar(
               content: Text(
-                'Koordinat "${directory.namaUsaha}" berhasil diupdate',
+                'Koordinat dan data regional "${directory.namaUsaha}" berhasil diupdate',
               ),
               backgroundColor: Colors.green,
             ),
           );
 
           // Refresh the map data
-          context.read<MapBloc>().add(const PlacesRequested());
+          mapBloc.add(const PlacesRequested());
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
+          scaffoldMessenger.showSnackBar(
             const SnackBar(
               content: Text('Gagal mengupdate koordinat'),
               backgroundColor: Colors.red,
@@ -942,11 +1300,144 @@ class MapPage extends StatelessWidget {
           );
         }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     }
+  }
+
+  // Kode pos diambil langsung dari GeoJSON; fungsi API dihapus.
+
+  void _showSelectExistingDirektori(BuildContext context, LatLng point) {
+    final TextEditingController searchController = TextEditingController();
+    List<DirektoriModel> searchResults = [];
+    bool isSearching = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => Dialog(
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.8,
+            height: MediaQuery.of(context).size.height * 0.7,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Pilih Direktori untuk Update Koordinat',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: searchController,
+                  decoration: const InputDecoration(
+                    labelText: 'Cari nama usaha',
+                    hintText: 'Ketik minimal 3 karakter untuk mencari...',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (query) {
+                    if (query.length >= 3) {
+                      setState(() {
+                        isSearching = true;
+                      });
+                      _searchDirectories(query, setState, (results, loading) {
+                        searchResults = results;
+                        isSearching = loading;
+                      }, context);
+                    } else {
+                      setState(() {
+                        searchResults = [];
+                        isSearching = false;
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: isSearching
+                      ? const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 16),
+                              Text('Mencari...'),
+                            ],
+                          ),
+                        )
+                      : searchResults.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'Tidak ada usaha yang ditemukan',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        )
+                      : ListView.separated(
+                          itemCount: searchResults.length,
+                          separatorBuilder: (context, index) =>
+                              const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final directory = searchResults[index];
+                            return ListTile(
+                              title: Text(
+                                directory.namaUsaha,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (directory.alamat != null)
+                                    Text(
+                                      directory.alamat!,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  Text(
+                                    'ID SLS: ${directory.idSls}',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              trailing: ElevatedButton(
+                                onPressed: () {
+                                  Navigator.of(dialogContext).pop();
+                                  _updateDirectoryCoordinates(
+                                    context,
+                                    directory,
+                                    point,
+                                  );
+                                },
+                                child: const Text('Update Koordinat'),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _saveDirektori(
@@ -957,15 +1448,16 @@ class MapPage extends StatelessWidget {
     String pemilik,
     String nomorTelepon,
     ScaffoldMessengerState scaffoldMessenger,
-    MapBloc mapBloc,
-  ) async {
+    MapBloc mapBloc, {
+    bool minimalMode = false,
+  }) async {
     print('🔄 [DEBUG] Memulai proses penyimpanan direktori...');
     print('📍 [DEBUG] Koordinat: ${point.latitude}, ${point.longitude}');
     print('🏢 [DEBUG] Nama Usaha: $namaUsaha');
     print('📍 [DEBUG] Alamat: $alamat');
     print('👤 [DEBUG] Pemilik: $pemilik');
     print('📞 [DEBUG] Nomor Telepon: $nomorTelepon');
-    
+
     try {
       // Find polygon at point to get idSls and nama_sls
       String idSls = '';
@@ -981,56 +1473,70 @@ class MapPage extends StatelessWidget {
         if (_isPointInPolygon(point, polygon.points)) {
           idSls = polygon.idsls ?? '';
           namaSls = polygon.name; // Mengambil nama SLS dari polygon
-          print('✅ [DEBUG] Polygon ditemukan! idSls: $idSls, nama_sls: $namaSls');
+          kodePos = polygon.kodePos; // Ambil kode pos dari GeoJSON
+          print(
+            '✅ [DEBUG] Polygon ditemukan! idSls: $idSls, nama_sls: $namaSls, kode_pos: $kodePos',
+          );
           break;
         }
       }
-      
-      // Reverse geocoding untuk mendapatkan alamat dan kode pos
-      try {
-        print('🌍 [DEBUG] Melakukan reverse geocoding...');
-        List<Placemark> placemarks = await placemarkFromCoordinates(
-          point.latitude, 
-          point.longitude
-        );
-        
-        if (placemarks.isNotEmpty) {
-          final placemark = placemarks.first;
-          alamatFromGeocode = '${placemark.street ?? ''}, ${placemark.subLocality ?? ''}, ${placemark.locality ?? ''}'.replaceAll(RegExp(r'^,\s*|,\s*$'), '').replaceAll(RegExp(r',\s*,'), ',');
-          kodePos = placemark.postalCode;
-          print('📍 [DEBUG] Reverse geocoding berhasil - Alamat: $alamatFromGeocode, Kode Pos: $kodePos');
+
+      // Reverse geocoding untuk mendapatkan alamat dan kode pos (skip saat minimalMode)
+      if (!minimalMode) {
+        try {
+          print('🌍 [DEBUG] Melakukan reverse geocoding...');
+          List<Placemark> placemarks = await placemarkFromCoordinates(
+            point.latitude,
+            point.longitude,
+          );
+
+          if (placemarks.isNotEmpty) {
+            final placemark = placemarks.first;
+            alamatFromGeocode =
+                '${placemark.street ?? ''}, ${placemark.subLocality ?? ''}, ${placemark.locality ?? ''}'
+                    .replaceAll(RegExp(r'^,\s*|,\s*$'), '')
+                    .replaceAll(RegExp(r',\s*,'), ',');
+            print(
+              '📍 [DEBUG] Reverse geocoding berhasil - Alamat: $alamatFromGeocode',
+            );
+          }
+        } catch (e) {
+          print('⚠️ [DEBUG] Reverse geocoding gagal: $e');
         }
-      } catch (e) {
-        print('⚠️ [DEBUG] Reverse geocoding gagal: $e');
       }
-      
+
       if (idSls.isEmpty) {
         print('⚠️ [DEBUG] Tidak ada polygon yang mengandung titik ini');
       }
 
       print('🏗️ [DEBUG] Membuat objek DirektoriModel...');
-      
+
       // Ekstraksi kode wilayah dari idSls
       String kdProv = '';
       String kdKab = '';
       String kdKec = '';
       String kdDesa = '';
       String kdSls = '';
-      
+
       if (idSls.isNotEmpty && idSls.length >= 14) {
         kdProv = idSls.substring(0, 2);
         kdKab = idSls.substring(2, 4);
         kdKec = idSls.substring(4, 7);
         kdDesa = idSls.substring(7, 10);
         kdSls = idSls.substring(10, 14);
-        print('🗺️ [DEBUG] Kode wilayah - Prov: $kdProv, Kab: $kdKab, Kec: $kdKec, Desa: $kdDesa, SLS: $kdSls');
+        print(
+          '🗺️ [DEBUG] Kode wilayah - Prov: $kdProv, Kab: $kdKab, Kec: $kdKec, Desa: $kdDesa, SLS: $kdSls',
+        );
       }
-      
+
       final directory = DirektoriModel(
         id: '', // Will be generated by database
-        idSbr: '0', // Default value untuk data non-BPS, akan diupdate saat import BPS
+        idSbr:
+            '0', // Default value untuk data non-BPS, akan diupdate saat import BPS
         namaUsaha: namaUsaha,
-        alamat: alamatFromGeocode ?? alamat, // Prioritas alamat dari geocoding, fallback ke input user
+        alamat:
+            alamatFromGeocode ??
+            alamat, // Prioritas alamat dari geocoding, fallback ke input user
         idSls: idSls,
         kdProv: kdProv,
         kdKab: kdKab,
@@ -1041,7 +1547,7 @@ class MapPage extends StatelessWidget {
         kegiatanUsaha: const [],
         lat: point.latitude,
         long: point.longitude,
-        kodePos: kodePos, // Kode pos dari reverse geocoding
+        kodePos: kodePos, // Kode pos dari GeoJSON
         pemilik: pemilik,
         nomorTelepon: nomorTelepon,
       );
@@ -1053,7 +1559,9 @@ class MapPage extends StatelessWidget {
       print('📊 [DEBUG] Hasil penyimpanan: ${success ? "BERHASIL" : "GAGAL"}');
 
       if (success) {
-        print('✅ [DEBUG] Direktori berhasil disimpan, menampilkan SnackBar sukses');
+        print(
+          '✅ [DEBUG] Direktori berhasil disimpan, menampilkan SnackBar sukses',
+        );
         scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text('Direktori "$namaUsaha" berhasil disimpan'),
@@ -1065,7 +1573,7 @@ class MapPage extends StatelessWidget {
         // Refresh the map data dengan delay kecil untuk memastikan database sudah commit
         await Future.delayed(const Duration(milliseconds: 500));
         mapBloc.add(const PlacesRequested());
-        
+
         // Juga clear temporary marker jika ada
         mapBloc.add(const TemporaryMarkerRemoved());
       } else {
@@ -1084,7 +1592,139 @@ class MapPage extends StatelessWidget {
         SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
     }
-    
+
     print('🏁 [DEBUG] Proses penyimpanan direktori selesai');
+  }
+
+  void _updateRegionalData(BuildContext context, Place selectedPlace) async {
+    // Save references before async operations
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final mapBloc = context.read<MapBloc>();
+
+    // Get coordinates from selected place
+    final point = selectedPlace.position;
+
+    // Calculate regional data from coordinates
+    String idSls = '';
+    String? kodePos;
+    String? namaSls;
+    String kdProv = '';
+    String kdKab = '';
+    String kdKec = '';
+    String kdDesa = '';
+    String kdSls = '';
+
+    // Find polygon at point to get regional data
+    final polygons = mapBloc.state.polygonsMeta;
+    for (final polygon in polygons) {
+      if (_isPointInPolygon(point, polygon.points)) {
+        idSls = polygon.idsls ?? '';
+        namaSls = polygon.name;
+        kodePos = polygon.kodePos;
+
+        // Extract regional codes from idSls
+        if (idSls.isNotEmpty && idSls.length >= 14) {
+          kdProv = idSls.substring(0, 2);
+          kdKab = idSls.substring(2, 4);
+          kdKec = idSls.substring(4, 7);
+          kdDesa = idSls.substring(7, 10);
+          kdSls = idSls.substring(10, 14);
+        }
+        break;
+      }
+    }
+
+    // Show confirmation dialog with regional info
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Konfirmasi Update Regional'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Direktori: ${selectedPlace.name}'),
+            const SizedBox(height: 8),
+            Text(
+              'Koordinat: ${point.latitude.toStringAsFixed(6)}, ${point.longitude.toStringAsFixed(6)}',
+            ),
+            const SizedBox(height: 8),
+            Text('ID SLS: ${idSls.isNotEmpty ? idSls : "Tidak ditemukan"}'),
+            const SizedBox(height: 4),
+            Text('Nama SLS: ${namaSls ?? "Tidak ditemukan"}'),
+            const SizedBox(height: 4),
+            Text('Kode Pos: ${kodePos ?? "Tidak ditemukan"}'),
+            const SizedBox(height: 8),
+            if (idSls.isNotEmpty) ...[
+              Text('Kode Provinsi: $kdProv'),
+              Text('Kode Kabupaten: $kdKab'),
+              Text('Kode Kecamatan: $kdKec'),
+              Text('Kode Desa: $kdDesa'),
+              Text('Kode SLS: $kdSls'),
+            ],
+            const SizedBox(height: 16),
+            const Text(
+              'Apakah Anda yakin ingin mengupdate data regional untuk direktori ini?',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Update Regional'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final repository = MapRepositoryImpl();
+        final success = await repository
+            .updateDirectoryCoordinatesWithRegionalData(
+              selectedPlace.id,
+              point.latitude,
+              point.longitude,
+              idSls,
+              kdProv,
+              kdKab,
+              kdKec,
+              kdDesa,
+              kdSls,
+              kodePos,
+              namaSls,
+            );
+
+        if (success) {
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                'Data regional "${selectedPlace.name}" berhasil diupdate',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+
+          // Refresh the map data
+          mapBloc.add(const PlacesRequested());
+        } else {
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Text('Gagal mengupdate data regional'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (e) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }

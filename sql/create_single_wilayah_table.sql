@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS wilayah (
     nm_kec VARCHAR(100) NOT NULL,
     nm_desa VARCHAR(100) NOT NULL,
     nm_sls VARCHAR(100) NOT NULL,
+    kode_pos CHAR(5),
     
     -- Alamat lengkap untuk kemudahan
     alamat_lengkap TEXT GENERATED ALWAYS AS (
@@ -281,6 +282,7 @@ CREATE INDEX IF NOT EXISTS idx_wilayah_desa ON wilayah(kd_prov, kd_kab, kd_kec, 
 CREATE INDEX IF NOT EXISTS idx_wilayah_nama_prov ON wilayah(nm_prov);
 CREATE INDEX IF NOT EXISTS idx_wilayah_nama_kab ON wilayah(nm_kab);
 CREATE INDEX IF NOT EXISTS idx_wilayah_search ON wilayah USING gin(to_tsvector('indonesian', alamat_lengkap));
+CREATE INDEX IF NOT EXISTS idx_wilayah_kodepos ON wilayah(kode_pos);
 
 -- Index untuk tabel direktori
 CREATE INDEX IF NOT EXISTS idx_direktori_id_sbr ON direktori(id_sbr);

@@ -4,6 +4,9 @@
 -- Pastikan tabel wilayah sudah dibuat terlebih dahulu
 -- Jalankan create_single_wilayah_table.sql sebelum script ini
 
+-- Tambah kolom kode_pos untuk wilayah (sekali jalan)
+ALTER TABLE wilayah ADD COLUMN IF NOT EXISTS kode_pos CHAR(5);
+
 INSERT INTO wilayah (id_sls, kd_prov, kd_kab, kd_kec, kd_desa, kd_sls, nm_prov, nm_kab, nm_kec, nm_desa, nm_sls) VALUES
 ('73720110010009', '73', '72', '011', '001', '0009', 'SULAWESI SELATAN', 'PAREPARE', 'BACUKIKI BARAT', 'LUMPUE', 'RT 002 RW 004'),
 ('73720110010012', '73', '72', '011', '001', '0012', 'SULAWESI SELATAN', 'PAREPARE', 'BACUKIKI BARAT', 'LUMPUE', 'RT 001 RW 006'),

@@ -35,7 +35,7 @@ class MapRepositoryImpl implements MapRepository {
           .from('direktori')
           .select('*, wilayah(*)')
           .eq('keberadaan_usaha', 1) // 1 = Aktif
-          .or('latitude.is.null,longitude.is.null,lat.is.null,long.is.null')
+          .or('latitude.is.null,longitude.is.null')
           .ilike('nama_usaha', '%$query%')
           .limit(20);
 
@@ -66,6 +66,43 @@ class MapRepositoryImpl implements MapRepository {
       return true;
     } catch (e) {
       print('Error updating directory coordinates: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateDirectoryCoordinatesWithRegionalData(
+    String id,
+    double lat,
+    double lng,
+    String idSls,
+    String kdProv,
+    String kdKab,
+    String kdKec,
+    String kdDesa,
+    String kdSls,
+    String? kodePos,
+    String? namaSls,
+  ) async {
+    try {
+      await _supabaseClient
+          .from('direktori')
+          .update({
+            'latitude': lat,
+            'longitude': lng,
+            'id_sls': idSls,
+            'kd_prov': kdProv,
+            'kd_kab': kdKab,
+            'kd_kec': kdKec,
+            'kd_desa': kdDesa,
+            'kd_sls': kdSls,
+            'kode_pos': kodePos,
+            'nama_sls': namaSls,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', id);
+      return true;
+    } catch (e) {
+      print('Error updating directory coordinates with regional data: $e');
       return false;
     }
   }
@@ -113,6 +150,8 @@ class MapRepositoryImpl implements MapRepository {
           .eq('keberadaan_usaha', 1) // hanya ambil yang aktif (asumsi: 1)
           .not('latitude', 'is', null) // hanya yang punya koordinat baru
           .not('longitude', 'is', null)
+          .order('updated_at', ascending: false)
+          .order('created_at', ascending: false)
           .limit(100); // Batasi untuk performa
 
       if (response.isEmpty) {
@@ -281,6 +320,7 @@ class MapRepositoryImpl implements MapRepository {
         kecamatan: null,
         desa: null,
         idsls: null,
+        kodePos: null,
       );
     }
     final Map<String, dynamic> firstFeature =
@@ -299,6 +339,9 @@ class MapRepositoryImpl implements MapRepository {
     final String? idsls = properties != null
         ? properties['idsls'] as String?
         : null;
+    final String? kodePos = properties != null
+        ? properties['kode_pos']?.toString()
+        : null;
 
     final Map<String, dynamic>? geometry =
         firstFeature['geometry'] as Map<String, dynamic>?;
@@ -310,6 +353,7 @@ class MapRepositoryImpl implements MapRepository {
         kecamatan: kec,
         desa: desa,
         idsls: idsls,
+        kodePos: kodePos,
       );
     }
     final String? type = geometry['type'] as String?;
@@ -331,6 +375,7 @@ class MapRepositoryImpl implements MapRepository {
           kecamatan: kec,
           desa: desa,
           idsls: idsls,
+          kodePos: kodePos,
         );
       }
     } else if (type == 'Polygon') {
@@ -346,6 +391,7 @@ class MapRepositoryImpl implements MapRepository {
           kecamatan: kec,
           desa: desa,
           idsls: idsls,
+          kodePos: kodePos,
         );
       }
     } else {
@@ -356,6 +402,7 @@ class MapRepositoryImpl implements MapRepository {
         kecamatan: kec,
         desa: desa,
         idsls: idsls,
+        kodePos: kodePos,
       );
     }
 
@@ -376,6 +423,7 @@ class MapRepositoryImpl implements MapRepository {
       kecamatan: kec,
       desa: desa,
       idsls: idsls,
+      kodePos: kodePos,
     );
   }
 
@@ -425,6 +473,9 @@ class MapRepositoryImpl implements MapRepository {
       final String? idsls = properties != null
           ? properties['idsls'] as String?
           : null;
+      final String? kodePos = properties != null
+          ? properties['kode_pos']?.toString()
+          : null;
 
       final Map<String, dynamic>? geometry =
           feature['geometry'] as Map<String, dynamic>?;
@@ -436,6 +487,7 @@ class MapRepositoryImpl implements MapRepository {
             kecamatan: kec,
             desa: desa,
             idsls: idsls,
+            kodePos: kodePos,
           ),
         );
         continue;
@@ -469,6 +521,7 @@ class MapRepositoryImpl implements MapRepository {
             kecamatan: kec,
             desa: desa,
             idsls: idsls,
+            kodePos: kodePos,
           ),
         );
         continue;
@@ -489,6 +542,7 @@ class MapRepositoryImpl implements MapRepository {
           kecamatan: kec,
           desa: desa,
           idsls: idsls,
+          kodePos: kodePos,
         ),
       );
     }
@@ -497,5 +551,45 @@ class MapRepositoryImpl implements MapRepository {
       'GeoJSON(list): loaded ${results.length} polygons with names from $cleanPath',
     );
     return results;
+  }
+
+  // New method: delete if id_sbr == 0 or empty, else mark closed (keberadaan_usaha = 4)
+  Future<bool> deleteOrCloseDirectoryById(String id) async {
+    try {
+      final response = await _supabaseClient
+          .from('direktori')
+          .select('id,id_sbr')
+          .eq('id', id)
+          .limit(1);
+
+      if (response is List && response.isNotEmpty) {
+        final row = response.first as Map<String, dynamic>;
+        final dynamic idSbrVal = row['id_sbr'];
+        final bool isPending =
+            idSbrVal == null ||
+            idSbrVal == '' ||
+            idSbrVal == '0' ||
+            idSbrVal == 0;
+
+        if (isPending) {
+          await _supabaseClient.from('direktori').delete().eq('id', id);
+        } else {
+          await _supabaseClient
+              .from('direktori')
+              .update({
+                'keberadaan_usaha': 4, // 4 = Tutup
+                'updated_at': DateTime.now().toIso8601String(),
+              })
+              .eq('id', id);
+        }
+        return true;
+      }
+
+      debugPrint('MapRepository: No direktori found with id: $id');
+      return false;
+    } catch (e) {
+      debugPrint('MapRepository: Error deleteOrCloseDirectoryById: $e');
+      return false;
+    }
   }
 }

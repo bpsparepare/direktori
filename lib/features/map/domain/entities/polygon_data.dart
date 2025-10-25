@@ -6,6 +6,7 @@ class PolygonData {
   final String? kecamatan; // nmkec
   final String? desa; // nmdesa
   final String? idsls; // idsls for sorting
+  final String? kodePos; // kode_pos from GeoJSON
 
   const PolygonData({
     required this.points,
@@ -13,5 +14,6 @@ class PolygonData {
     this.kecamatan,
     this.desa,
     this.idsls,
+    this.kodePos,
   });
 }
