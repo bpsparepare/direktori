@@ -91,23 +91,11 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     try {
       final list = await getAllPolygonsMeta(event.assetPath);
       debugPrint('BLoC: polygons list loaded count = ${list.length}');
-      // default selection: keep current if any, else first item
+      // Keep current selection if any, but don't auto-select first item
       var selPoints = state.polygon;
       String? selLabel = state.polygonLabel;
       var selMeta = state.selectedPolygonMeta;
-      if (selPoints.isEmpty && list.isNotEmpty) {
-        selPoints = list.first.points;
 
-        // Buat label yang lebih informatif untuk polygon pertama
-        String label = list.first.name ?? 'Polygon';
-        if (list.first.kecamatan != null || list.first.desa != null) {
-          final kecInfo = list.first.kecamatan ?? '-';
-          final desaInfo = list.first.desa ?? '-';
-          label = '$label\nKec: $kecInfo\nDesa: $desaInfo';
-        }
-        selLabel = label;
-        selMeta = list.first;
-      }
       emit(
         state.copyWith(
           polygonsMeta: list,

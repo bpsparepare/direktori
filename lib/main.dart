@@ -59,7 +59,6 @@ class MyApp extends StatelessWidget {
                 )
                 ..add(const MapInitRequested())
                 ..add(const PlacesRequested())
-                ..add(const PolygonRequested())
                 ..add(const PolygonsListRequested()),
         ),
       ],

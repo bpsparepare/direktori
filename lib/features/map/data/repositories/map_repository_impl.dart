@@ -111,11 +111,16 @@ class MapRepositoryImpl implements MapRepository {
   Future<bool> insertDirectory(DirektoriModel directory) async {
     try {
       await _supabaseClient.from('direktori').insert({
-        'id_sbr': directory.idSbr, // Menambahkan id_sbr yang hilang
+        'id_sbr': directory.idSbr,
         'nama_usaha': directory.namaUsaha,
+        'nama_komersial_usaha': directory.namaKomersialUsaha,
         'alamat': directory.alamat,
         'pemilik': directory.pemilik,
+        'nik_pemilik': directory.nikPemilik,
         'nomor_telepon': directory.nomorTelepon,
+        'nomor_whatsapp': directory.nomorWhatsapp,
+        'email': directory.email,
+        'website': directory.website,
         'latitude': directory.latitude ?? directory.lat,
         'longitude': directory.longitude ?? directory.long,
         'id_sls': directory.idSls,
@@ -125,9 +130,24 @@ class MapRepositoryImpl implements MapRepository {
         'kd_desa': directory.kdDesa,
         'kd_sls': directory.kdSls,
         'kode_pos': directory.kodePos,
-        'nama_sls': directory.nmSls, // Menambahkan nama_sls
-        'keberadaan_usaha': 1, // 1 = Aktif
-        'created_at': DateTime.now().toIso8601String(),
+        'nama_sls': directory.nmSls,
+        'skala_usaha': directory.skalaUsaha,
+        'jenis_perusahaan': directory.jenisPerusahaan,
+        'keterangan': directory.keterangan,
+        'nib': directory.nib,
+        'url_gambar': directory.urlGambar,
+        'sumber_data': directory.sumberData,
+        'keberadaan_usaha': directory.keberadaanUsaha ?? 1,
+        'jenis_kepemilikan_usaha': directory.jenisKepemilikanUsaha,
+        'bentuk_badan_hukum_usaha': directory.bentukBadanHukumUsaha,
+        'deskripsi_badan_usaha_lainnya': directory.deskripsiBadanUsahaLainnya,
+        'tahun_berdiri': directory.tahunBerdiri,
+        'jaringan_usaha': directory.jaringanUsaha,
+        'sektor_institusi': directory.sektorInstitusi,
+        'tenaga_kerja': directory.tenagaKerja,
+        'created_at':
+            directory.createdAt?.toIso8601String() ??
+            DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       });
       return true;
@@ -551,6 +571,42 @@ class MapRepositoryImpl implements MapRepository {
       'GeoJSON(list): loaded ${results.length} polygons with names from $cleanPath',
     );
     return results;
+  }
+
+  @override
+  Future<DirektoriModel?> getDirectoryById(String id) async {
+    try {
+      final response = await _supabaseClient
+          .from('direktori')
+          .select('''
+            *,
+            wilayah(*)
+          ''')
+          .eq('id', id)
+          .limit(1);
+
+      if (response.isEmpty) {
+        debugPrint('MapRepository: No directory found with id: $id');
+        return null;
+      }
+
+      final item = response.first;
+
+      // Flatten data wilayah ke level utama untuk kemudahan parsing
+      final Map<String, dynamic> flattenedData = Map<String, dynamic>.from(
+        item,
+      );
+
+      if (item['wilayah'] != null && item['wilayah'] is Map) {
+        final wilayahData = item['wilayah'] as Map<String, dynamic>;
+        flattenedData.addAll(wilayahData);
+      }
+
+      return DirektoriModel.fromJson(flattenedData);
+    } catch (e) {
+      debugPrint('MapRepository: Error fetching directory by id: $e');
+      return null;
+    }
   }
 
   // New method: delete if id_sbr == 0 or empty, else mark closed (keberadaan_usaha = 4)

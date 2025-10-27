@@ -15,7 +15,7 @@ extension MapTypeExtension on MapType {
       case MapType.satellite:
         return 'Satelit (Esri)';
       case MapType.bingSatellite:
-        return 'Satelit (Alternatif)';
+        return 'Street (Google)';
       case MapType.googleSatellite:
         return 'Satelit (Google)';
       case MapType.topographic:
@@ -32,7 +32,7 @@ extension MapTypeExtension on MapType {
       case MapType.satellite:
         return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
       case MapType.bingSatellite:
-        return 'https://khm{s}.google.com/kh/v=101&x={x}&y={y}&z={z}';
+        return 'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}';
       case MapType.googleSatellite:
         return 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}';
       case MapType.topographic:
