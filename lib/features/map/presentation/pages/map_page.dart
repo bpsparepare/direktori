@@ -20,8 +20,15 @@ import '../bloc/map_state.dart';
 
 class MapPage extends StatelessWidget {
   final MapController? mapController;
+  final DirektoriModel? coordinateTarget; // Directory selected to add coordinate
+  final VoidCallback? onExitCoordinateMode; // Callback to exit coordinate mode
 
-  const MapPage({super.key, this.mapController});
+  const MapPage({
+    super.key,
+    this.mapController,
+    this.coordinateTarget,
+    this.onExitCoordinateMode,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +73,88 @@ class MapPage extends StatelessWidget {
                       );
                     },
                   ),
+                  // Coordinate mode overlay: center crosshair + actions
+                  if (coordinateTarget != null)
+                    ...[
+                      // Center crosshair icon (non-interactive)
+                      IgnorePointer(
+                        child: Center(
+                          child: Icon(
+                            Icons.add_location_alt_outlined,
+                            color: Colors.blue,
+                            size: 40,
+                          ),
+                        ),
+                      ),
+                      // Bottom action bar
+                      Positioned(
+                        bottom: 24,
+                        left: 16,
+                        right: 16,
+                        child: Card(
+                          elevation: 6,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                              horizontal: 16,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Text(
+                                        'Mode Tambah Koordinat',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        coordinateTarget?.namaUsaha ?? '-',
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    onExitCoordinateMode?.call();
+                                  },
+                                  child: const Text('Batal'),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton.icon(
+                                  onPressed: () {
+                                    // Use map center as the chosen point
+                                    final LatLng center = mapController?.camera.center ?? config.center;
+                                    _updateDirectoryCoordinates(
+                                      context,
+                                      coordinateTarget!,
+                                      center,
+                                      onSuccess: () {
+                                        onExitCoordinateMode?.call();
+                                      },
+                                    );
+                                  },
+                                  icon: const Icon(Icons.save),
+                                  label: const Text('Simpan Koordinat'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   if (state.selectedPlace != null)
                     Align(
                       alignment: Alignment.bottomCenter,
@@ -3043,6 +3132,7 @@ class MapPage extends StatelessWidget {
     BuildContext context,
     DirektoriModel directory,
     LatLng point,
+    {VoidCallback? onSuccess}
   ) async {
     // Save references before async operations
     final scaffoldMessenger = ScaffoldMessenger.of(context);
@@ -3146,6 +3236,9 @@ class MapPage extends StatelessWidget {
 
           // Refresh the map data
           mapBloc.add(const PlacesRequested());
+
+          // Notify caller (e.g., to exit coordinate mode)
+          onSuccess?.call();
         } else {
           scaffoldMessenger.showSnackBar(
             const SnackBar(

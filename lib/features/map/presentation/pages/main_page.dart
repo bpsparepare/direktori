@@ -31,6 +31,7 @@ class _MainPageState extends State<MainPage> {
   List<Place> _searchResults = [];
   List<DirektoriModel> _directoryResults = [];
   List<Place> _allPlaces = [];
+  DirektoriModel? _pendingCoordinateDirectory; // Directory selected to add coordinates
 
   @override
   void initState() {
@@ -216,13 +217,18 @@ class _MainPageState extends State<MainPage> {
                               onTap: () {
                                 // Close bottom sheet
                                 Navigator.pop(context);
-                                // Show info that this place has no coordinates
+                                // Switch to map tab and enable Add Coordinate mode
+                                setState(() {
+                                  _selectedIndex = 0;
+                                  _pendingCoordinateDirectory = directory;
+                                });
+                                // Inform user how to use the mode
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      '${directory.namaUsaha} belum memiliki koordinat. Anda dapat menambahkan koordinat melalui peta.',
+                                      'Geser peta untuk menentukan posisi pusat, lalu tekan Simpan.',
                                     ),
-                                    backgroundColor: Colors.orange,
+                                    backgroundColor: Colors.blue,
                                     duration: const Duration(seconds: 3),
                                   ),
                                 );
@@ -261,7 +267,15 @@ class _MainPageState extends State<MainPage> {
       body: Stack(
         children: [
           // Base map layer - always MapPage to maintain consistent map
-          MapPage(mapController: _sharedMapController),
+          MapPage(
+            mapController: _sharedMapController,
+            coordinateTarget: _pendingCoordinateDirectory,
+            onExitCoordinateMode: () {
+              setState(() {
+                _pendingCoordinateDirectory = null;
+              });
+            },
+          ),
           // Overlay content based on selected tab
           if (_selectedIndex != 0) _buildOverlayContent(),
           // Floating search bar with avatar (Google Maps style)
