@@ -49,6 +49,13 @@ class MapPage extends StatelessWidget {
                     onPlaceTap: (place) {
                       context.read<MapBloc>().add(PlaceSelected(place));
                     },
+                    onPlaceDragEnd: (place, newPoint) {
+                      _confirmMovePlaceAndUpdateRegional(
+                        context,
+                        place,
+                        newPoint,
+                      );
+                    },
                     onLongPress: (point) {
                       context.read<MapBloc>().add(TemporaryMarkerAdded(point));
                       _showContextMenu(context, point);
@@ -2880,6 +2887,125 @@ class MapPage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  // Konfirmasi pemindahan lokasi place dan update data regional jika berubah
+  void _confirmMovePlaceAndUpdateRegional(
+    BuildContext context,
+    Place place,
+    LatLng newPoint,
+  ) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final mapBloc = context.read<MapBloc>();
+
+    // Hitung data regional dari koordinat baru
+    String idSls = '';
+    String? kodePos;
+    String? namaSls;
+    String kdProv = '';
+    String kdKab = '';
+    String kdKec = '';
+    String kdDesa = '';
+    String kdSls = '';
+
+    final polygons = mapBloc.state.polygonsMeta;
+    for (final polygon in polygons) {
+      if (_isPointInPolygon(newPoint, polygon.points)) {
+        idSls = polygon.idsls ?? '';
+        namaSls = polygon.name;
+        kodePos = polygon.kodePos;
+
+        if (idSls.isNotEmpty && idSls.length >= 14) {
+          kdProv = idSls.substring(0, 2);
+          kdKab = idSls.substring(2, 4);
+          kdKec = idSls.substring(4, 7);
+          kdDesa = idSls.substring(7, 10);
+          kdSls = idSls.substring(10, 14);
+        }
+        break;
+      }
+    }
+
+    // Tampilkan dialog konfirmasi
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Konfirmasi Pemindahan Lokasi'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Pindahkan "${place.name}" ke lokasi baru?'),
+            const SizedBox(height: 8),
+            Text('Latitude: ${newPoint.latitude.toStringAsFixed(6)}'),
+            Text('Longitude: ${newPoint.longitude.toStringAsFixed(6)}'),
+            if (idSls.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Data Regional Baru:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text('ID SLS: $idSls'),
+              if (namaSls != null) Text('Nama SLS: $namaSls'),
+              if (kodePos != null) Text('Kode Pos: $kodePos'),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Pindahkan'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final repository = MapRepositoryImpl();
+        final success = await repository.updateDirectoryCoordinatesWithRegionalData(
+          place.id,
+          newPoint.latitude,
+          newPoint.longitude,
+          idSls,
+          kdProv,
+          kdKab,
+          kdKec,
+          kdDesa,
+          kdSls,
+          kodePos,
+          namaSls,
+        );
+
+        if (success) {
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                'Lokasi dan data regional "${place.name}" berhasil diperbarui',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // Refresh data pada peta
+          mapBloc.add(const PlacesRequested());
+        } else {
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Text('Gagal memperbarui lokasi'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (e) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   void _searchDirectories(

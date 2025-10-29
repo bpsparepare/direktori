@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_dragmarker/flutter_map_dragmarker.dart';
 import 'package:latlong2/latlong.dart';
 import '../../domain/entities/map_config.dart';
 import '../../domain/entities/place.dart';
@@ -15,6 +16,7 @@ class MapView extends StatefulWidget {
   final LatLng? temporaryMarker;
   final List<PolygonData> polygonsMeta;
   final void Function(Place) onPlaceTap;
+  final void Function(Place, LatLng)? onPlaceDragEnd;
   final void Function(LatLng)? onLongPress;
   final void Function(int)? onPolygonSelected;
   final MapController? mapController; // Add optional MapController parameter
@@ -28,6 +30,7 @@ class MapView extends StatefulWidget {
     this.temporaryMarker,
     this.polygonsMeta = const [],
     required this.onPlaceTap,
+    this.onPlaceDragEnd,
     this.onLongPress,
     this.onPolygonSelected,
     this.mapController, // Add to constructor
@@ -332,26 +335,38 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                   ),
                 ],
               ),
-            MarkerLayer(
-              markers: [
-                // Existing place markers
-                ...widget.places
+            // Draggable markers for places
+            if (widget.places.isNotEmpty)
+              DragMarkers(
+                markers: widget.places
                     .map(
-                      (p) => Marker(
+                      (p) => DragMarker(
                         point: p.position,
-                        width: 40,
-                        height: 40,
-                        child: GestureDetector(
-                          onTap: () => widget.onPlaceTap(p),
-                          child: const Icon(
-                            Icons.location_on,
+                        size: const Size.square(40),
+                        offset: const Offset(0, -12),
+                        builder: (_, __, isDragging) {
+                          return Icon(
+                            isDragging
+                                ? Icons.edit_location
+                                : Icons.location_on,
                             color: Colors.red,
                             size: 32,
-                          ),
-                        ),
+                          );
+                        },
+                        onTap: (_) => widget.onPlaceTap(p),
+                        onDragEnd: (_, newPoint) =>
+                            widget.onPlaceDragEnd?.call(p, newPoint),
+                        // Allow smooth map scroll near edges while dragging
+                        scrollMapNearEdge: true,
+                        scrollNearEdgeRatio: 2.0,
+                        scrollNearEdgeSpeed: 2.0,
                       ),
                     )
                     .toList(),
+              ),
+            // Keep non-draggable markers (current location and temporary)
+            MarkerLayer(
+              markers: [
                 // Current location marker
                 if (_currentLocation != null)
                   Marker(
