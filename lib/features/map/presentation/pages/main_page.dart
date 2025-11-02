@@ -4,6 +4,11 @@ import 'package:flutter_map/flutter_map.dart';
 import 'map_page.dart';
 import 'saved_page.dart';
 import 'contribution_page.dart';
+import '../../../direktori/presentation/pages/direktori_list_page.dart';
+import '../../../direktori/presentation/bloc/direktori_bloc.dart';
+import '../../../direktori/domain/usecases/get_direktori_list.dart';
+import '../../../direktori/data/repositories/direktori_repository_impl.dart';
+import '../../../direktori/data/datasources/direktori_remote_datasource.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
@@ -31,7 +36,8 @@ class _MainPageState extends State<MainPage> {
   List<Place> _searchResults = [];
   List<DirektoriModel> _directoryResults = [];
   List<Place> _allPlaces = [];
-  DirektoriModel? _pendingCoordinateDirectory; // Directory selected to add coordinates
+  DirektoriModel?
+  _pendingCoordinateDirectory; // Directory selected to add coordinates
 
   @override
   void initState() {
@@ -68,7 +74,8 @@ class _MainPageState extends State<MainPage> {
     List<DirektoriModel> directoriesWithoutCoordinates = [];
     try {
       final repository = MapRepositoryImpl();
-      directoriesWithoutCoordinates = await repository.searchDirectoriesWithoutCoordinates(query);
+      directoriesWithoutCoordinates = await repository
+          .searchDirectoriesWithoutCoordinates(query);
     } catch (e) {
       print('Error searching directories without coordinates: $e');
     }
@@ -150,7 +157,8 @@ class _MainPageState extends State<MainPage> {
                       )
                     : ListView.builder(
                         controller: scrollController,
-                        itemCount: _searchResults.length + _directoryResults.length,
+                        itemCount:
+                            _searchResults.length + _directoryResults.length,
                         itemBuilder: (context, index) {
                           // Show places with coordinates first
                           if (index < _searchResults.length) {
@@ -170,7 +178,7 @@ class _MainPageState extends State<MainPage> {
                               onTap: () {
                                 // Close bottom sheet and navigate to location
                                 Navigator.pop(context);
-                                _sharedMapController.move(place.position, 15.0);
+                                _sharedMapController.move(place.position, 18.0);
                                 // Switch to map tab if not already there
                                 if (_selectedIndex != 0) {
                                   setState(() {
@@ -180,11 +188,16 @@ class _MainPageState extends State<MainPage> {
                                 // Clear search and unfocus
                                 _searchController.clear();
                                 _searchFocusNode.unfocus();
+                                // Add place selection to MapBloc for visual indicator
+                                context.read<MapBloc>().add(
+                                  PlaceSelected(place),
+                                );
                               },
                             );
                           } else {
                             // Show directories without coordinates
-                            final directoryIndex = index - _searchResults.length;
+                            final directoryIndex =
+                                index - _searchResults.length;
                             final directory = _directoryResults[directoryIndex];
                             return ListTile(
                               leading: const Icon(
@@ -200,6 +213,18 @@ class _MainPageState extends State<MainPage> {
                                       directory.alamat!,
                                       style: const TextStyle(fontSize: 12),
                                     ),
+                                  Text(
+                                    'Status: ${_getKeberadaanUsahaDescription(directory.keberadaanUsaha)}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: directory.keberadaanUsaha == 1
+                                          ? Colors.green
+                                          : directory.keberadaanUsaha == 4
+                                          ? Colors.red
+                                          : Colors.orange,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
                                   Text(
                                     'ID SLS: ${directory.idSls} • Tanpa koordinat',
                                     style: const TextStyle(
@@ -256,6 +281,8 @@ class _MainPageState extends State<MainPage> {
         return SavedPage(mapController: _sharedMapController);
       case 2:
         return ContributionPage(mapController: _sharedMapController);
+      case 3:
+        return DirektoriListPage();
       default:
         return MapPage(mapController: _sharedMapController);
     }
@@ -324,6 +351,10 @@ class _MainPageState extends State<MainPage> {
                             _performSearch(value.trim());
                           }
                         },
+                        onChanged: (value) {
+                          // Clear place selection when user starts typing
+                          context.read<MapBloc>().add(const PlaceCleared());
+                        },
                       ),
                     ),
                   ),
@@ -372,6 +403,8 @@ class _MainPageState extends State<MainPage> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {
+          // Clear place selection when switching tabs
+          context.read<MapBloc>().add(const PlaceCleared());
           setState(() {
             _selectedIndex = index;
           });
@@ -389,9 +422,45 @@ class _MainPageState extends State<MainPage> {
             icon: Icon(Icons.add_circle_outline),
             label: 'Kontribusi',
           ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.business),
+            label: 'Direktori',
+          ),
         ],
       ),
     );
+  }
+
+  // Helper function to get keberadaan usaha description
+  String _getKeberadaanUsahaDescription(int? keberadaanUsaha) {
+    if (keberadaanUsaha == null) {
+      return 'Undefined';
+    }
+
+    switch (keberadaanUsaha) {
+      case 1:
+        return 'Aktif';
+      case 2:
+        return 'Tutup Sementara';
+      case 3:
+        return 'Belum Beroperasi/Berproduksi';
+      case 4:
+        return 'Tutup';
+      case 5:
+        return 'Alih Usaha';
+      case 6:
+        return 'Tidak Ditemukan';
+      case 7:
+        return 'Aktif Pindah';
+      case 8:
+        return 'Aktif Nonrespon';
+      case 9:
+        return 'Duplikat';
+      case 10:
+        return 'Salah Kode Wilayah';
+      default:
+        return 'Tidak Diketahui';
+    }
   }
 
   void _showLogoutDialog(BuildContext context) {

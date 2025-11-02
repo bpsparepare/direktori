@@ -43,7 +43,11 @@
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
+  <key>UIApplicationSupportsIndirectInputEvents</key>
+  <true/>
+  <key>NSCameraUsageDescription</key>
+  <string>Aplikasi membutuhkan akses kamera untuk mengambil foto.</string>
+  <key>NSPhotoLibraryUsageDescription</key>
+  <string>Aplikasi membutuhkan akses galeri untuk memilih foto.</string>
 </dict>
 </plist>

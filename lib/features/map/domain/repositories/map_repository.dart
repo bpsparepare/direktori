@@ -15,6 +15,7 @@ abstract class MapRepository {
   );
   Future<bool> updateDirectoryCoordinates(String id, double lat, double lng);
   Future<bool> insertDirectory(DirektoriModel directory);
+  Future<bool> updateDirectory(DirektoriModel directory);
   Future<DirektoriModel?> getDirectoryById(String id);
   // New method to support delete-or-close behavior per id_sbr
   Future<bool> deleteOrCloseDirectoryById(String id);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -17,10 +18,12 @@ import '../../domain/entities/place.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
+import '../../../../core/widgets/image_upload_widget.dart';
 
 class MapPage extends StatelessWidget {
   final MapController? mapController;
-  final DirektoriModel? coordinateTarget; // Directory selected to add coordinate
+  final DirektoriModel?
+  coordinateTarget; // Directory selected to add coordinate
   final VoidCallback? onExitCoordinateMode; // Callback to exit coordinate mode
 
   const MapPage({
@@ -48,6 +51,8 @@ class MapPage extends StatelessWidget {
                   MapView(
                     config: config,
                     places: state.places,
+                    selectedPlace:
+                        state.selectedPlace, // Pass selectedPlace to MapView
                     polygon: state.polygon,
                     polygonLabel: state.polygonLabel,
                     temporaryMarker: state.temporaryMarker,
@@ -74,199 +79,318 @@ class MapPage extends StatelessWidget {
                     },
                   ),
                   // Coordinate mode overlay: center crosshair + actions
-                  if (coordinateTarget != null)
-                    ...[
-                      // Center crosshair icon (non-interactive)
-                      IgnorePointer(
-                        child: Center(
-                          child: Icon(
-                            Icons.add_location_alt_outlined,
-                            color: Colors.blue,
-                            size: 40,
+                  if (coordinateTarget != null) ...[
+                    // Center crosshair icon (non-interactive)
+                    IgnorePointer(
+                      child: Center(
+                        child: Icon(
+                          Icons.add_location_alt_outlined,
+                          color: Colors.blue,
+                          size: 40,
+                        ),
+                      ),
+                    ),
+                    // Bottom action bar
+                    Positioned(
+                      bottom: 24,
+                      left: 16,
+                      right: 16,
+                      child: Card(
+                        elevation: 6,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 16,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text(
+                                      'Mode Tambah Koordinat',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      coordinateTarget?.namaUsaha ?? '-',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  onExitCoordinateMode?.call();
+                                },
+                                child: const Text('Batal'),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  // Use map center as the chosen point
+                                  final LatLng center =
+                                      mapController?.camera.center ??
+                                      config.center;
+                                  _updateDirectoryCoordinates(
+                                    context,
+                                    coordinateTarget!,
+                                    center,
+                                    onSuccess: () {
+                                      onExitCoordinateMode?.call();
+                                    },
+                                  );
+                                },
+                                icon: const Icon(Icons.save),
+                                label: const Text('Simpan Koordinat'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      // Bottom action bar
-                      Positioned(
-                        bottom: 24,
-                        left: 16,
-                        right: 16,
-                        child: Card(
-                          elevation: 6,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 12,
-                              horizontal: 16,
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Text(
-                                        'Mode Tambah Koordinat',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        coordinateTarget?.namaUsaha ?? '-',
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                TextButton(
-                                  onPressed: () {
-                                    onExitCoordinateMode?.call();
-                                  },
-                                  child: const Text('Batal'),
-                                ),
-                                const SizedBox(width: 8),
-                                ElevatedButton.icon(
-                                  onPressed: () {
-                                    // Use map center as the chosen point
-                                    final LatLng center = mapController?.camera.center ?? config.center;
-                                    _updateDirectoryCoordinates(
-                                      context,
-                                      coordinateTarget!,
-                                      center,
-                                      onSuccess: () {
-                                        onExitCoordinateMode?.call();
-                                      },
-                                    );
-                                  },
-                                  icon: const Icon(Icons.save),
-                                  label: const Text('Simpan Koordinat'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blue,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
+                  ],
                   if (state.selectedPlace != null)
                     Align(
                       alignment: Alignment.bottomCenter,
                       child: Padding(
                         padding: const EdgeInsets.all(12.0),
-                        child: GestureDetector(
-                          onTap: () {
-                            // Tap anywhere on card to close (optional)
+                        child: Focus(
+                          autofocus: true,
+                          onKeyEvent: (node, event) {
+                            if (event is KeyDownEvent &&
+                                event.logicalKey == LogicalKeyboardKey.escape) {
+                              context.read<MapBloc>().add(const PlaceCleared());
+                              return KeyEventResult.handled;
+                            }
+                            return KeyEventResult.ignored;
                           },
-                          child: Card(
-                            elevation: 6,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // Place information section
-                                Padding(
-                                  padding: const EdgeInsets.all(12.0),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Icon(
-                                        Icons.place,
-                                        color: Colors.red,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              state.selectedPlace!.name,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              state.selectedPlace!.description,
-                                            ),
-                                          ],
+                          child: GestureDetector(
+                            onTap: () {
+                              // Tap anywhere on card to close (optional)
+                            },
+                            child: Focus(
+                              autofocus: true,
+                              onKeyEvent: (node, event) {
+                                if (event is KeyDownEvent &&
+                                    event.logicalKey ==
+                                        LogicalKeyboardKey.escape) {
+                                  context.read<MapBloc>().add(
+                                    const PlaceCleared(),
+                                  );
+                                  return KeyEventResult.handled;
+                                }
+                                return KeyEventResult.ignored;
+                              },
+                              child: Card(
+                                elevation: 6,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Display image at the top if urlGambar is available
+                                    if (state.selectedPlace!.urlGambar !=
+                                            null &&
+                                        state
+                                            .selectedPlace!
+                                            .urlGambar!
+                                            .isNotEmpty) ...[
+                                      ClipRRect(
+                                        borderRadius: const BorderRadius.only(
+                                          topLeft: Radius.circular(12),
+                                          topRight: Radius.circular(12),
                                         ),
-                                      ),
-                                      // Improved close button with larger touch target
-                                      Container(
-                                        width: 48,
-                                        height: 48,
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(
-                                            24,
+                                        child: AspectRatio(
+                                          aspectRatio:
+                                              16 / 9, // Maintain aspect ratio
+                                          child: Image.network(
+                                            state.selectedPlace!.urlGambar!,
+                                            width: double.infinity,
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (context, error, stackTrace) {
+                                                  return Container(
+                                                    width: double.infinity,
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.grey[300],
+                                                      borderRadius:
+                                                          const BorderRadius.only(
+                                                            topLeft:
+                                                                Radius.circular(
+                                                                  12,
+                                                                ),
+                                                            topRight:
+                                                                Radius.circular(
+                                                                  12,
+                                                                ),
+                                                          ),
+                                                    ),
+                                                    child: const Column(
+                                                      mainAxisAlignment:
+                                                          MainAxisAlignment
+                                                              .center,
+                                                      children: [
+                                                        Icon(
+                                                          Icons.broken_image,
+                                                          color: Colors.grey,
+                                                          size: 40,
+                                                        ),
+                                                        SizedBox(height: 4),
+                                                        Text(
+                                                          'Gambar tidak dapat dimuat',
+                                                          style: TextStyle(
+                                                            color: Colors.grey,
+                                                            fontSize: 12,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                },
+                                            loadingBuilder:
+                                                (
+                                                  context,
+                                                  child,
+                                                  loadingProgress,
+                                                ) {
+                                                  if (loadingProgress == null)
+                                                    return child;
+                                                  return Container(
+                                                    width: double.infinity,
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.grey[200],
+                                                      borderRadius:
+                                                          const BorderRadius.only(
+                                                            topLeft:
+                                                                Radius.circular(
+                                                                  12,
+                                                                ),
+                                                            topRight:
+                                                                Radius.circular(
+                                                                  12,
+                                                                ),
+                                                          ),
+                                                    ),
+                                                    child: const Center(
+                                                      child:
+                                                          CircularProgressIndicator(),
+                                                    ),
+                                                  );
+                                                },
                                           ),
-                                        ),
-                                        child: IconButton(
-                                          icon: const Icon(Icons.close),
-                                          iconSize: 20,
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(
-                                            minWidth: 48,
-                                            minHeight: 48,
-                                          ),
-                                          onPressed: () {
-                                            print(
-                                              'DEBUG: Close button pressed',
-                                            ); // Debug log
-                                            context.read<MapBloc>().add(
-                                              const PlaceCleared(),
-                                            );
-                                          },
                                         ),
                                       ),
                                     ],
-                                  ),
-                                ),
-                                // Action buttons section
-                                Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade50,
-                                    borderRadius: const BorderRadius.only(
-                                      bottomLeft: Radius.circular(12),
-                                      bottomRight: Radius.circular(12),
+                                    // Place information section
+                                    Padding(
+                                      padding: const EdgeInsets.all(12.0),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Icon(
+                                            Icons.place,
+                                            color: Colors.red,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  state.selectedPlace!.name,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  state
+                                                      .selectedPlace!
+                                                      .description,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          // Improved close button with larger touch target
+                                          Container(
+                                            width: 48,
+                                            height: 48,
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.withOpacity(
+                                                0.1,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(24),
+                                            ),
+                                            child: IconButton(
+                                              icon: const Icon(Icons.close),
+                                              iconSize: 20,
+                                              padding: EdgeInsets.zero,
+                                              constraints: const BoxConstraints(
+                                                minWidth: 48,
+                                                minHeight: 48,
+                                              ),
+                                              onPressed: () {
+                                                print(
+                                                  'DEBUG: Close button pressed',
+                                                ); // Debug log
+                                                context.read<MapBloc>().add(
+                                                  const PlaceCleared(),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(12.0),
-                                    child: Row(
-                                      children: [
-                                        // Zoom to location button
-                                        Expanded(
-                                          child: LayoutBuilder(
-                                            builder: (context, constraints) {
-                                              final isMobile =
-                                                  MediaQuery.of(
-                                                    context,
-                                                  ).size.width <
-                                                  600;
+                                    // Action buttons section
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade50,
+                                        borderRadius: const BorderRadius.only(
+                                          bottomLeft: Radius.circular(12),
+                                          bottomRight: Radius.circular(12),
+                                        ),
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(12.0),
+                                        child: Row(
+                                          children: [
+                                            // Zoom to location button
+                                            Expanded(
+                                              child: LayoutBuilder(
+                                                builder: (context, constraints) {
+                                                  final isMobile =
+                                                      MediaQuery.of(
+                                                        context,
+                                                      ).size.width <
+                                                      600;
 
-                                              if (isMobile) {
-                                                return ElevatedButton(
-                                                  onPressed: () {
-                                                    // Zoom to the selected place location
-                                                    mapController?.move(
-                                                      state
-                                                          .selectedPlace!
-                                                          .position,
-                                                      18.0, // High zoom level for detailed view
-                                                    );
-                                                  },
-                                                  style:
-                                                      ElevatedButton.styleFrom(
+                                                  if (isMobile) {
+                                                    return ElevatedButton(
+                                                      onPressed: () {
+                                                        // Zoom to the selected place location
+                                                        mapController?.move(
+                                                          state
+                                                              .selectedPlace!
+                                                              .position,
+                                                          18.0, // High zoom level for detailed view
+                                                        );
+                                                      },
+                                                      style: ElevatedButton.styleFrom(
                                                         backgroundColor:
                                                             Colors.blue,
                                                         foregroundColor:
@@ -280,108 +404,111 @@ class MapPage extends StatelessWidget {
                                                           48,
                                                         ),
                                                       ),
-                                                  child: const Icon(
-                                                    Icons.zoom_in,
-                                                    size: 20,
-                                                  ),
-                                                );
-                                              } else {
-                                                return ElevatedButton.icon(
-                                                  onPressed: () {
-                                                    // Zoom to the selected place location
-                                                    mapController?.move(
-                                                      state
-                                                          .selectedPlace!
-                                                          .position,
-                                                      18.0, // High zoom level for detailed view
+                                                      child: const Icon(
+                                                        Icons.zoom_in,
+                                                        size: 20,
+                                                      ),
                                                     );
-                                                  },
-                                                  icon: const Icon(
-                                                    Icons.zoom_in,
-                                                    size: 18,
-                                                  ),
-                                                  label: const Text('Zoom To'),
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor:
-                                                        Colors.blue,
-                                                    foregroundColor:
-                                                        Colors.white,
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 16,
-                                                          vertical: 12,
-                                                        ),
-                                                  ),
-                                                );
-                                              }
-                                            },
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        // Navigate to location button
-                                        Expanded(
-                                          child: LayoutBuilder(
-                                            builder: (context, constraints) {
-                                              final isMobile =
-                                                  MediaQuery.of(
-                                                    context,
-                                                  ).size.width <
-                                                  600;
-
-                                              if (isMobile) {
-                                                return ElevatedButton(
-                                                  onPressed: () async {
-                                                    final place =
-                                                        state.selectedPlace!;
-                                                    final lat =
-                                                        place.position.latitude;
-                                                    final lng = place
-                                                        .position
-                                                        .longitude;
-
-                                                    // Create Google Maps URL
-                                                    final googleMapsUrl = Uri.parse(
-                                                      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
-                                                    );
-
-                                                    try {
-                                                      if (await canLaunchUrl(
-                                                        googleMapsUrl,
-                                                      )) {
-                                                        await launchUrl(
-                                                          googleMapsUrl,
-                                                          mode: LaunchMode
-                                                              .externalApplication,
+                                                  } else {
+                                                    return ElevatedButton.icon(
+                                                      onPressed: () {
+                                                        // Zoom to the selected place location
+                                                        mapController?.move(
+                                                          state
+                                                              .selectedPlace!
+                                                              .position,
+                                                          18.0, // High zoom level for detailed view
                                                         );
-                                                      } else {
-                                                        // Fallback to generic maps URL
-                                                        final fallbackUrl =
-                                                            Uri.parse(
-                                                              'https://maps.google.com/?q=$lat,$lng',
-                                                            );
-                                                        await launchUrl(
-                                                          fallbackUrl,
-                                                        );
-                                                      }
-                                                    } catch (e) {
-                                                      // Show error message
-                                                      if (context.mounted) {
-                                                        ScaffoldMessenger.of(
-                                                          context,
-                                                        ).showSnackBar(
-                                                          const SnackBar(
-                                                            content: Text(
-                                                              'Tidak dapat membuka aplikasi navigasi',
+                                                      },
+                                                      icon: const Icon(
+                                                        Icons.zoom_in,
+                                                        size: 18,
+                                                      ),
+                                                      label: const Text(
+                                                        'Zoom To',
+                                                      ),
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor:
+                                                            Colors.blue,
+                                                        foregroundColor:
+                                                            Colors.white,
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 16,
+                                                              vertical: 12,
                                                             ),
-                                                            backgroundColor:
-                                                                Colors.red,
-                                                          ),
-                                                        );
-                                                      }
-                                                    }
-                                                  },
-                                                  style:
-                                                      ElevatedButton.styleFrom(
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            // Navigate to location button
+                                            Expanded(
+                                              child: LayoutBuilder(
+                                                builder: (context, constraints) {
+                                                  final isMobile =
+                                                      MediaQuery.of(
+                                                        context,
+                                                      ).size.width <
+                                                      600;
+
+                                                  if (isMobile) {
+                                                    return ElevatedButton(
+                                                      onPressed: () async {
+                                                        final place = state
+                                                            .selectedPlace!;
+                                                        final lat = place
+                                                            .position
+                                                            .latitude;
+                                                        final lng = place
+                                                            .position
+                                                            .longitude;
+
+                                                        // Create Google Maps URL
+                                                        final googleMapsUrl =
+                                                            Uri.parse(
+                                                              'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
+                                                            );
+
+                                                        try {
+                                                          if (await canLaunchUrl(
+                                                            googleMapsUrl,
+                                                          )) {
+                                                            await launchUrl(
+                                                              googleMapsUrl,
+                                                              mode: LaunchMode
+                                                                  .externalApplication,
+                                                            );
+                                                          } else {
+                                                            // Fallback to generic maps URL
+                                                            final fallbackUrl =
+                                                                Uri.parse(
+                                                                  'https://maps.google.com/?q=$lat,$lng',
+                                                                );
+                                                            await launchUrl(
+                                                              fallbackUrl,
+                                                            );
+                                                          }
+                                                        } catch (e) {
+                                                          // Show error message
+                                                          if (context.mounted) {
+                                                            ScaffoldMessenger.of(
+                                                              context,
+                                                            ).showSnackBar(
+                                                              const SnackBar(
+                                                                content: Text(
+                                                                  'Tidak dapat membuka aplikasi navigasi',
+                                                                ),
+                                                                backgroundColor:
+                                                                    Colors.red,
+                                                              ),
+                                                            );
+                                                          }
+                                                        }
+                                                      },
+                                                      style: ElevatedButton.styleFrom(
                                                         backgroundColor:
                                                             Colors.green,
                                                         foregroundColor:
@@ -395,107 +522,110 @@ class MapPage extends StatelessWidget {
                                                           48,
                                                         ),
                                                       ),
-                                                  child: const Icon(
-                                                    Icons.navigation,
-                                                    size: 20,
-                                                  ),
-                                                );
-                                              } else {
-                                                return ElevatedButton.icon(
-                                                  onPressed: () async {
-                                                    final place =
-                                                        state.selectedPlace!;
-                                                    final lat =
-                                                        place.position.latitude;
-                                                    final lng = place
-                                                        .position
-                                                        .longitude;
-
-                                                    // Create Google Maps URL
-                                                    final googleMapsUrl = Uri.parse(
-                                                      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
+                                                      child: const Icon(
+                                                        Icons.navigation,
+                                                        size: 20,
+                                                      ),
                                                     );
+                                                  } else {
+                                                    return ElevatedButton.icon(
+                                                      onPressed: () async {
+                                                        final place = state
+                                                            .selectedPlace!;
+                                                        final lat = place
+                                                            .position
+                                                            .latitude;
+                                                        final lng = place
+                                                            .position
+                                                            .longitude;
 
-                                                    try {
-                                                      if (await canLaunchUrl(
-                                                        googleMapsUrl,
-                                                      )) {
-                                                        await launchUrl(
-                                                          googleMapsUrl,
-                                                          mode: LaunchMode
-                                                              .externalApplication,
-                                                        );
-                                                      } else {
-                                                        // Fallback to generic maps URL
-                                                        final fallbackUrl =
+                                                        // Create Google Maps URL
+                                                        final googleMapsUrl =
                                                             Uri.parse(
-                                                              'https://maps.google.com/?q=$lat,$lng',
+                                                              'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
                                                             );
-                                                        await launchUrl(
-                                                          fallbackUrl,
-                                                        );
-                                                      }
-                                                    } catch (e) {
-                                                      // Show error message
-                                                      if (context.mounted) {
-                                                        ScaffoldMessenger.of(
-                                                          context,
-                                                        ).showSnackBar(
-                                                          const SnackBar(
-                                                            content: Text(
-                                                              'Tidak dapat membuka aplikasi navigasi',
-                                                            ),
-                                                            backgroundColor:
-                                                                Colors.red,
-                                                          ),
-                                                        );
-                                                      }
-                                                    }
-                                                  },
-                                                  icon: const Icon(
-                                                    Icons.navigation,
-                                                    size: 18,
-                                                  ),
-                                                  label: const Text('Navigate'),
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor:
-                                                        Colors.green,
-                                                    foregroundColor:
-                                                        Colors.white,
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 16,
-                                                          vertical: 12,
-                                                        ),
-                                                  ),
-                                                );
-                                              }
-                                            },
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        // Update Regional Data button
-                                        Expanded(
-                                          child: LayoutBuilder(
-                                            builder: (context, constraints) {
-                                              final isMobile =
-                                                  MediaQuery.of(
-                                                    context,
-                                                  ).size.width <
-                                                  600;
 
-                                              if (isMobile) {
-                                                return ElevatedButton(
-                                                  onPressed: () async {
-                                                    final place =
-                                                        state.selectedPlace!;
-                                                    _updateRegionalData(
-                                                      context,
-                                                      place,
+                                                        try {
+                                                          if (await canLaunchUrl(
+                                                            googleMapsUrl,
+                                                          )) {
+                                                            await launchUrl(
+                                                              googleMapsUrl,
+                                                              mode: LaunchMode
+                                                                  .externalApplication,
+                                                            );
+                                                          } else {
+                                                            // Fallback to generic maps URL
+                                                            final fallbackUrl =
+                                                                Uri.parse(
+                                                                  'https://maps.google.com/?q=$lat,$lng',
+                                                                );
+                                                            await launchUrl(
+                                                              fallbackUrl,
+                                                            );
+                                                          }
+                                                        } catch (e) {
+                                                          // Show error message
+                                                          if (context.mounted) {
+                                                            ScaffoldMessenger.of(
+                                                              context,
+                                                            ).showSnackBar(
+                                                              const SnackBar(
+                                                                content: Text(
+                                                                  'Tidak dapat membuka aplikasi navigasi',
+                                                                ),
+                                                                backgroundColor:
+                                                                    Colors.red,
+                                                              ),
+                                                            );
+                                                          }
+                                                        }
+                                                      },
+                                                      icon: const Icon(
+                                                        Icons.navigation,
+                                                        size: 18,
+                                                      ),
+                                                      label: const Text(
+                                                        'Navigate',
+                                                      ),
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor:
+                                                            Colors.green,
+                                                        foregroundColor:
+                                                            Colors.white,
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 16,
+                                                              vertical: 12,
+                                                            ),
+                                                      ),
                                                     );
-                                                  },
-                                                  style:
-                                                      ElevatedButton.styleFrom(
+                                                  }
+                                                },
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            // Update Regional Data button
+                                            Expanded(
+                                              child: LayoutBuilder(
+                                                builder: (context, constraints) {
+                                                  final isMobile =
+                                                      MediaQuery.of(
+                                                        context,
+                                                      ).size.width <
+                                                      600;
+
+                                                  if (isMobile) {
+                                                    return ElevatedButton(
+                                                      onPressed: () async {
+                                                        final place = state
+                                                            .selectedPlace!;
+                                                        _updateRegionalData(
+                                                          context,
+                                                          place,
+                                                        );
+                                                      },
+                                                      style: ElevatedButton.styleFrom(
                                                         backgroundColor:
                                                             Colors.orange,
                                                         foregroundColor:
@@ -509,140 +639,151 @@ class MapPage extends StatelessWidget {
                                                           48,
                                                         ),
                                                       ),
-                                                  child: const Icon(
-                                                    Icons.location_city,
-                                                    size: 20,
-                                                  ),
-                                                );
-                                              } else {
-                                                return ElevatedButton.icon(
-                                                  onPressed: () async {
-                                                    final place =
-                                                        state.selectedPlace!;
-                                                    _updateRegionalData(
-                                                      context,
-                                                      place,
+                                                      child: const Icon(
+                                                        Icons.location_city,
+                                                        size: 20,
+                                                      ),
                                                     );
-                                                  },
-                                                  icon: const Icon(
-                                                    Icons.location_city,
-                                                    size: 18,
-                                                  ),
-                                                  label: const Text(
-                                                    'Update Regional',
-                                                  ),
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor:
-                                                        Colors.orange,
-                                                    foregroundColor:
-                                                        Colors.white,
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 16,
-                                                          vertical: 12,
-                                                        ),
-                                                  ),
-                                                );
-                                              }
-                                            },
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        // Edit directory button
-                                        Expanded(
-                                          child: LayoutBuilder(
-                                            builder: (context, constraints) {
-                                              final isMobile =
-                                                  MediaQuery.of(
-                                                    context,
-                                                  ).size.width <
-                                                  600;
+                                                  } else {
+                                                    return ElevatedButton.icon(
+                                                      onPressed: () async {
+                                                        final place = state
+                                                            .selectedPlace!;
+                                                        _updateRegionalData(
+                                                          context,
+                                                          place,
+                                                        );
+                                                      },
+                                                      icon: const Icon(
+                                                        Icons.location_city,
+                                                        size: 18,
+                                                      ),
+                                                      label: const Text(
+                                                        'Update Regional',
+                                                      ),
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor:
+                                                            Colors.orange,
+                                                        foregroundColor:
+                                                            Colors.white,
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 16,
+                                                              vertical: 12,
+                                                            ),
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            // Edit directory button
+                                            Expanded(
+                                              child: LayoutBuilder(
+                                                builder: (context, constraints) {
+                                                  final isMobile =
+                                                      MediaQuery.of(
+                                                        context,
+                                                      ).size.width <
+                                                      600;
 
-                                              if (isMobile) {
-                                                return ElevatedButton(
-                                                  onPressed: () async {
-                                                    final place =
-                                                        state.selectedPlace!;
+                                                  if (isMobile) {
+                                                    return ElevatedButton(
+                                                      onPressed: () async {
+                                                        final place = state
+                                                            .selectedPlace!;
 
-                                                    // Fetch full directory data from repository
-                                                    final repository =
-                                                        MapRepositoryImpl();
-                                                    final directory =
-                                                        await repository
-                                                            .getDirectoryById(
-                                                              place.id,
-                                                            );
+                                                        // Fetch full directory data from repository
+                                                        final repository =
+                                                            MapRepositoryImpl();
+                                                        final directory =
+                                                            await repository
+                                                                .getDirectoryById(
+                                                                  place.id,
+                                                                );
 
-                                                    if (directory != null) {
-                                                      // Extract region data from place or directory
-                                                      String idSls = '';
-                                                      String kdProv = '';
-                                                      String kdKab = '';
-                                                      String kdKec = '';
-                                                      String kdDesa = '';
-                                                      String kdSls = '';
-                                                      String? namaSls;
-                                                      String? kodePos;
+                                                        if (directory != null) {
+                                                          // Extract region data from place or directory
+                                                          String idSls = '';
+                                                          String kdProv = '';
+                                                          String kdKab = '';
+                                                          String kdKec = '';
+                                                          String kdDesa = '';
+                                                          String kdSls = '';
+                                                          String? namaSls;
+                                                          String? kodePos;
 
-                                                      // Try to get region data from directory first
-                                                      if (directory.idSls !=
-                                                              null &&
-                                                          directory
-                                                              .idSls!
-                                                              .isNotEmpty) {
-                                                        idSls =
-                                                            directory.idSls!;
-                                                        if (idSls.length >=
-                                                            14) {
-                                                          kdProv = idSls
-                                                              .substring(0, 2);
-                                                          kdKab = idSls
-                                                              .substring(2, 4);
-                                                          kdKec = idSls
-                                                              .substring(4, 7);
-                                                          kdDesa = idSls
-                                                              .substring(7, 10);
-                                                          kdSls = idSls
-                                                              .substring(
-                                                                10,
-                                                                14,
-                                                              );
+                                                          // Try to get region data from directory first
+                                                          if (directory.idSls !=
+                                                                  null &&
+                                                              directory
+                                                                  .idSls!
+                                                                  .isNotEmpty) {
+                                                            idSls = directory
+                                                                .idSls!;
+                                                            if (idSls.length >=
+                                                                14) {
+                                                              kdProv = idSls
+                                                                  .substring(
+                                                                    0,
+                                                                    2,
+                                                                  );
+                                                              kdKab = idSls
+                                                                  .substring(
+                                                                    2,
+                                                                    4,
+                                                                  );
+                                                              kdKec = idSls
+                                                                  .substring(
+                                                                    4,
+                                                                    7,
+                                                                  );
+                                                              kdDesa = idSls
+                                                                  .substring(
+                                                                    7,
+                                                                    10,
+                                                                  );
+                                                              kdSls = idSls
+                                                                  .substring(
+                                                                    10,
+                                                                    14,
+                                                                  );
+                                                            }
+                                                            namaSls =
+                                                                directory.nmSls;
+                                                            kodePos = directory
+                                                                .kodePos;
+                                                          }
+
+                                                          _showAddDirektoriForm(
+                                                            context,
+                                                            place.position,
+                                                            idSls,
+                                                            kdProv,
+                                                            kdKab,
+                                                            kdKec,
+                                                            kdDesa,
+                                                            kdSls,
+                                                            namaSls,
+                                                            kodePos,
+                                                            null, // alamatFromGeocode
+                                                            existingDirectory:
+                                                                directory,
+                                                          );
+                                                        } else {
+                                                          ScaffoldMessenger.of(
+                                                            context,
+                                                          ).showSnackBar(
+                                                            const SnackBar(
+                                                              content: Text(
+                                                                'Gagal memuat data direktori untuk diedit',
+                                                              ),
+                                                            ),
+                                                          );
                                                         }
-                                                        namaSls =
-                                                            directory.nmSls;
-                                                        kodePos =
-                                                            directory.kodePos;
-                                                      }
-
-                                                      _showAddDirektoriForm(
-                                                        context,
-                                                        place.position,
-                                                        idSls,
-                                                        kdProv,
-                                                        kdKab,
-                                                        kdKec,
-                                                        kdDesa,
-                                                        kdSls,
-                                                        namaSls,
-                                                        kodePos,
-                                                        null, // alamatFromGeocode
-                                                        existingDirectory:
-                                                            directory,
-                                                      );
-                                                    } else {
-                                                      ScaffoldMessenger.of(
-                                                        context,
-                                                      ).showSnackBar(
-                                                        const SnackBar(
-                                                          content: Text(
-                                                            'Gagal memuat data direktori untuk diedit',
-                                                          ),
-                                                        ),
-                                                      );
-                                                    }
-                                                  },
-                                                  style:
-                                                      ElevatedButton.styleFrom(
+                                                      },
+                                                      style: ElevatedButton.styleFrom(
                                                         backgroundColor:
                                                             Colors.blue,
                                                         foregroundColor:
@@ -656,356 +797,386 @@ class MapPage extends StatelessWidget {
                                                           48,
                                                         ),
                                                       ),
-                                                  child: const Icon(
-                                                    Icons.edit,
-                                                    size: 20,
-                                                  ),
-                                                );
-                                              } else {
-                                                return ElevatedButton.icon(
-                                                  onPressed: () async {
-                                                    final place =
-                                                        state.selectedPlace!;
+                                                      child: const Icon(
+                                                        Icons.edit,
+                                                        size: 20,
+                                                      ),
+                                                    );
+                                                  } else {
+                                                    return ElevatedButton.icon(
+                                                      onPressed: () async {
+                                                        final place = state
+                                                            .selectedPlace!;
 
-                                                    // Fetch full directory data from repository
-                                                    final repository =
-                                                        MapRepositoryImpl();
-                                                    final directory =
-                                                        await repository
-                                                            .getDirectoryById(
-                                                              place.id,
-                                                            );
+                                                        // Fetch full directory data from repository
+                                                        final repository =
+                                                            MapRepositoryImpl();
+                                                        final directory =
+                                                            await repository
+                                                                .getDirectoryById(
+                                                                  place.id,
+                                                                );
 
-                                                    if (directory != null) {
-                                                      // Extract region data from place or directory
-                                                      String idSls = '';
-                                                      String kdProv = '';
-                                                      String kdKab = '';
-                                                      String kdKec = '';
-                                                      String kdDesa = '';
-                                                      String kdSls = '';
-                                                      String? namaSls;
-                                                      String? kodePos;
+                                                        if (directory != null) {
+                                                          // Extract region data from place or directory
+                                                          String idSls = '';
+                                                          String kdProv = '';
+                                                          String kdKab = '';
+                                                          String kdKec = '';
+                                                          String kdDesa = '';
+                                                          String kdSls = '';
+                                                          String? namaSls;
+                                                          String? kodePos;
 
-                                                      // Try to get region data from directory first
-                                                      if (directory.idSls !=
-                                                              null &&
-                                                          directory
-                                                              .idSls!
-                                                              .isNotEmpty) {
-                                                        idSls =
-                                                            directory.idSls!;
-                                                        if (idSls.length >=
-                                                            14) {
-                                                          kdProv = idSls
-                                                              .substring(0, 2);
-                                                          kdKab = idSls
-                                                              .substring(2, 4);
-                                                          kdKec = idSls
-                                                              .substring(4, 7);
-                                                          kdDesa = idSls
-                                                              .substring(7, 10);
-                                                          kdSls = idSls
-                                                              .substring(
-                                                                10,
-                                                                14,
-                                                              );
+                                                          // Try to get region data from directory first
+                                                          if (directory.idSls !=
+                                                                  null &&
+                                                              directory
+                                                                  .idSls!
+                                                                  .isNotEmpty) {
+                                                            idSls = directory
+                                                                .idSls!;
+                                                            if (idSls.length >=
+                                                                14) {
+                                                              kdProv = idSls
+                                                                  .substring(
+                                                                    0,
+                                                                    2,
+                                                                  );
+                                                              kdKab = idSls
+                                                                  .substring(
+                                                                    2,
+                                                                    4,
+                                                                  );
+                                                              kdKec = idSls
+                                                                  .substring(
+                                                                    4,
+                                                                    7,
+                                                                  );
+                                                              kdDesa = idSls
+                                                                  .substring(
+                                                                    7,
+                                                                    10,
+                                                                  );
+                                                              kdSls = idSls
+                                                                  .substring(
+                                                                    10,
+                                                                    14,
+                                                                  );
+                                                            }
+                                                            namaSls =
+                                                                directory.nmSls;
+                                                            kodePos = directory
+                                                                .kodePos;
+                                                          }
+
+                                                          _showAddDirektoriForm(
+                                                            context,
+                                                            place.position,
+                                                            idSls,
+                                                            kdProv,
+                                                            kdKab,
+                                                            kdKec,
+                                                            kdDesa,
+                                                            kdSls,
+                                                            namaSls,
+                                                            kodePos,
+                                                            null, // alamatFromGeocode
+                                                            existingDirectory:
+                                                                directory,
+                                                          );
+                                                        } else {
+                                                          ScaffoldMessenger.of(
+                                                            context,
+                                                          ).showSnackBar(
+                                                            const SnackBar(
+                                                              content: Text(
+                                                                'Gagal memuat data direktori untuk diedit',
+                                                              ),
+                                                            ),
+                                                          );
                                                         }
-                                                        namaSls =
-                                                            directory.nmSls;
-                                                        kodePos =
-                                                            directory.kodePos;
-                                                      }
-
-                                                      _showAddDirektoriForm(
-                                                        context,
-                                                        place.position,
-                                                        idSls,
-                                                        kdProv,
-                                                        kdKab,
-                                                        kdKec,
-                                                        kdDesa,
-                                                        kdSls,
-                                                        namaSls,
-                                                        kodePos,
-                                                        null, // alamatFromGeocode
-                                                        existingDirectory:
-                                                            directory,
-                                                      );
-                                                    } else {
-                                                      ScaffoldMessenger.of(
-                                                        context,
-                                                      ).showSnackBar(
-                                                        const SnackBar(
-                                                          content: Text(
-                                                            'Gagal memuat data direktori untuk diedit',
-                                                          ),
-                                                        ),
-                                                      );
-                                                    }
-                                                  },
-                                                  icon: const Icon(
-                                                    Icons.edit,
-                                                    size: 18,
-                                                  ),
-                                                  label: const Text('Edit'),
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor:
-                                                        Colors.blue,
-                                                    foregroundColor:
-                                                        Colors.white,
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 16,
-                                                          vertical: 12,
-                                                        ),
-                                                  ),
-                                                );
-                                              }
-                                            },
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        // Delete or mark closed button
-                                        Expanded(
-                                          child: LayoutBuilder(
-                                            builder: (context, constraints) {
-                                              final isMobile =
-                                                  MediaQuery.of(
-                                                    context,
-                                                  ).size.width <
-                                                  600;
-
-                                              if (isMobile) {
-                                                return ElevatedButton(
-                                                  onPressed: () async {
-                                                    final place =
-                                                        state.selectedPlace!;
-                                                    final confirmed = await showDialog<bool>(
-                                                      context: context,
-                                                      builder: (ctx) => AlertDialog(
-                                                        title: const Text(
-                                                          'Konfirmasi Hapus/Tutup',
-                                                        ),
-                                                        content: const Text(
-                                                          'Jika id_sbr = 0 (belum approve) akan dihapus. Jika sudah memiliki id_sbr, status keberadaan akan diubah menjadi kode 4 (Tutup). Lanjutkan?',
-                                                        ),
-                                                        actions: [
-                                                          TextButton(
-                                                            onPressed: () =>
-                                                                Navigator.of(
-                                                                  ctx,
-                                                                ).pop(false),
-                                                            child: const Text(
-                                                              'Batal',
+                                                      },
+                                                      icon: const Icon(
+                                                        Icons.edit,
+                                                        size: 18,
+                                                      ),
+                                                      label: const Text('Edit'),
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor:
+                                                            Colors.blue,
+                                                        foregroundColor:
+                                                            Colors.white,
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 16,
+                                                              vertical: 12,
                                                             ),
-                                                          ),
-                                                          ElevatedButton(
-                                                            onPressed: () =>
-                                                                Navigator.of(
-                                                                  ctx,
-                                                                ).pop(true),
-                                                            child: const Text(
-                                                              'Lanjut',
-                                                            ),
-                                                          ),
-                                                        ],
                                                       ),
                                                     );
-                                                    if (confirmed != true)
-                                                      return;
-                                                    try {
-                                                      final repository =
-                                                          MapRepositoryImpl();
-                                                      final success =
-                                                          await repository
-                                                              .deleteOrCloseDirectoryById(
-                                                                place.id,
-                                                              );
-                                                      if (success) {
-                                                        ScaffoldMessenger.of(
-                                                          context,
-                                                        ).showSnackBar(
-                                                          const SnackBar(
-                                                            content: Text(
-                                                              'Berhasil menghapus/menutup sesuai status',
-                                                            ),
-                                                            backgroundColor:
-                                                                Colors.green,
-                                                          ),
-                                                        );
-                                                        // Refresh data dan tutup card
-                                                        context.read<MapBloc>().add(
-                                                          const PlacesRequested(),
-                                                        );
-                                                        context
-                                                            .read<MapBloc>()
-                                                            .add(
-                                                              const PlaceCleared(),
-                                                            );
-                                                      } else {
-                                                        ScaffoldMessenger.of(
-                                                          context,
-                                                        ).showSnackBar(
-                                                          const SnackBar(
-                                                            content: Text(
-                                                              'Operasi gagal',
-                                                            ),
-                                                            backgroundColor:
-                                                                Colors.red,
-                                                          ),
-                                                        );
-                                                      }
-                                                    } catch (e) {
-                                                      ScaffoldMessenger.of(
+                                                  }
+                                                },
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            // Delete or mark closed button
+                                            Expanded(
+                                              child: LayoutBuilder(
+                                                builder: (context, constraints) {
+                                                  final isMobile =
+                                                      MediaQuery.of(
                                                         context,
-                                                      ).showSnackBar(
-                                                        SnackBar(
-                                                          content: Text(
-                                                            'Error: $e',
-                                                          ),
-                                                          backgroundColor:
-                                                              Colors.red,
-                                                        ),
-                                                      );
-                                                    }
-                                                  },
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.red,
-                                                    foregroundColor:
-                                                        Colors.white,
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 16,
-                                                          vertical: 12,
-                                                        ),
-                                                  ),
-                                                  child: const Icon(
-                                                    Icons.delete_forever,
-                                                    size: 18,
-                                                  ),
-                                                );
-                                              } else {
-                                                return ElevatedButton.icon(
-                                                  onPressed: () async {
-                                                    final place =
-                                                        state.selectedPlace!;
-                                                    final confirmed = await showDialog<bool>(
-                                                      context: context,
-                                                      builder: (ctx) => AlertDialog(
-                                                        title: const Text(
-                                                          'Konfirmasi Hapus/Tutup',
-                                                        ),
-                                                        content: const Text(
-                                                          'Jika id_sbr = 0 (belum approve) akan dihapus. Jika sudah memiliki id_sbr, status keberadaan akan diubah menjadi kode 4 (Tutup). Lanjutkan?',
-                                                        ),
-                                                        actions: [
-                                                          TextButton(
-                                                            onPressed: () =>
-                                                                Navigator.of(
-                                                                  ctx,
-                                                                ).pop(false),
-                                                            child: const Text(
-                                                              'Batal',
+                                                      ).size.width <
+                                                      600;
+
+                                                  if (isMobile) {
+                                                    return ElevatedButton(
+                                                      onPressed: () async {
+                                                        final place = state
+                                                            .selectedPlace!;
+                                                        final confirmed = await showDialog<bool>(
+                                                          context: context,
+                                                          builder: (ctx) => AlertDialog(
+                                                            title: const Text(
+                                                              'Konfirmasi Hapus/Tutup',
                                                             ),
-                                                          ),
-                                                          ElevatedButton(
-                                                            onPressed: () =>
-                                                                Navigator.of(
-                                                                  ctx,
-                                                                ).pop(true),
-                                                            child: const Text(
-                                                              'Lanjut',
+                                                            content: const Text(
+                                                              'Jika id_sbr = 0 (belum approve) akan dihapus. Jika sudah memiliki id_sbr, status keberadaan akan diubah menjadi kode 4 (Tutup). Lanjutkan?',
                                                             ),
+                                                            actions: [
+                                                              TextButton(
+                                                                onPressed: () =>
+                                                                    Navigator.of(
+                                                                      ctx,
+                                                                    ).pop(
+                                                                      false,
+                                                                    ),
+                                                                child:
+                                                                    const Text(
+                                                                      'Batal',
+                                                                    ),
+                                                              ),
+                                                              ElevatedButton(
+                                                                onPressed: () =>
+                                                                    Navigator.of(
+                                                                      ctx,
+                                                                    ).pop(true),
+                                                                child:
+                                                                    const Text(
+                                                                      'Lanjut',
+                                                                    ),
+                                                              ),
+                                                            ],
                                                           ),
-                                                        ],
+                                                        );
+                                                        if (confirmed != true)
+                                                          return;
+                                                        try {
+                                                          final repository =
+                                                              MapRepositoryImpl();
+                                                          final success =
+                                                              await repository
+                                                                  .deleteOrCloseDirectoryById(
+                                                                    place.id,
+                                                                  );
+                                                          if (success) {
+                                                            ScaffoldMessenger.of(
+                                                              context,
+                                                            ).showSnackBar(
+                                                              const SnackBar(
+                                                                content: Text(
+                                                                  'Berhasil menghapus/menutup sesuai status',
+                                                                ),
+                                                                backgroundColor:
+                                                                    Colors
+                                                                        .green,
+                                                              ),
+                                                            );
+                                                            // Refresh data dan tutup card
+                                                            context
+                                                                .read<MapBloc>()
+                                                                .add(
+                                                                  const PlacesRequested(),
+                                                                );
+                                                            context
+                                                                .read<MapBloc>()
+                                                                .add(
+                                                                  const PlaceCleared(),
+                                                                );
+                                                          } else {
+                                                            ScaffoldMessenger.of(
+                                                              context,
+                                                            ).showSnackBar(
+                                                              const SnackBar(
+                                                                content: Text(
+                                                                  'Operasi gagal',
+                                                                ),
+                                                                backgroundColor:
+                                                                    Colors.red,
+                                                              ),
+                                                            );
+                                                          }
+                                                        } catch (e) {
+                                                          ScaffoldMessenger.of(
+                                                            context,
+                                                          ).showSnackBar(
+                                                            SnackBar(
+                                                              content: Text(
+                                                                'Error: $e',
+                                                              ),
+                                                              backgroundColor:
+                                                                  Colors.red,
+                                                            ),
+                                                          );
+                                                        }
+                                                      },
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor:
+                                                            Colors.red,
+                                                        foregroundColor:
+                                                            Colors.white,
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 16,
+                                                              vertical: 12,
+                                                            ),
+                                                      ),
+                                                      child: const Icon(
+                                                        Icons.delete_forever,
+                                                        size: 18,
                                                       ),
                                                     );
-                                                    if (confirmed != true)
-                                                      return;
-                                                    try {
-                                                      final repository =
-                                                          MapRepositoryImpl();
-                                                      final success =
-                                                          await repository
-                                                              .deleteOrCloseDirectoryById(
-                                                                place.id,
-                                                              );
-                                                      if (success) {
-                                                        ScaffoldMessenger.of(
-                                                          context,
-                                                        ).showSnackBar(
-                                                          const SnackBar(
-                                                            content: Text(
-                                                              'Berhasil menghapus/menutup sesuai status',
+                                                  } else {
+                                                    return ElevatedButton.icon(
+                                                      onPressed: () async {
+                                                        final place = state
+                                                            .selectedPlace!;
+                                                        final confirmed = await showDialog<bool>(
+                                                          context: context,
+                                                          builder: (ctx) => AlertDialog(
+                                                            title: const Text(
+                                                              'Konfirmasi Hapus/Tutup',
                                                             ),
-                                                            backgroundColor:
-                                                                Colors.green,
+                                                            content: const Text(
+                                                              'Jika id_sbr = 0 (belum approve) akan dihapus. Jika sudah memiliki id_sbr, status keberadaan akan diubah menjadi kode 4 (Tutup). Lanjutkan?',
+                                                            ),
+                                                            actions: [
+                                                              TextButton(
+                                                                onPressed: () =>
+                                                                    Navigator.of(
+                                                                      ctx,
+                                                                    ).pop(
+                                                                      false,
+                                                                    ),
+                                                                child:
+                                                                    const Text(
+                                                                      'Batal',
+                                                                    ),
+                                                              ),
+                                                              ElevatedButton(
+                                                                onPressed: () =>
+                                                                    Navigator.of(
+                                                                      ctx,
+                                                                    ).pop(true),
+                                                                child:
+                                                                    const Text(
+                                                                      'Lanjut',
+                                                                    ),
+                                                              ),
+                                                            ],
                                                           ),
                                                         );
-                                                        // Refresh data dan tutup card
-                                                        context.read<MapBloc>().add(
-                                                          const PlacesRequested(),
-                                                        );
-                                                        context
-                                                            .read<MapBloc>()
-                                                            .add(
-                                                              const PlaceCleared(),
+                                                        if (confirmed != true)
+                                                          return;
+                                                        try {
+                                                          final repository =
+                                                              MapRepositoryImpl();
+                                                          final success =
+                                                              await repository
+                                                                  .deleteOrCloseDirectoryById(
+                                                                    place.id,
+                                                                  );
+                                                          if (success) {
+                                                            ScaffoldMessenger.of(
+                                                              context,
+                                                            ).showSnackBar(
+                                                              const SnackBar(
+                                                                content: Text(
+                                                                  'Berhasil menghapus/menutup sesuai status',
+                                                                ),
+                                                                backgroundColor:
+                                                                    Colors
+                                                                        .green,
+                                                              ),
                                                             );
-                                                      } else {
-                                                        ScaffoldMessenger.of(
-                                                          context,
-                                                        ).showSnackBar(
-                                                          const SnackBar(
-                                                            content: Text(
-                                                              'Operasi gagal',
+                                                            // Refresh data dan tutup card
+                                                            context
+                                                                .read<MapBloc>()
+                                                                .add(
+                                                                  const PlacesRequested(),
+                                                                );
+                                                            context
+                                                                .read<MapBloc>()
+                                                                .add(
+                                                                  const PlaceCleared(),
+                                                                );
+                                                          } else {
+                                                            ScaffoldMessenger.of(
+                                                              context,
+                                                            ).showSnackBar(
+                                                              const SnackBar(
+                                                                content: Text(
+                                                                  'Operasi gagal',
+                                                                ),
+                                                                backgroundColor:
+                                                                    Colors.red,
+                                                              ),
+                                                            );
+                                                          }
+                                                        } catch (e) {
+                                                          ScaffoldMessenger.of(
+                                                            context,
+                                                          ).showSnackBar(
+                                                            SnackBar(
+                                                              content: Text(
+                                                                'Error: $e',
+                                                              ),
+                                                              backgroundColor:
+                                                                  Colors.red,
                                                             ),
-                                                            backgroundColor:
-                                                                Colors.red,
-                                                          ),
-                                                        );
-                                                      }
-                                                    } catch (e) {
-                                                      ScaffoldMessenger.of(
-                                                        context,
-                                                      ).showSnackBar(
-                                                        SnackBar(
-                                                          content: Text(
-                                                            'Error: $e',
-                                                          ),
-                                                          backgroundColor:
-                                                              Colors.red,
-                                                        ),
-                                                      );
-                                                    }
-                                                  },
-                                                  icon: const Icon(
-                                                    Icons.delete_forever,
-                                                    size: 18,
-                                                  ),
-                                                  label: const Text(
-                                                    'Hapus/Tutup',
-                                                  ),
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.red,
-                                                    foregroundColor:
-                                                        Colors.white,
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 16,
-                                                          vertical: 12,
-                                                        ),
-                                                  ),
-                                                );
-                                              }
-                                            },
-                                          ),
+                                                          );
+                                                        }
+                                                      },
+                                                      icon: const Icon(
+                                                        Icons.delete_forever,
+                                                        size: 18,
+                                                      ),
+                                                      label: const Text(
+                                                        'Hapus/Tutup',
+                                                      ),
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor:
+                                                            Colors.red,
+                                                        foregroundColor:
+                                                            Colors.white,
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 16,
+                                                              vertical: 12,
+                                                            ),
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                         ),
@@ -1020,6 +1191,70 @@ class MapPage extends StatelessWidget {
         }
       },
     );
+  }
+
+  // Helper function to get keberadaan usaha description
+  String _getKeberadaanUsahaDescription(int? keberadaanUsaha) {
+    if (keberadaanUsaha == null) {
+      return 'Undefined';
+    }
+
+    switch (keberadaanUsaha) {
+      case 1:
+        return 'Aktif';
+      case 2:
+        return 'Tutup Sementara';
+      case 3:
+        return 'Belum Beroperasi/Berproduksi';
+      case 4:
+        return 'Tutup';
+      case 5:
+        return 'Alih Usaha';
+      case 6:
+        return 'Tidak Ditemukan';
+      case 7:
+        return 'Aktif Pindah';
+      case 8:
+        return 'Aktif Nonrespon';
+      case 9:
+        return 'Duplikat';
+      case 10:
+        return 'Salah Kode Wilayah';
+      default:
+        return 'Tidak Diketahui';
+    }
+  }
+
+  // Helper function to get keberadaan usaha color
+  Color _getKeberadaanUsahaColor(int? keberadaanUsaha) {
+    if (keberadaanUsaha == null) {
+      return Colors.grey.shade400;
+    }
+
+    switch (keberadaanUsaha) {
+      case 1: // Aktif
+        return Colors.green;
+      case 2: // Tutup Sementara
+        return Colors.orange;
+      case 3: // Belum Beroperasi/Berproduksi
+        return Colors.blue;
+      case 4: // Tutup
+        return Colors.red;
+      case 5: // Alih Usaha
+        return Colors.purple;
+      case 6: // Tidak Ditemukan
+        return Colors.grey;
+      case 7: // Aktif Pindah
+        return Colors.teal;
+      case 8: // Aktif Nonrespon
+        return Colors.amber;
+      case 9: // Duplikat
+        return Colors.brown;
+      case 10: // Salah Kode Wilayah
+        return Colors.pink;
+      default:
+        return Colors.grey;
+    }
   }
 
   void _showContextMenu(BuildContext parentContext, LatLng point) {
@@ -1492,9 +1727,15 @@ class MapPage extends StatelessWidget {
     final nikPemilikController = TextEditingController();
     final keteranganController = TextEditingController();
     final deskripsiBadanUsahaController = TextEditingController();
+    final kategoriController =
+        TextEditingController(); // For kategori/tag input
+    final kbliController = TextEditingController(); // For KBLI 5-digit code
+    final tagController = TextEditingController(); // For tag input
+    final urlGambarController = TextEditingController(); // For image URL
 
     // Dropdown variables
     // Declare dropdown variables first
+    List<String> selectedTags = []; // For multiple tag selection
     String? selectedSkalaUsaha;
     String? selectedJenisPerusahaan;
     String? selectedKeberadaanUsaha = '1'; // Default to Aktif
@@ -1537,6 +1778,13 @@ class MapPage extends StatelessWidget {
       selectedSektorInstitusi = existingDirectory.sektorInstitusi?.toString();
       selectedTahunBerdiri = existingDirectory.tahunBerdiri?.toString();
       selectedTenagaKerja = existingDirectory.tenagaKerja?.toString();
+
+      // Initialize KBLI and tag fields
+      kbliController.text = existingDirectory.kbli ?? '';
+      if (existingDirectory.tag != null && existingDirectory.tag!.isNotEmpty) {
+        selectedTags = List<String>.from(existingDirectory.tag!);
+        tagController.text = selectedTags.join(', ');
+      }
     }
 
     // Variables for autocomplete functionality
@@ -1549,6 +1797,8 @@ class MapPage extends StatelessWidget {
     bool businessNameSelected = false;
     String selectedBusinessType = ''; // 'new' or 'existing'
     DirektoriModel? selectedExistingBusiness;
+    bool showFollowUpQuestions =
+        false; // Controls follow-up questions visibility
 
     showModalBottomSheet(
       context: context,
@@ -1614,10 +1864,65 @@ class MapPage extends StatelessWidget {
                                 ),
                             ],
                           ),
-                          IconButton(
-                            onPressed: () =>
-                                Navigator.of(bottomSheetContext).pop(),
-                            icon: const Icon(Icons.close),
+                          Row(
+                            children: [
+                              IconButton(
+                                tooltip: 'Info lokasi',
+                                onPressed: () {
+                                  showDialog(
+                                    context: bottomSheetContext,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text('Informasi Lokasi'),
+                                      content: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Koordinat:',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'Latitude: ${point.latitude.toStringAsFixed(6)}',
+                                          ),
+                                          Text(
+                                            'Longitude: ${point.longitude.toStringAsFixed(6)}',
+                                          ),
+                                          const SizedBox(height: 12),
+                                          const Text(
+                                            'Informasi Wilayah:',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'idsls: ${idSls.isNotEmpty ? idSls : "-"}',
+                                          ),
+                                          Text('kode_pos: ${kodePos ?? "-"}'),
+                                        ],
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.of(ctx).pop(),
+                                          child: const Text('Tutup'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.info_outline),
+                              ),
+                              IconButton(
+                                onPressed: () =>
+                                    Navigator.of(bottomSheetContext).pop(),
+                                icon: const Icon(Icons.close),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -1696,25 +2001,8 @@ class MapPage extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Always show coordinates and region info
-                        const Text(
-                          'Koordinat:',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 4),
-                        Text('Latitude: ${point.latitude.toStringAsFixed(6)}'),
-                        Text(
-                          'Longitude: ${point.longitude.toStringAsFixed(6)}',
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Informasi Wilayah:',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 4),
-                        Text('idsls: ${idSls.isNotEmpty ? idSls : "-"}'),
-                        Text('kode_pos: ${kodePos ?? "-"}'),
-                        const SizedBox(height: 16),
+                        // Info lokasi dipindahkan ke dialog (ikon info di header)
+                        const SizedBox(height: 8),
 
                         // Phase 1: Business name selection (only for new directories)
                         if (existingDirectory == null && currentPhase == 1) ...[
@@ -1779,8 +2067,7 @@ class MapPage extends StatelessWidget {
                                   ),
 
                                   // Enhanced suggestions dropdown
-                                  if (showSuggestions &&
-                                      (isSearching || searchResults.isNotEmpty))
+                                  if (showSuggestions)
                                     Container(
                                       margin: const EdgeInsets.only(top: 8),
                                       child: Material(
@@ -1870,71 +2157,6 @@ class MapPage extends StatelessWidget {
                                                           ),
                                                         ),
                                                       )
-                                                    : searchResults.isEmpty
-                                                    ? Padding(
-                                                        padding:
-                                                            const EdgeInsets.all(
-                                                              16,
-                                                            ),
-                                                        child: Column(
-                                                          mainAxisSize:
-                                                              MainAxisSize.min,
-                                                          children: [
-                                                            Icon(
-                                                              Icons.search_off,
-                                                              size: 32,
-                                                              color: Colors
-                                                                  .grey
-                                                                  .shade400,
-                                                            ),
-                                                            const SizedBox(
-                                                              height: 8,
-                                                            ),
-                                                            Text(
-                                                              'Tidak ada usaha ditemukan',
-                                                              style: TextStyle(
-                                                                color: Colors
-                                                                    .grey
-                                                                    .shade600,
-                                                                fontSize: 14,
-                                                              ),
-                                                            ),
-                                                            const SizedBox(
-                                                              height: 12,
-                                                            ),
-                                                            ElevatedButton.icon(
-                                                              onPressed: () {
-                                                                setState(() {
-                                                                  showSuggestions =
-                                                                      false;
-                                                                });
-                                                              },
-                                                              icon: const Icon(
-                                                                Icons.add,
-                                                                size: 16,
-                                                              ),
-                                                              label: const Text(
-                                                                'Buat Usaha Baru',
-                                                              ),
-                                                              style: ElevatedButton.styleFrom(
-                                                                backgroundColor:
-                                                                    Colors
-                                                                        .green,
-                                                                foregroundColor:
-                                                                    Colors
-                                                                        .white,
-                                                                padding:
-                                                                    const EdgeInsets.symmetric(
-                                                                      horizontal:
-                                                                          16,
-                                                                      vertical:
-                                                                          8,
-                                                                    ),
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      )
                                                     : ListView.separated(
                                                         shrinkWrap: true,
                                                         itemCount:
@@ -1999,12 +2221,17 @@ class MapPage extends StatelessWidget {
                                                                 ),
                                                                 onTap: () {
                                                                   setState(() {
-                                                                    showSuggestions = false;
-                                                                    businessNameSelected = true;
-                                                                    selectedBusinessType = 'new';
-                                                                    currentPhase = 2;
+                                                                    showSuggestions =
+                                                                        false;
+                                                                    businessNameSelected =
+                                                                        true;
+                                                                    selectedBusinessType =
+                                                                        'new';
+                                                                    currentPhase =
+                                                                        2;
                                                                     // Clear existing business reference for new business
-                                                                    selectedExistingBusiness = null;
+                                                                    selectedExistingBusiness =
+                                                                        null;
                                                                   });
                                                                 },
                                                               ),
@@ -2071,16 +2298,7 @@ class MapPage extends StatelessWidget {
                                                                             12,
                                                                       ),
                                                                     ),
-                                                                  Text(
-                                                                    'ID SLS: ${directory.idSls}',
-                                                                    style: TextStyle(
-                                                                      fontSize:
-                                                                          11,
-                                                                      color: Colors
-                                                                          .grey
-                                                                          .shade600,
-                                                                    ),
-                                                                  ),
+
                                                                   Row(
                                                                     children: [
                                                                       Icon(
@@ -2127,6 +2345,46 @@ class MapPage extends StatelessWidget {
                                                                       ),
                                                                     ],
                                                                   ),
+                                                                  // Keberadaan Usaha info
+                                                                  const SizedBox(
+                                                                    height: 4,
+                                                                  ),
+                                                                  Row(
+                                                                    children: [
+                                                                      Container(
+                                                                        width:
+                                                                            8,
+                                                                        height:
+                                                                            8,
+                                                                        decoration: BoxDecoration(
+                                                                          color: _getKeberadaanUsahaColor(
+                                                                            directory.keberadaanUsaha,
+                                                                          ),
+                                                                          shape:
+                                                                              BoxShape.circle,
+                                                                        ),
+                                                                      ),
+                                                                      const SizedBox(
+                                                                        width:
+                                                                            4,
+                                                                      ),
+                                                                      Text(
+                                                                        _getKeberadaanUsahaDescription(
+                                                                          directory
+                                                                              .keberadaanUsaha,
+                                                                        ),
+                                                                        style: TextStyle(
+                                                                          fontSize:
+                                                                              10,
+                                                                          color: _getKeberadaanUsahaColor(
+                                                                            directory.keberadaanUsaha,
+                                                                          ),
+                                                                          fontWeight:
+                                                                              FontWeight.w500,
+                                                                        ),
+                                                                      ),
+                                                                    ],
+                                                                  ),
                                                                 ],
                                                               ),
                                                               trailing: PopupMenuButton<String>(
@@ -2149,39 +2407,121 @@ class MapPage extends StatelessWidget {
                                                                   } else if (value ==
                                                                       'use_name') {
                                                                     // Pre-fill form with existing business data
-                                                                    namaUsahaController.text = directory.namaUsaha;
-                                                                    alamatController.text = directory.alamat ?? '';
-                                                                    pemilikController.text = directory.pemilik ?? '';
-                                                                    nomorTeleponController.text = directory.nomorTelepon ?? '';
-                                                                    namaKomersialController.text = directory.namaKomersialUsaha ?? '';
-                                                                    nibController.text = directory.nib ?? '';
-                                                                    emailController.text = directory.email ?? '';
-                                                                    websiteController.text = directory.website ?? '';
-                                                                    nomorWhatsappController.text = directory.nomorWhatsapp ?? '';
-                                                                    nikPemilikController.text = directory.nikPemilik ?? '';
-                                                                    kegiatanUsahaController.text = directory.kegiatanUsaha.isNotEmpty 
-                                                                        ? directory.kegiatanUsaha.map((k) => k['kegiatan_usaha'] ?? '').join(', ')
+                                                                    namaUsahaController
+                                                                            .text =
+                                                                        directory
+                                                                            .namaUsaha;
+                                                                    alamatController
+                                                                            .text =
+                                                                        directory
+                                                                            .alamat ??
+                                                                        '';
+                                                                    pemilikController
+                                                                            .text =
+                                                                        directory
+                                                                            .pemilik ??
+                                                                        '';
+                                                                    nomorTeleponController
+                                                                            .text =
+                                                                        directory
+                                                                            .nomorTelepon ??
+                                                                        '';
+                                                                    namaKomersialController
+                                                                            .text =
+                                                                        directory
+                                                                            .namaKomersialUsaha ??
+                                                                        '';
+                                                                    nibController
+                                                                            .text =
+                                                                        directory
+                                                                            .nib ??
+                                                                        '';
+                                                                    emailController
+                                                                            .text =
+                                                                        directory
+                                                                            .email ??
+                                                                        '';
+                                                                    websiteController
+                                                                            .text =
+                                                                        directory
+                                                                            .website ??
+                                                                        '';
+                                                                    nomorWhatsappController
+                                                                            .text =
+                                                                        directory
+                                                                            .nomorWhatsapp ??
+                                                                        '';
+                                                                    nikPemilikController
+                                                                            .text =
+                                                                        directory
+                                                                            .nikPemilik ??
+                                                                        '';
+                                                                    kegiatanUsahaController
+                                                                            .text =
+                                                                        directory
+                                                                            .kegiatanUsaha
+                                                                            .isNotEmpty
+                                                                        ? directory
+                                                                              .kegiatanUsaha
+                                                                              .map(
+                                                                                (
+                                                                                  k,
+                                                                                ) =>
+                                                                                    k['kegiatan_usaha'] ??
+                                                                                    '',
+                                                                              )
+                                                                              .join(', ')
                                                                         : '';
-                                                                    
+
                                                                     // Set dropdown values
-                                                                    selectedSkalaUsaha = directory.skalaUsaha;
-                                                                    selectedJenisPerusahaan = directory.jenisPerusahaan;
-                                                                    selectedKeberadaanUsaha = directory.keberadaanUsaha?.toString();
-                                                                    selectedJenisKepemilikan = directory.jenisKepemilikanUsaha?.toString();
-                                                                    selectedBentukBadanHukum = directory.bentukBadanHukumUsaha?.toString();
-                                                                    selectedJaringanUsaha = directory.jaringanUsaha?.toString();
-                                                                    selectedSektorInstitusi = directory.sektorInstitusi?.toString();
-                                                                    selectedTahunBerdiri = directory.tahunBerdiri?.toString();
-                                                                    selectedTenagaKerja = directory.tenagaKerja?.toString();
-                                                                    
+                                                                    selectedSkalaUsaha =
+                                                                        directory
+                                                                            .skalaUsaha;
+                                                                    selectedJenisPerusahaan =
+                                                                        directory
+                                                                            .jenisPerusahaan;
+                                                                    selectedKeberadaanUsaha =
+                                                                        directory
+                                                                            .keberadaanUsaha
+                                                                            ?.toString();
+                                                                    selectedJenisKepemilikan =
+                                                                        directory
+                                                                            .jenisKepemilikanUsaha
+                                                                            ?.toString();
+                                                                    selectedBentukBadanHukum =
+                                                                        directory
+                                                                            .bentukBadanHukumUsaha
+                                                                            ?.toString();
+                                                                    selectedJaringanUsaha =
+                                                                        directory
+                                                                            .jaringanUsaha
+                                                                            ?.toString();
+                                                                    selectedSektorInstitusi =
+                                                                        directory
+                                                                            .sektorInstitusi
+                                                                            ?.toString();
+                                                                    selectedTahunBerdiri =
+                                                                        directory
+                                                                            .tahunBerdiri
+                                                                            ?.toString();
+                                                                    selectedTenagaKerja =
+                                                                        directory
+                                                                            .tenagaKerja
+                                                                            ?.toString();
+
                                                                     // Store the selected existing business for reference
-                                                                    selectedExistingBusiness = directory;
-                                                                    
+                                                                    selectedExistingBusiness =
+                                                                        directory;
+
                                                                     setState(() {
-                                                                      showSuggestions = false;
-                                                                      businessNameSelected = true;
-                                                                      selectedBusinessType = 'existing';
-                                                                      currentPhase = 2;
+                                                                      showSuggestions =
+                                                                          false;
+                                                                      businessNameSelected =
+                                                                          true;
+                                                                      selectedBusinessType =
+                                                                          'existing';
+                                                                      currentPhase =
+                                                                          2;
                                                                     });
                                                                   }
                                                                 },
@@ -2232,39 +2572,123 @@ class MapPage extends StatelessWidget {
                                                               ),
                                                               onTap: () {
                                                                 // Pre-fill form with existing business data
-                                                                namaUsahaController.text = directory.namaUsaha;
-                                                                alamatController.text = directory.alamat ?? '';
-                                                                pemilikController.text = directory.pemilik ?? '';
-                                                                nomorTeleponController.text = directory.nomorTelepon ?? '';
-                                                                namaKomersialController.text = directory.namaKomersialUsaha ?? '';
-                                                                nibController.text = directory.nib ?? '';
-                                                                emailController.text = directory.email ?? '';
-                                                                websiteController.text = directory.website ?? '';
-                                                                nomorWhatsappController.text = directory.nomorWhatsapp ?? '';
-                                                                nikPemilikController.text = directory.nikPemilik ?? '';
-                                                                kegiatanUsahaController.text = directory.kegiatanUsaha.isNotEmpty 
-                                                                    ? directory.kegiatanUsaha.map((k) => k['kegiatan_usaha'] ?? '').join(', ')
+                                                                namaUsahaController
+                                                                        .text =
+                                                                    directory
+                                                                        .namaUsaha;
+                                                                alamatController
+                                                                        .text =
+                                                                    directory
+                                                                        .alamat ??
+                                                                    '';
+                                                                pemilikController
+                                                                        .text =
+                                                                    directory
+                                                                        .pemilik ??
+                                                                    '';
+                                                                nomorTeleponController
+                                                                        .text =
+                                                                    directory
+                                                                        .nomorTelepon ??
+                                                                    '';
+                                                                namaKomersialController
+                                                                        .text =
+                                                                    directory
+                                                                        .namaKomersialUsaha ??
+                                                                    '';
+                                                                nibController
+                                                                        .text =
+                                                                    directory
+                                                                        .nib ??
+                                                                    '';
+                                                                emailController
+                                                                        .text =
+                                                                    directory
+                                                                        .email ??
+                                                                    '';
+                                                                websiteController
+                                                                        .text =
+                                                                    directory
+                                                                        .website ??
+                                                                    '';
+                                                                nomorWhatsappController
+                                                                        .text =
+                                                                    directory
+                                                                        .nomorWhatsapp ??
+                                                                    '';
+                                                                nikPemilikController
+                                                                        .text =
+                                                                    directory
+                                                                        .nikPemilik ??
+                                                                    '';
+                                                                kegiatanUsahaController
+                                                                        .text =
+                                                                    directory
+                                                                        .kegiatanUsaha
+                                                                        .isNotEmpty
+                                                                    ? directory
+                                                                          .kegiatanUsaha
+                                                                          .map(
+                                                                            (
+                                                                              k,
+                                                                            ) =>
+                                                                                k['kegiatan_usaha'] ??
+                                                                                '',
+                                                                          )
+                                                                          .join(
+                                                                            ', ',
+                                                                          )
                                                                     : '';
-                                                                
+
                                                                 // Set dropdown values
-                                                                selectedSkalaUsaha = directory.skalaUsaha;
-                                                                selectedJenisPerusahaan = directory.jenisPerusahaan;
-                                                                selectedKeberadaanUsaha = directory.keberadaanUsaha?.toString();
-                                                                selectedJenisKepemilikan = directory.jenisKepemilikanUsaha?.toString();
-                                                                selectedBentukBadanHukum = directory.bentukBadanHukumUsaha?.toString();
-                                                                selectedJaringanUsaha = directory.jaringanUsaha?.toString();
-                                                                selectedSektorInstitusi = directory.sektorInstitusi?.toString();
-                                                                selectedTahunBerdiri = directory.tahunBerdiri?.toString();
-                                                                selectedTenagaKerja = directory.tenagaKerja?.toString();
-                                                                
+                                                                selectedSkalaUsaha =
+                                                                    directory
+                                                                        .skalaUsaha;
+                                                                selectedJenisPerusahaan =
+                                                                    directory
+                                                                        .jenisPerusahaan;
+                                                                selectedKeberadaanUsaha =
+                                                                    directory
+                                                                        .keberadaanUsaha
+                                                                        ?.toString();
+                                                                selectedJenisKepemilikan =
+                                                                    directory
+                                                                        .jenisKepemilikanUsaha
+                                                                        ?.toString();
+                                                                selectedBentukBadanHukum =
+                                                                    directory
+                                                                        .bentukBadanHukumUsaha
+                                                                        ?.toString();
+                                                                selectedJaringanUsaha =
+                                                                    directory
+                                                                        .jaringanUsaha
+                                                                        ?.toString();
+                                                                selectedSektorInstitusi =
+                                                                    directory
+                                                                        .sektorInstitusi
+                                                                        ?.toString();
+                                                                selectedTahunBerdiri =
+                                                                    directory
+                                                                        .tahunBerdiri
+                                                                        ?.toString();
+                                                                selectedTenagaKerja =
+                                                                    directory
+                                                                        .tenagaKerja
+                                                                        ?.toString();
+
                                                                 // Store the selected existing business for reference
-                                                                selectedExistingBusiness = directory;
-                                                                
+                                                                selectedExistingBusiness =
+                                                                    directory;
+
                                                                 setState(() {
-                                                                  showSuggestions = false;
-                                                                  businessNameSelected = true;
-                                                                  selectedBusinessType = 'existing';
-                                                                  currentPhase = 2;
+                                                                  showSuggestions =
+                                                                      false;
+                                                                  businessNameSelected =
+                                                                      true;
+                                                                  selectedBusinessType =
+                                                                      'existing';
+                                                                  currentPhase =
+                                                                      2;
                                                                 });
                                                               },
                                                             ),
@@ -2281,8 +2705,6 @@ class MapPage extends StatelessWidget {
                               ),
                             ],
                           ),
-
-
                         ],
 
                         // Phase 2: Detailed form (for new directories or when business name is selected)
@@ -2366,429 +2788,781 @@ class MapPage extends StatelessWidget {
                               ],
                             ),
 
-                          // Additional form fields
-                          TextField(
-                            controller: alamatController,
-                            decoration: const InputDecoration(
-                              labelText: 'Alamat',
-                              border: OutlineInputBorder(),
+                          // MAIN QUESTIONS SECTION
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.green.shade200),
                             ),
-                            maxLines: 2,
-                          ),
-                          const SizedBox(height: 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.assignment,
+                                      color: Colors.green.shade700,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Pertanyaan Utama',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
 
-                          TextField(
-                            controller: pemilikController,
-                            decoration: const InputDecoration(
-                              labelText: 'Nama Pemilik',
-                              border: OutlineInputBorder(),
+                                // 1. Alamat
+                                TextField(
+                                  controller: alamatController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Alamat *',
+                                    border: OutlineInputBorder(),
+                                    helperText: 'Alamat lengkap usaha',
+                                  ),
+                                  maxLines: 2,
+                                ),
+                                const SizedBox(height: 16),
+
+                                // 2. KBLI Code (5 digits)
+                                TextField(
+                                  controller: kbliController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Kode KBLI *',
+                                    border: OutlineInputBorder(),
+                                    hintText: 'Contoh: 47111',
+                                    helperText: 'Kode KBLI harus 5 digit angka',
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  maxLength: 5,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
+                                  onChanged: (value) {
+                                    // Validate KBLI format
+                                    if (value.length == 5) {
+                                      // Valid KBLI
+                                    }
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+
+                                // 3. Deskripsi Badan Usaha
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Deskripsi Badan Usaha *',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.grey.shade700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    TextField(
+                                      controller: kegiatanUsahaController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Kegiatan Usaha',
+                                        border: OutlineInputBorder(),
+                                        hintText:
+                                            'Contoh: Perdagangan, Jasa, Manufaktur',
+                                        helperText:
+                                            'Pisahkan dengan koma jika lebih dari satu',
+                                      ),
+                                      maxLines: 2,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: deskripsiBadanUsahaController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Deskripsi Detail Usaha',
+                                        border: OutlineInputBorder(),
+                                        hintText:
+                                            'Jelaskan secara detail kegiatan usaha Anda',
+                                      ),
+                                      maxLines: 3,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+
+                                // 4. Tag Multi-Selection
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Tag/Kategori',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.grey.shade700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+
+                                    // Selected tags display
+                                    if (selectedTags.isNotEmpty)
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                            color: Colors.grey.shade300,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          children: selectedTags.map((tag) {
+                                            return Chip(
+                                              label: Text(tag),
+                                              deleteIcon: const Icon(
+                                                Icons.close,
+                                                size: 18,
+                                              ),
+                                              onDeleted: () {
+                                                setState(() {
+                                                  selectedTags.remove(tag);
+                                                  tagController.text =
+                                                      selectedTags.join(', ');
+                                                });
+                                              },
+                                              backgroundColor:
+                                                  Colors.blue.shade100,
+                                              deleteIconColor:
+                                                  Colors.blue.shade700,
+                                            );
+                                          }).toList(),
+                                        ),
+                                      ),
+
+                                    const SizedBox(height: 8),
+
+                                    // Tag input field
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: TextField(
+                                            controller: tagController,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Tambah Tag',
+                                              border: OutlineInputBorder(),
+                                              hintText:
+                                                  'Ketik tag dan tekan Enter',
+                                            ),
+                                            onSubmitted: (value) {
+                                              if (value.trim().isNotEmpty &&
+                                                  !selectedTags.contains(
+                                                    value.trim(),
+                                                  )) {
+                                                setState(() {
+                                                  selectedTags.add(
+                                                    value.trim(),
+                                                  );
+                                                  tagController.clear();
+                                                });
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        IconButton(
+                                          onPressed: () {
+                                            final value = tagController.text
+                                                .trim();
+                                            if (value.isNotEmpty &&
+                                                !selectedTags.contains(value)) {
+                                              setState(() {
+                                                selectedTags.add(value);
+                                                tagController.clear();
+                                              });
+                                            }
+                                          },
+                                          icon: const Icon(Icons.add),
+                                          style: IconButton.styleFrom(
+                                            backgroundColor:
+                                                Colors.blue.shade100,
+                                            foregroundColor:
+                                                Colors.blue.shade700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+
+                                    // Predefined tags
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Tag Populer:',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 4,
+                                      children:
+                                          [
+                                            'Sekolah',
+                                            'Hotel',
+                                            'Cafe',
+                                            'Restoran',
+                                            'Toko',
+                                            'Bengkel',
+                                            'Klinik',
+                                            'Bank',
+                                          ].map((tag) {
+                                            final isSelected = selectedTags
+                                                .contains(tag);
+                                            return FilterChip(
+                                              label: Text(tag),
+                                              selected: isSelected,
+                                              onSelected: (selected) {
+                                                setState(() {
+                                                  if (selected) {
+                                                    selectedTags.add(tag);
+                                                  } else {
+                                                    selectedTags.remove(tag);
+                                                  }
+                                                });
+                                              },
+                                              selectedColor:
+                                                  Colors.blue.shade200,
+                                              checkmarkColor:
+                                                  Colors.blue.shade700,
+                                            );
+                                          }).toList(),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+
+                                // 5. Upload Gambar
+                                ImageUploadWidget(
+                                  onImageUploaded: (imageUrl) {
+                                    setState(() {
+                                      urlGambarController.text = imageUrl;
+                                    });
+                                  },
+                                  initialImageUrl:
+                                      urlGambarController.text.isNotEmpty
+                                      ? urlGambarController.text
+                                      : null,
+                                  hintText: 'Upload gambar usaha (opsional)',
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 12),
 
-                          TextField(
-                            controller: nomorTeleponController,
-                            decoration: const InputDecoration(
-                              labelText: 'Nomor Telepon',
-                              border: OutlineInputBorder(),
+                          // CONTINUE BUTTON
+                          if (!showFollowUpQuestions)
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 16),
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    showFollowUpQuestions = true;
+                                  });
+                                },
+                                icon: const Icon(Icons.expand_more),
+                                label: const Text('Lanjutan (Opsional)'),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                  side: BorderSide(color: Colors.blue.shade300),
+                                ),
+                              ),
                             ),
-                            keyboardType: TextInputType.phone,
-                          ),
-                          const SizedBox(height: 12),
 
-                          TextField(
-                            controller: namaKomersialController,
-                            decoration: const InputDecoration(
-                              labelText: 'Nama Komersial',
-                              border: OutlineInputBorder(),
+                          // FOLLOW-UP QUESTIONS SECTION
+                          if (showFollowUpQuestions) ...[
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              margin: const EdgeInsets.only(bottom: 16),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.orange.shade200,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.assignment_outlined,
+                                        color: Colors.orange.shade700,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Pertanyaan Lanjutan (Opsional)',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.orange.shade700,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      TextButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            showFollowUpQuestions = false;
+                                          });
+                                        },
+                                        child: const Text('Sembunyikan'),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // Contact Information
+                                  Text(
+                                    'Informasi Kontak',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextField(
+                                    controller: pemilikController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Nama Pemilik',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: nomorTeleponController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Nomor Telepon',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    keyboardType: TextInputType.phone,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: emailController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Email',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    keyboardType: TextInputType.emailAddress,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: nomorWhatsappController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Nomor WhatsApp',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    keyboardType: TextInputType.phone,
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // Business Details
+                                  Text(
+                                    'Detail Usaha',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextField(
+                                    controller: namaKomersialController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Nama Komersial',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: websiteController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Website',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    keyboardType: TextInputType.url,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  DropdownButtonFormField<String>(
+                                    value: selectedSkalaUsaha,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Skala Usaha',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: '1',
+                                        child: Text('Mikro'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '2',
+                                        child: Text('Kecil'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '3',
+                                        child: Text('Menengah'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '4',
+                                        child: Text('Besar'),
+                                      ),
+                                    ],
+                                    onChanged: (value) {
+                                      setState(() {
+                                        selectedSkalaUsaha = value;
+                                      });
+                                    },
+                                  ),
+                                  const SizedBox(height: 12),
+                                  DropdownButtonFormField<String>(
+                                    value: selectedKeberadaanUsaha,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Keberadaan Usaha',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: '1',
+                                        child: Text('Ada/Aktif'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '2',
+                                        child: Text('Sementara Tidak Ada'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '3',
+                                        child: Text('Tidak Ditemukan'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '4',
+                                        child: Text('Tutup Sementara'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '5',
+                                        child: Text('Tutup'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '6',
+                                        child: Text('Pindah Lokasi'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '7',
+                                        child: Text('Berganti Nama'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '8',
+                                        child: Text('Berganti Pemilik'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '9',
+                                        child: Text('Duplikat'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '10',
+                                        child: Text('Lainnya'),
+                                      ),
+                                    ],
+                                    onChanged: (value) {
+                                      setState(() {
+                                        selectedKeberadaanUsaha = value;
+                                      });
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // Legal Information
+                                  Text(
+                                    'Informasi Legal',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextField(
+                                    controller: nibController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'NIB (Nomor Induk Berusaha)',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: nikPemilikController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'NIK Pemilik',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  DropdownButtonFormField<String>(
+                                    value: selectedJenisPerusahaan,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Jenis Perusahaan',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: '1',
+                                        child: Text('Perorangan'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '2',
+                                        child: Text('Persekutuan'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '3',
+                                        child: Text('Perseroan Terbatas'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '4',
+                                        child: Text('Koperasi'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '5',
+                                        child: Text('BUMN/BUMD'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '6',
+                                        child: Text('Lainnya'),
+                                      ),
+                                    ],
+                                    onChanged: (value) {
+                                      setState(() {
+                                        selectedJenisPerusahaan = value;
+                                      });
+                                    },
+                                  ),
+                                  const SizedBox(height: 12),
+                                  DropdownButtonFormField<String>(
+                                    value: selectedBentukBadanHukum,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Bentuk Badan Hukum Usaha',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: '1',
+                                        child: Text('Tidak Berbadan Hukum'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '2',
+                                        child: Text('PT (Perseroan Terbatas)'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '3',
+                                        child: Text(
+                                          'CV (Commanditaire Vennootschap)',
+                                        ),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '4',
+                                        child: Text('Firma'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '5',
+                                        child: Text('Koperasi'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '6',
+                                        child: Text('Yayasan'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '7',
+                                        child: Text('Perkumpulan'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '8',
+                                        child: Text('BUMN'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '9',
+                                        child: Text('BUMD'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '10',
+                                        child: Text('Perusahaan Umum'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '11',
+                                        child: Text('Perusahaan Jawatan'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '12',
+                                        child: Text('Perusahaan Perseroan'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '99',
+                                        child: Text('Lainnya'),
+                                      ),
+                                    ],
+                                    onChanged: (value) {
+                                      setState(() {
+                                        selectedBentukBadanHukum = value;
+                                      });
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // Additional Information
+                                  Text(
+                                    'Informasi Tambahan',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  DropdownButtonFormField<String>(
+                                    value: selectedJenisKepemilikan,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Jenis Kepemilikan Usaha',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: '1',
+                                        child: Text('Milik Sendiri'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '2',
+                                        child: Text('Sewa/Kontrak'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '3',
+                                        child: Text('Bebas Sewa'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '4',
+                                        child: Text('Lainnya'),
+                                      ),
+                                    ],
+                                    onChanged: (value) {
+                                      setState(() {
+                                        selectedJenisKepemilikan = value;
+                                      });
+                                    },
+                                  ),
+                                  const SizedBox(height: 12),
+                                  DropdownButtonFormField<String>(
+                                    value: selectedJaringanUsaha,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Jaringan Usaha',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: '1',
+                                        child: Text('Tidak Ada Jaringan'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '2',
+                                        child: Text('Cabang'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '3',
+                                        child: Text('Kantor Pusat'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '4',
+                                        child: Text('Franchise'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '5',
+                                        child: Text('Agen/Distributor'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '6',
+                                        child: Text('Lainnya'),
+                                      ),
+                                    ],
+                                    onChanged: (value) {
+                                      setState(() {
+                                        selectedJaringanUsaha = value;
+                                      });
+                                    },
+                                  ),
+                                  const SizedBox(height: 12),
+                                  DropdownButtonFormField<String>(
+                                    value: selectedSektorInstitusi,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Sektor Institusi',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: '1',
+                                        child: Text('Swasta'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '2',
+                                        child: Text('Pemerintah'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '3',
+                                        child: Text('BUMN/BUMD'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '4',
+                                        child: Text('Koperasi'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '5',
+                                        child: Text('Lainnya'),
+                                      ),
+                                    ],
+                                    onChanged: (value) {
+                                      setState(() {
+                                        selectedSektorInstitusi = value;
+                                      });
+                                    },
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: keteranganController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Keterangan',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    maxLines: 3,
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 12),
+                          ],
 
-                          TextField(
-                            controller: nibController,
-                            decoration: const InputDecoration(
-                              labelText: 'NIB (Nomor Induk Berusaha)',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
                           const SizedBox(height: 12),
-
-                          TextField(
-                            controller: emailController,
-                            decoration: const InputDecoration(
-                              labelText: 'Email',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: TextInputType.emailAddress,
-                          ),
-                          const SizedBox(height: 12),
-
-                          TextField(
-                            controller: websiteController,
-                            decoration: const InputDecoration(
-                              labelText: 'Website',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: TextInputType.url,
-                          ),
-                          const SizedBox(height: 12),
-
-                          TextField(
-                            controller: nomorWhatsappController,
-                            decoration: const InputDecoration(
-                              labelText: 'Nomor WhatsApp',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: TextInputType.phone,
-                          ),
-                          const SizedBox(height: 12),
-
-                          TextField(
-                            controller: nikPemilikController,
-                            decoration: const InputDecoration(
-                              labelText: 'NIK Pemilik',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Dropdown fields
-                          DropdownButtonFormField<String>(
-                            value: selectedSkalaUsaha,
-                            decoration: const InputDecoration(
-                              labelText: 'Skala Usaha',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: '1',
-                                child: Text('Mikro'),
-                              ),
-                              DropdownMenuItem(
-                                value: '2',
-                                child: Text('Kecil'),
-                              ),
-                              DropdownMenuItem(
-                                value: '3',
-                                child: Text('Menengah'),
-                              ),
-                              DropdownMenuItem(
-                                value: '4',
-                                child: Text('Besar'),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              setState(() {
-                                selectedSkalaUsaha = value;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 12),
-
-                          DropdownButtonFormField<String>(
-                            value: selectedJenisPerusahaan,
-                            decoration: const InputDecoration(
-                              labelText: 'Jenis Perusahaan',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: '1',
-                                child: Text('Perorangan'),
-                              ),
-                              DropdownMenuItem(
-                                value: '2',
-                                child: Text('Persekutuan'),
-                              ),
-                              DropdownMenuItem(
-                                value: '3',
-                                child: Text('Perseroan Terbatas'),
-                              ),
-                              DropdownMenuItem(
-                                value: '4',
-                                child: Text('Koperasi'),
-                              ),
-                              DropdownMenuItem(
-                                value: '5',
-                                child: Text('BUMN/BUMD'),
-                              ),
-                              DropdownMenuItem(
-                                value: '6',
-                                child: Text('Lainnya'),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              setState(() {
-                                selectedJenisPerusahaan = value;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 12),
-
-                          DropdownButtonFormField<String>(
-                            value: selectedKeberadaanUsaha,
-                            decoration: const InputDecoration(
-                              labelText: 'Keberadaan Usaha',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: '1',
-                                child: Text('Ada/Aktif'),
-                              ),
-                              DropdownMenuItem(
-                                value: '2',
-                                child: Text('Sementara Tidak Ada'),
-                              ),
-                              DropdownMenuItem(
-                                value: '3',
-                                child: Text('Tidak Ditemukan'),
-                              ),
-                              DropdownMenuItem(
-                                value: '4',
-                                child: Text('Tutup Sementara'),
-                              ),
-                              DropdownMenuItem(
-                                value: '5',
-                                child: Text('Tutup'),
-                              ),
-                              DropdownMenuItem(
-                                value: '6',
-                                child: Text('Pindah Lokasi'),
-                              ),
-                              DropdownMenuItem(
-                                value: '7',
-                                child: Text('Berganti Nama'),
-                              ),
-                              DropdownMenuItem(
-                                value: '8',
-                                child: Text('Berganti Pemilik'),
-                              ),
-                              DropdownMenuItem(
-                                value: '9',
-                                child: Text('Duplikat'),
-                              ),
-                              DropdownMenuItem(
-                                value: '10',
-                                child: Text('Lainnya'),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              setState(() {
-                                selectedKeberadaanUsaha = value;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 12),
-
-                          TextField(
-                            controller: kegiatanUsahaController,
-                            decoration: const InputDecoration(
-                              labelText:
-                                  'Kegiatan Usaha (pisahkan dengan koma)',
-                              border: OutlineInputBorder(),
-                              hintText: 'Contoh: Perdagangan, Jasa, Manufaktur',
-                            ),
-                            maxLines: 2,
-                          ),
-                          const SizedBox(height: 12),
-
-                          DropdownButtonFormField<String>(
-                            value: selectedJenisKepemilikan,
-                            decoration: const InputDecoration(
-                              labelText: 'Jenis Kepemilikan Usaha',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: '1',
-                                child: Text('Milik Sendiri'),
-                              ),
-                              DropdownMenuItem(
-                                value: '2',
-                                child: Text('Sewa/Kontrak'),
-                              ),
-                              DropdownMenuItem(
-                                value: '3',
-                                child: Text('Bebas Sewa'),
-                              ),
-                              DropdownMenuItem(
-                                value: '4',
-                                child: Text('Lainnya'),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              setState(() {
-                                selectedJenisKepemilikan = value;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 12),
-
-                          DropdownButtonFormField<String>(
-                            value: selectedBentukBadanHukum,
-                            decoration: const InputDecoration(
-                              labelText: 'Bentuk Badan Hukum Usaha',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: '1',
-                                child: Text('Tidak Berbadan Hukum'),
-                              ),
-                              DropdownMenuItem(
-                                value: '2',
-                                child: Text('PT (Perseroan Terbatas)'),
-                              ),
-                              DropdownMenuItem(
-                                value: '3',
-                                child: Text('CV (Commanditaire Vennootschap)'),
-                              ),
-                              DropdownMenuItem(
-                                value: '4',
-                                child: Text('Firma'),
-                              ),
-                              DropdownMenuItem(
-                                value: '5',
-                                child: Text('Koperasi'),
-                              ),
-                              DropdownMenuItem(
-                                value: '6',
-                                child: Text('Yayasan'),
-                              ),
-                              DropdownMenuItem(
-                                value: '7',
-                                child: Text('Perkumpulan'),
-                              ),
-                              DropdownMenuItem(value: '8', child: Text('BUMN')),
-                              DropdownMenuItem(value: '9', child: Text('BUMD')),
-                              DropdownMenuItem(
-                                value: '10',
-                                child: Text('Perusahaan Umum'),
-                              ),
-                              DropdownMenuItem(
-                                value: '11',
-                                child: Text('Perusahaan Jawatan'),
-                              ),
-                              DropdownMenuItem(
-                                value: '12',
-                                child: Text('Perusahaan Perseroan'),
-                              ),
-                              DropdownMenuItem(
-                                value: '99',
-                                child: Text('Lainnya'),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              setState(() {
-                                selectedBentukBadanHukum = value;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 12),
-
-                          DropdownButtonFormField<String>(
-                            value: selectedJaringanUsaha,
-                            decoration: const InputDecoration(
-                              labelText: 'Jaringan Usaha',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: '1',
-                                child: Text('Tidak Ada Jaringan'),
-                              ),
-                              DropdownMenuItem(
-                                value: '2',
-                                child: Text('Cabang'),
-                              ),
-                              DropdownMenuItem(
-                                value: '3',
-                                child: Text('Kantor Pusat'),
-                              ),
-                              DropdownMenuItem(
-                                value: '4',
-                                child: Text('Franchise'),
-                              ),
-                              DropdownMenuItem(
-                                value: '5',
-                                child: Text('Agen/Distributor'),
-                              ),
-                              DropdownMenuItem(
-                                value: '6',
-                                child: Text('Lainnya'),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              setState(() {
-                                selectedJaringanUsaha = value;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 12),
-
-                          DropdownButtonFormField<String>(
-                            value: selectedSektorInstitusi,
-                            decoration: const InputDecoration(
-                              labelText: 'Sektor Institusi',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: '1',
-                                child: Text('Swasta'),
-                              ),
-                              DropdownMenuItem(
-                                value: '2',
-                                child: Text('Pemerintah'),
-                              ),
-                              DropdownMenuItem(
-                                value: '3',
-                                child: Text('BUMN/BUMD'),
-                              ),
-                              DropdownMenuItem(
-                                value: '4',
-                                child: Text('Koperasi'),
-                              ),
-                              DropdownMenuItem(
-                                value: '5',
-                                child: Text('Lainnya'),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              setState(() {
-                                selectedSektorInstitusi = value;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 12),
-
-                          TextField(
-                            controller: keteranganController,
-                            decoration: const InputDecoration(
-                              labelText: 'Keterangan',
-                              border: OutlineInputBorder(),
-                            ),
-                            maxLines: 3,
-                          ),
-                          const SizedBox(height: 12),
-
-                          TextField(
-                            controller: deskripsiBadanUsahaController,
-                            decoration: const InputDecoration(
-                              labelText: 'Deskripsi Badan Usaha',
-                              border: OutlineInputBorder(),
-                            ),
-                            maxLines: 3,
-                          ),
-                          const SizedBox(height: 12),
-
                           const Text(
-                            'Hanya nama usaha yang wajib diisi. Field lainnya opsional.',
+                            'Hanya nama usaha dan alamat yang wajib diisi. Field lainnya opsional.',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
                           ),
 
-                          // Navigation buttons for Phase 2
+                          // Navigation buttons for Phase 2 (New Directory)
                           if (existingDirectory == null && currentPhase == 2)
                             Container(
                               margin: const EdgeInsets.only(top: 16),
@@ -2947,8 +3721,27 @@ class MapPage extends StatelessWidget {
                                                 selectedSektorInstitusi,
                                             tahunBerdiri: selectedTahunBerdiri,
                                             tenagaKerja: selectedTenagaKerja,
+                                            // New fields
+                                            kbli:
+                                                kbliController.text
+                                                    .trim()
+                                                    .isEmpty
+                                                ? null
+                                                : kbliController.text.trim(),
+                                            tag: selectedTags.isEmpty
+                                                ? null
+                                                : selectedTags,
+                                            urlGambar:
+                                                urlGambarController.text
+                                                    .trim()
+                                                    .isEmpty
+                                                ? null
+                                                : urlGambarController.text
+                                                      .trim(),
                                             existingDirectory:
                                                 existingDirectory,
+                                            selectedExistingBusiness:
+                                                selectedExistingBusiness,
                                           );
                                         }
                                       },
@@ -2963,6 +3756,152 @@ class MapPage extends StatelessWidget {
                                     ),
                                   ),
                                 ],
+                              ),
+                            ),
+
+                          // Save button for Edit Mode
+                          if (existingDirectory != null)
+                            Container(
+                              margin: const EdgeInsets.only(top: 16),
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () async {
+                                  final namaUsaha = namaUsahaController.text
+                                      .trim();
+                                  if (namaUsaha.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Nama usaha harus diisi'),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  // Show confirmation dialog
+                                  final confirmed = await showDialog<bool>(
+                                    context: context,
+                                    builder: (dialogContext) => AlertDialog(
+                                      title: const Text('Konfirmasi'),
+                                      content: Text(
+                                        'Apakah Anda yakin ingin menyimpan perubahan direktori "$namaUsaha"?',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.of(
+                                            dialogContext,
+                                          ).pop(false),
+                                          child: const Text('Batal'),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed: () => Navigator.of(
+                                            dialogContext,
+                                          ).pop(true),
+                                          child: const Text('Simpan'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+
+                                  if (confirmed == true) {
+                                    Navigator.of(context).pop();
+                                    final scaffoldMessenger =
+                                        ScaffoldMessenger.of(context);
+                                    final mapBloc = context.read<MapBloc>();
+
+                                    await _saveDirektori(
+                                      context,
+                                      point,
+                                      namaUsaha,
+                                      alamatController.text.trim(),
+                                      pemilikController.text.trim(),
+                                      nomorTeleponController.text.trim(),
+                                      scaffoldMessenger,
+                                      mapBloc,
+                                      namaKomersial:
+                                          namaKomersialController.text
+                                              .trim()
+                                              .isEmpty
+                                          ? null
+                                          : namaKomersialController.text.trim(),
+                                      nib: nibController.text.trim().isEmpty
+                                          ? null
+                                          : nibController.text.trim(),
+                                      email: emailController.text.trim().isEmpty
+                                          ? null
+                                          : emailController.text.trim(),
+                                      website:
+                                          websiteController.text.trim().isEmpty
+                                          ? null
+                                          : websiteController.text.trim(),
+                                      nomorWhatsapp:
+                                          nomorWhatsappController.text
+                                              .trim()
+                                              .isEmpty
+                                          ? null
+                                          : nomorWhatsappController.text.trim(),
+                                      nikPemilik:
+                                          nikPemilikController.text
+                                              .trim()
+                                              .isEmpty
+                                          ? null
+                                          : nikPemilikController.text.trim(),
+                                      keterangan:
+                                          keteranganController.text
+                                              .trim()
+                                              .isEmpty
+                                          ? null
+                                          : keteranganController.text.trim(),
+                                      kegiatanUsaha:
+                                          kegiatanUsahaController.text
+                                              .trim()
+                                              .isEmpty
+                                          ? null
+                                          : kegiatanUsahaController.text.trim(),
+                                      deskripsiBadanUsaha:
+                                          deskripsiBadanUsahaController.text
+                                              .trim()
+                                              .isEmpty
+                                          ? null
+                                          : deskripsiBadanUsahaController.text
+                                                .trim(),
+                                      skalaUsaha: selectedSkalaUsaha,
+                                      jenisPerusahaan: selectedJenisPerusahaan,
+                                      keberadaanUsaha: selectedKeberadaanUsaha,
+                                      jenisKepemilikan:
+                                          selectedJenisKepemilikan,
+                                      bentukBadanHukum:
+                                          selectedBentukBadanHukum,
+                                      jaringanUsaha: selectedJaringanUsaha,
+                                      sektorInstitusi: selectedSektorInstitusi,
+                                      tahunBerdiri: selectedTahunBerdiri,
+                                      tenagaKerja: selectedTenagaKerja,
+                                      // New fields
+                                      kbli: kbliController.text.trim().isEmpty
+                                          ? null
+                                          : kbliController.text.trim(),
+                                      tag: selectedTags.isEmpty
+                                          ? null
+                                          : selectedTags,
+                                      urlGambar:
+                                          urlGambarController.text
+                                              .trim()
+                                              .isEmpty
+                                          ? null
+                                          : urlGambarController.text.trim(),
+                                      existingDirectory: existingDirectory,
+                                      selectedExistingBusiness: null,
+                                    );
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                ),
+                                child: const Text('Simpan Perubahan'),
                               ),
                             ),
                         ],
@@ -3056,19 +3995,20 @@ class MapPage extends StatelessWidget {
     if (confirmed == true) {
       try {
         final repository = MapRepositoryImpl();
-        final success = await repository.updateDirectoryCoordinatesWithRegionalData(
-          place.id,
-          newPoint.latitude,
-          newPoint.longitude,
-          idSls,
-          kdProv,
-          kdKab,
-          kdKec,
-          kdDesa,
-          kdSls,
-          kodePos,
-          namaSls,
-        );
+        final success = await repository
+            .updateDirectoryCoordinatesWithRegionalData(
+              place.id,
+              newPoint.latitude,
+              newPoint.longitude,
+              idSls,
+              kdProv,
+              kdKab,
+              kdKec,
+              kdDesa,
+              kdSls,
+              kodePos,
+              namaSls,
+            );
 
         if (success) {
           scaffoldMessenger.showSnackBar(
@@ -3131,9 +4071,9 @@ class MapPage extends StatelessWidget {
   void _updateDirectoryCoordinates(
     BuildContext context,
     DirektoriModel directory,
-    LatLng point,
-    {VoidCallback? onSuccess}
-  ) async {
+    LatLng point, {
+    VoidCallback? onSuccess,
+  }) async {
     // Save references before async operations
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final mapBloc = context.read<MapBloc>();
@@ -3416,7 +4356,11 @@ class MapPage extends StatelessWidget {
     String? sektorInstitusi,
     String? tahunBerdiri,
     String? tenagaKerja,
+    String? kbli, // New KBLI parameter
+    List<String>? tag, // New tag parameter
+    String? urlGambar, // New URL gambar parameter
     DirektoriModel? existingDirectory,
+    DirektoriModel? selectedExistingBusiness,
   }) async {
     print('🔄 [DEBUG] Memulai proses penyimpanan direktori...');
     print('📍 [DEBUG] Koordinat: ${point.latitude}, ${point.longitude}');
@@ -3501,7 +4445,9 @@ class MapPage extends StatelessWidget {
             existingDirectory?.id ??
             '', // Use existing ID for updates, empty for new
         idSbr:
-            existingDirectory?.idSbr ?? '0', // Default value untuk data non-BPS
+            selectedExistingBusiness?.idSbr ??
+            existingDirectory?.idSbr ??
+            '0', // Use selected business id_sbr if available
         namaUsaha: namaUsaha,
         namaKomersialUsaha: namaKomersial,
         alamat: alamatFromGeocode ?? alamat, // Prioritas alamat dari geocoding
@@ -3524,7 +4470,9 @@ class MapPage extends StatelessWidget {
         long: point.longitude,
         latitude: point.latitude,
         longitude: point.longitude,
-        urlGambar: existingDirectory?.urlGambar,
+        urlGambar: urlGambar?.trim().isNotEmpty == true
+            ? urlGambar!.trim()
+            : existingDirectory?.urlGambar,
         kodePos: kodePos, // Kode pos dari GeoJSON
         jenisPerusahaan: jenisPerusahaan,
         pemilik: pemilik,
@@ -3555,11 +4503,26 @@ class MapPage extends StatelessWidget {
         tenagaKerja: tenagaKerja != null ? int.tryParse(tenagaKerja) : null,
         createdAt: existingDirectory?.createdAt,
         updatedAt: DateTime.now(),
+        // New fields
+        kbli: kbli,
+        tag: tag,
       );
 
       print('💾 [DEBUG] Menyimpan ke database...');
       final repository = MapRepositoryImpl();
-      final success = await repository.insertDirectory(directory);
+      final bool success;
+
+      if (existingDirectory != null) {
+        // Update existing directory
+        print(
+          '🔄 [DEBUG] Mengupdate direktori yang sudah ada dengan ID: ${existingDirectory.id}',
+        );
+        success = await repository.updateDirectory(directory);
+      } else {
+        // Insert new directory
+        print('➕ [DEBUG] Menambah direktori baru');
+        success = await repository.insertDirectory(directory);
+      }
 
       print('📊 [DEBUG] Hasil penyimpanan: ${success ? "BERHASIL" : "GAGAL"}');
 

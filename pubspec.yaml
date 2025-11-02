@@ -58,7 +58,14 @@ dependencies:
   # UUID generator
   uuid: ^4.5.1
   http: ^1.2.2
+  http_parser: ^4.0.2
   flutter_map_dragmarker: ^8.0.3
+  
+  # Image upload dependencies
+  image_picker: ^1.1.2
+  path_provider: ^2.1.4
+  mime: ^1.0.6
+  image: ^4.2.0
 
 dev_dependencies: 
   flutter_test:

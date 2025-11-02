@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'core/config/supabase_config.dart';
+import 'core/services/image_service_locator.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/data/repositories/auth_repository_impl.dart';
 import 'features/auth/domain/usecases/get_current_user_usecase.dart';
@@ -22,6 +23,13 @@ void main() async {
 
   // Initialize Supabase
   await SupabaseConfig.initialize();
+
+  // Initialize Image Service with Upload API on shared hosting
+  print('🔄 Initializing Upload API service...');
+  await ImageServiceLocator.initializeWithUploadApi();
+  print(
+    '✅ Upload API service initialized: ${ImageServiceLocator.currentServiceName}',
+  );
 
   runApp(const MyApp());
 }

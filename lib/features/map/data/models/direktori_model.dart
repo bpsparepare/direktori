@@ -60,6 +60,10 @@ class DirektoriModel {
   final String? kdDesa;
   final String? kdSls;
 
+  // New fields for KBLI and tags
+  final String? kbli; // 5-digit KBLI code
+  final List<String>? tag; // Array of tags
+
   const DirektoriModel({
     required this.id,
     required this.idSbr,
@@ -112,6 +116,9 @@ class DirektoriModel {
     this.kdKec,
     this.kdDesa,
     this.kdSls,
+    // New fields
+    this.kbli,
+    this.tag,
   });
 
   factory DirektoriModel.fromJson(Map<String, dynamic> json) {
@@ -181,6 +188,9 @@ class DirektoriModel {
       kdKec: json['kd_kec'],
       kdDesa: json['kd_desa'],
       kdSls: json['kd_sls'],
+      // New fields
+      kbli: json['kbli'],
+      tag: json['tag'] != null ? List<String>.from(json['tag']) : null,
     );
   }
 
@@ -237,6 +247,9 @@ class DirektoriModel {
       'kd_kec': kdKec,
       'kd_desa': kdDesa,
       'kd_sls': kdSls,
+      // New fields
+      'kbli': kbli,
+      'tag': tag,
     };
   }
 
@@ -256,6 +269,7 @@ class DirektoriModel {
       name: namaUsaha,
       description: description,
       position: position,
+      urlGambar: urlGambar,
     );
   }
 
@@ -288,87 +302,12 @@ class DirektoriModel {
       descriptionParts.add('📱 WhatsApp: $nomorWhatsapp');
     }
 
-    if (email != null && email!.isNotEmpty) {
-      descriptionParts.add('📧 Email: $email');
-    }
-
-    if (website != null && website!.isNotEmpty) {
-      descriptionParts.add('🌐 Website: $website');
-    }
-
-    // Status (using keberadaanUsaha)
-    if (keberadaanUsaha != null) {
-      descriptionParts.add(
-        '📊 Status: ${_getKeberadaanUsahaText(keberadaanUsaha!)}',
-      );
-    }
-
-    // Skala usaha
-    if (skalaUsaha != null && skalaUsaha!.isNotEmpty) {
-      descriptionParts.add('🏢 Skala: ${skalaUsaha!.toUpperCase()}');
-    }
-
-    // Pemilik
-    if (pemilik != null && pemilik!.isNotEmpty) {
-      descriptionParts.add('👤 Pemilik: $pemilik');
-    }
-
-    // Tenaga kerja
-    if (tenagaKerja != null && tenagaKerja! > 0) {
-      descriptionParts.add('👥 Tenaga Kerja: $tenagaKerja orang');
-    }
-
     // Kegiatan usaha (ambil yang pertama jika ada)
     if (kegiatanUsaha.isNotEmpty) {
       final kegiatan = kegiatanUsaha.first;
       if (kegiatan['kegiatan_usaha'] != null) {
         descriptionParts.add('💼 ${kegiatan['kegiatan_usaha']}');
       }
-    }
-
-    // Sumber data
-    if (sumberData != null && sumberData!.isNotEmpty) {
-      descriptionParts.add('📋 Sumber: $sumberData');
-    }
-
-    // Tahun berdiri
-    if (tahunBerdiri != null && tahunBerdiri! > 0) {
-      descriptionParts.add('📅 Tahun Berdiri: $tahunBerdiri');
-    }
-
-    // Status keberadaan usaha
-    if (keberadaanUsaha != null) {
-      String statusKeberadaan = _getKeberadaanUsahaText(keberadaanUsaha!);
-      descriptionParts.add('🏪 Status: $statusKeberadaan');
-    }
-
-    // Jenis kepemilikan
-    if (jenisKepemilikanUsaha != null) {
-      String jenisKepemilikan = _getJenisKepemilikanText(
-        jenisKepemilikanUsaha!,
-      );
-      descriptionParts.add('🏛️ Kepemilikan: $jenisKepemilikan');
-    }
-
-    // Bentuk badan hukum
-    if (bentukBadanHukumUsaha != null) {
-      String bentukBadanHukum = _getBentukBadanHukumText(
-        bentukBadanHukumUsaha!,
-      );
-      descriptionParts.add('⚖️ Badan Hukum: $bentukBadanHukum');
-
-      // Deskripsi tambahan jika bentuk badan hukum adalah "Lainnya"
-      if (bentukBadanHukumUsaha == 99 &&
-          deskripsiBadanUsahaLainnya != null &&
-          deskripsiBadanUsahaLainnya!.isNotEmpty) {
-        descriptionParts.add('   └─ $deskripsiBadanUsahaLainnya');
-      }
-    }
-
-    // Jaringan usaha
-    if (jaringanUsaha != null) {
-      String jaringan = _getJaringanUsahaText(jaringanUsaha!);
-      descriptionParts.add('🌐 Jaringan: $jaringan');
     }
 
     // Sektor institusi

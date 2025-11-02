@@ -27,6 +27,59 @@ class MapRepositoryImpl implements MapRepository {
   }
 
   @override
+  Future<bool> updateDirectory(DirektoriModel directory) async {
+    try {
+      await _supabaseClient
+          .from('direktori')
+          .update({
+            'id_sbr': directory.idSbr,
+            'nama_usaha': directory.namaUsaha,
+            'nama_komersial_usaha': directory.namaKomersialUsaha,
+            'alamat': directory.alamat,
+            'pemilik': directory.pemilik,
+            'nik_pemilik': directory.nikPemilik,
+            'nomor_telepon': directory.nomorTelepon,
+            'nomor_whatsapp': directory.nomorWhatsapp,
+            'email': directory.email,
+            'website': directory.website,
+            'latitude': directory.latitude ?? directory.lat,
+            'longitude': directory.longitude ?? directory.long,
+            'id_sls': directory.idSls,
+            'kd_prov': directory.kdProv,
+            'kd_kab': directory.kdKab,
+            'kd_kec': directory.kdKec,
+            'kd_desa': directory.kdDesa,
+            'kd_sls': directory.kdSls,
+            'kode_pos': directory.kodePos,
+            'nama_sls': directory.nmSls,
+            'skala_usaha': directory.skalaUsaha,
+            'jenis_perusahaan': directory.jenisPerusahaan,
+            'keterangan': directory.keterangan,
+            'nib': directory.nib,
+            'url_gambar': directory.urlGambar,
+            'sumber_data': directory.sumberData,
+            'keberadaan_usaha': directory.keberadaanUsaha ?? 1,
+            'jenis_kepemilikan_usaha': directory.jenisKepemilikanUsaha,
+            'bentuk_badan_hukum_usaha': directory.bentukBadanHukumUsaha,
+            'deskripsi_badan_usaha_lainnya':
+                directory.deskripsiBadanUsahaLainnya,
+            'tahun_berdiri': directory.tahunBerdiri,
+            'jaringan_usaha': directory.jaringanUsaha,
+            'sektor_institusi': directory.sektorInstitusi,
+            'tenaga_kerja': directory.tenagaKerja,
+            'kbli': directory.kbli,
+            'tag': directory.tag,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', directory.id!);
+      return true;
+    } catch (e) {
+      print('Error updating directory: $e');
+      return false;
+    }
+  }
+
+  @override
   Future<List<DirektoriModel>> searchDirectoriesWithoutCoordinates(
     String query,
   ) async {
@@ -34,7 +87,6 @@ class MapRepositoryImpl implements MapRepository {
       final response = await _supabaseClient
           .from('direktori')
           .select('*, wilayah(*)')
-          .eq('keberadaan_usaha', 1) // 1 = Aktif
           .or('latitude.is.null,longitude.is.null')
           .ilike('nama_usaha', '%$query%')
           .limit(20);
@@ -145,6 +197,8 @@ class MapRepositoryImpl implements MapRepository {
         'jaringan_usaha': directory.jaringanUsaha,
         'sektor_institusi': directory.sektorInstitusi,
         'tenaga_kerja': directory.tenagaKerja,
+        'kbli': directory.kbli,
+        'tag': directory.tag,
         'created_at':
             directory.createdAt?.toIso8601String() ??
             DateTime.now().toIso8601String(),
@@ -176,7 +230,7 @@ class MapRepositoryImpl implements MapRepository {
 
       if (response.isEmpty) {
         debugPrint('MapRepository: No data found in direktori table');
-        return _getFallbackPlaces();
+        return [];
       }
 
       // Konversi response ke DirektoriModel lalu ke Place
@@ -211,42 +265,20 @@ class MapRepositoryImpl implements MapRepository {
         'MapRepository: Successfully loaded ${places.length} places from Supabase',
       );
 
-      // Jika tidak ada data yang valid, return fallback
+      // Jika tidak ada data yang valid, return list kosong
       if (places.isEmpty) {
-        debugPrint('MapRepository: No valid places found, using fallback data');
-        return _getFallbackPlaces();
+        debugPrint(
+          'MapRepository: No valid places found, returning empty list',
+        );
+        return [];
       }
 
       return places;
     } catch (e) {
       debugPrint('MapRepository: Error fetching places from Supabase: $e');
-      // Jika ada error, return dummy data sebagai fallback
-      return _getFallbackPlaces();
+      // Jika ada error, return list kosong
+      return [];
     }
-  }
-
-  /// Fallback data jika Supabase tidak tersedia atau error
-  List<Place> _getFallbackPlaces() {
-    return const [
-      Place(
-        id: 'p1',
-        name: 'Alun-Alun Parepare',
-        description: 'Ruang publik utama di pusat Parepare.',
-        position: LatLng(-4.0145, 119.6230),
-      ),
-      Place(
-        id: 'p2',
-        name: 'Pelabuhan Nusantara',
-        description: 'Pelabuhan utama Parepare dengan aktivitas maritim.',
-        position: LatLng(-4.0208, 119.6505),
-      ),
-      Place(
-        id: 'p3',
-        name: 'Monumen Cinta Sejati Habibie Ainun',
-        description: 'Ikon kota Parepare.',
-        position: LatLng(-4.0139, 119.6292),
-      ),
-    ];
   }
 
   @override

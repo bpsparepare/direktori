@@ -11,6 +11,7 @@ import 'map_type.dart';
 class MapView extends StatefulWidget {
   final MapConfig config;
   final List<Place> places;
+  final Place? selectedPlace; // Add selectedPlace parameter
   final List<LatLng> polygon;
   final String? polygonLabel;
   final LatLng? temporaryMarker;
@@ -25,6 +26,7 @@ class MapView extends StatefulWidget {
     super.key,
     required this.config,
     required this.places,
+    this.selectedPlace, // Add to constructor
     required this.polygon,
     this.polygonLabel,
     this.temporaryMarker,
@@ -338,31 +340,51 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
             // Draggable markers for places
             if (widget.places.isNotEmpty)
               DragMarkers(
-                markers: widget.places
-                    .map(
-                      (p) => DragMarker(
-                        point: p.position,
-                        size: const Size.square(40),
-                        offset: const Offset(0, -12),
-                        builder: (_, __, isDragging) {
-                          return Icon(
-                            isDragging
-                                ? Icons.edit_location
-                                : Icons.location_on,
-                            color: Colors.red,
-                            size: 32,
-                          );
-                        },
-                        onTap: (_) => widget.onPlaceTap(p),
-                        onDragEnd: (_, newPoint) =>
-                            widget.onPlaceDragEnd?.call(p, newPoint),
-                        // Allow smooth map scroll near edges while dragging
-                        scrollMapNearEdge: true,
-                        scrollNearEdgeRatio: 2.0,
-                        scrollNearEdgeSpeed: 2.0,
-                      ),
-                    )
-                    .toList(),
+                markers: widget.places.map((p) {
+                  final isSelected = widget.selectedPlace?.id == p.id;
+                  return DragMarker(
+                    point: p.position,
+                    size: Size.square(
+                      isSelected ? 50 : 40,
+                    ), // Larger size for selected
+                    offset: Offset(
+                      0,
+                      isSelected ? -15 : -12,
+                    ), // Adjust offset for larger size
+                    builder: (_, __, isDragging) {
+                      return Container(
+                        decoration: isSelected
+                            ? BoxDecoration(
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.blue.withOpacity(0.5),
+                                    blurRadius: 10,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              )
+                            : null,
+                        child: Icon(
+                          isDragging ? Icons.edit_location : Icons.location_on,
+                          color: isSelected
+                              ? Colors.blue
+                              : Colors.red, // Blue for selected, red for others
+                          size: isSelected
+                              ? 40
+                              : 32, // Larger icon for selected
+                        ),
+                      );
+                    },
+                    onTap: (_) => widget.onPlaceTap(p),
+                    onDragEnd: (_, newPoint) =>
+                        widget.onPlaceDragEnd?.call(p, newPoint),
+                    // Allow smooth map scroll near edges while dragging
+                    scrollMapNearEdge: true,
+                    scrollNearEdgeRatio: 2.0,
+                    scrollNearEdgeSpeed: 2.0,
+                  );
+                }).toList(),
               ),
             // Keep non-draggable markers (current location and temporary)
             MarkerLayer(
