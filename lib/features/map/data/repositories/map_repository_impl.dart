@@ -211,6 +211,65 @@ class MapRepositoryImpl implements MapRepository {
     }
   }
 
+  // New method to insert directory and return the new ID
+  Future<String?> insertDirectoryAndGetId(DirektoriModel directory) async {
+    try {
+      final response = await _supabaseClient.from('direktori').insert({
+        'id_sbr': directory.idSbr,
+        'nama_usaha': directory.namaUsaha,
+        'nama_komersial_usaha': directory.namaKomersialUsaha,
+        'alamat': directory.alamat,
+        'pemilik': directory.pemilik,
+        'nik_pemilik': directory.nikPemilik,
+        'nomor_telepon': directory.nomorTelepon,
+        'nomor_whatsapp': directory.nomorWhatsapp,
+        'email': directory.email,
+        'website': directory.website,
+        'latitude': directory.latitude ?? directory.lat,
+        'longitude': directory.longitude ?? directory.long,
+        'id_sls': directory.idSls,
+        'kd_prov': directory.kdProv,
+        'kd_kab': directory.kdKab,
+        'kd_kec': directory.kdKec,
+        'kd_desa': directory.kdDesa,
+        'kd_sls': directory.kdSls,
+        'kode_pos': directory.kodePos,
+        'nama_sls': directory.nmSls,
+        'skala_usaha': directory.skalaUsaha,
+        'jenis_perusahaan': directory.jenisPerusahaan,
+        'keterangan': directory.keterangan,
+        'nib': directory.nib,
+        'url_gambar': directory.urlGambar,
+        'sumber_data': directory.sumberData,
+        'keberadaan_usaha': directory.keberadaanUsaha ?? 1,
+        'jenis_kepemilikan_usaha': directory.jenisKepemilikanUsaha,
+        'bentuk_badan_hukum_usaha': directory.bentukBadanHukumUsaha,
+        'deskripsi_badan_usaha_lainnya': directory.deskripsiBadanUsahaLainnya,
+        'tahun_berdiri': directory.tahunBerdiri,
+        'jaringan_usaha': directory.jaringanUsaha,
+        'sektor_institusi': directory.sektorInstitusi,
+        'tenaga_kerja': directory.tenagaKerja,
+        'kbli': directory.kbli,
+        'tag': directory.tag,
+        'created_at':
+            directory.createdAt?.toIso8601String() ??
+            DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }).select('id').single();
+      
+      if (response != null && response['id'] != null) {
+        final newId = response['id'].toString();
+        print('✅ [DEBUG] Directory inserted with new ID: $newId');
+        return newId;
+      }
+      
+      return null;
+    } catch (e) {
+      print('Error inserting directory and getting ID: $e');
+      return null;
+    }
+  }
+
   @override
   Future<List<Place>> getPlaces() async {
     try {
@@ -226,7 +285,7 @@ class MapRepositoryImpl implements MapRepository {
           .not('longitude', 'is', null)
           .order('updated_at', ascending: false)
           .order('created_at', ascending: false)
-          .limit(100); // Batasi untuk performa
+          .limit(500); // Batasi untuk performa
 
       if (response.isEmpty) {
         debugPrint('MapRepository: No data found in direktori table');

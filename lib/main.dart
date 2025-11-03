@@ -17,6 +17,13 @@ import 'features/map/domain/usecases/get_initial_map_config.dart';
 import 'features/map/domain/usecases/get_places.dart';
 import 'features/map/domain/usecases/get_first_polygon_meta_from_geojson.dart';
 import 'features/map/domain/usecases/get_all_polygons_meta_from_geojson.dart';
+import 'features/contribution/presentation/bloc/contribution_bloc.dart';
+import 'features/contribution/data/repositories/contribution_repository_impl.dart';
+import 'features/contribution/data/datasources/contribution_remote_datasource.dart';
+import 'features/contribution/domain/usecases/create_contribution_usecase.dart';
+import 'features/contribution/domain/usecases/get_user_stats_usecase.dart';
+import 'features/contribution/domain/usecases/get_user_contributions_usecase.dart';
+import 'features/contribution/domain/usecases/get_leaderboard_usecase.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,6 +49,11 @@ class MyApp extends StatelessWidget {
     // Initialize repositories
     final authRepository = AuthRepositoryImpl();
     final mapRepository = MapRepositoryImpl();
+    final contributionRepository = ContributionRepositoryImpl(
+      remoteDataSource: ContributionRemoteDataSourceImpl(
+        supabaseClient: SupabaseConfig.client,
+      ),
+    );
 
     return MultiBlocProvider(
       providers: [
@@ -68,6 +80,15 @@ class MyApp extends StatelessWidget {
                 ..add(const MapInitRequested())
                 ..add(const PlacesRequested())
                 ..add(const PolygonsListRequested()),
+        ),
+        BlocProvider<ContributionBloc>(
+          create: (context) => ContributionBloc(
+            repository: contributionRepository,
+            createContributionUseCase: CreateContributionUseCase(contributionRepository),
+            getUserStatsUseCase: GetUserStatsUseCase(contributionRepository),
+            getUserContributionsUseCase: GetUserContributionsUseCase(contributionRepository),
+            getLeaderboardUseCase: GetLeaderboardUseCase(contributionRepository),
+          ),
         ),
       ],
       child: MaterialApp(

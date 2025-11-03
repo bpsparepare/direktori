@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'map_page.dart';
 import 'saved_page.dart';
-import 'contribution_page.dart';
+import '../../../contribution/presentation/pages/contribution_page.dart';
 import '../../../direktori/presentation/pages/direktori_list_page.dart';
 import '../../../direktori/presentation/bloc/direktori_bloc.dart';
 import '../../../direktori/domain/usecases/get_direktori_list.dart';
@@ -280,7 +280,7 @@ class _MainPageState extends State<MainPage> {
       case 1:
         return SavedPage(mapController: _sharedMapController);
       case 2:
-        return ContributionPage(mapController: _sharedMapController);
+        return const ContributionPage();
       case 3:
         return DirektoriListPage();
       default:
@@ -305,8 +305,9 @@ class _MainPageState extends State<MainPage> {
           ),
           // Overlay content based on selected tab
           if (_selectedIndex != 0) _buildOverlayContent(),
-          // Floating search bar with avatar (Google Maps style)
-          Positioned(
+          // Floating search bar with avatar (Google Maps style) - only on Jelajah tab
+          if (_selectedIndex == 0)
+            Positioned(
             top: MediaQuery.of(context).padding.top + 16,
             left: 16,
             right: 16,

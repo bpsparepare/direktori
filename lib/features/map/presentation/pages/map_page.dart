@@ -19,6 +19,8 @@ import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
 import '../../../../core/widgets/image_upload_widget.dart';
+import '../../../contribution/presentation/bloc/contribution_bloc.dart';
+import '../../../contribution/presentation/bloc/contribution_event.dart';
 
 class MapPage extends StatelessWidget {
   final MapController? mapController;
@@ -4369,6 +4371,20 @@ class MapPage extends StatelessWidget {
     print('👤 [DEBUG] Pemilik: $pemilik');
     print('📞 [DEBUG] Nomor Telepon: $nomorTelepon');
 
+    // Get ContributionBloc reference early to avoid widget deactivation issues
+    ContributionBloc? contributionBloc;
+    try {
+      // Check that context is still mounted
+      if (context.mounted) {
+        contributionBloc = context.read<ContributionBloc>();
+        print('✅ [CONTRIBUTION] ContributionBloc berhasil diakses');
+      } else {
+        print('⚠️ [CONTRIBUTION] Context tidak mounted');
+      }
+    } catch (e) {
+      print('⚠️ [CONTRIBUTION] Tidak dapat mengakses ContributionBloc: $e');
+    }
+
     try {
       // Find polygon at point to get idSls and nama_sls
       String idSls = '';
@@ -4450,7 +4466,7 @@ class MapPage extends StatelessWidget {
             '0', // Use selected business id_sbr if available
         namaUsaha: namaUsaha,
         namaKomersialUsaha: namaKomersial,
-        alamat: alamatFromGeocode ?? alamat, // Prioritas alamat dari geocoding
+        alamat: alamat, // Gunakan input pengguna dari alamatController
         idSls: idSls,
         kdProv: kdProv,
         kdKab: kdKab,
@@ -4510,7 +4526,8 @@ class MapPage extends StatelessWidget {
 
       print('💾 [DEBUG] Menyimpan ke database...');
       final repository = MapRepositoryImpl();
-      final bool success;
+      bool success = false;
+      String? newDirectoryId;
 
       if (existingDirectory != null) {
         // Update existing directory
@@ -4519,9 +4536,13 @@ class MapPage extends StatelessWidget {
         );
         success = await repository.updateDirectory(directory);
       } else {
-        // Insert new directory
+        // Insert new directory and get the new ID
         print('➕ [DEBUG] Menambah direktori baru');
-        success = await repository.insertDirectory(directory);
+        newDirectoryId = await repository.insertDirectoryAndGetId(directory);
+        success = newDirectoryId != null;
+        if (success) {
+          print('✅ [DEBUG] Direktori baru berhasil disimpan dengan ID: $newDirectoryId');
+        }
       }
 
       print('📊 [DEBUG] Hasil penyimpanan: ${success ? "BERHASIL" : "GAGAL"}');
@@ -4530,6 +4551,63 @@ class MapPage extends StatelessWidget {
         print(
           '✅ [DEBUG] Direktori berhasil disimpan, menampilkan SnackBar sukses',
         );
+        
+        // Save contribution after successful directory save
+        try {
+          print('💾 [CONTRIBUTION] Menyimpan kontribusi...');
+          
+          if (contributionBloc != null) {
+            // Determine action type and changes
+            final actionType = existingDirectory != null ? 'edit_location' : 'add_location';
+            final targetId = existingDirectory?.id ?? newDirectoryId ?? '';
+            
+            // Skip contribution if we don't have a valid target_id
+            if (targetId.isEmpty) {
+              print('⚠️ [CONTRIBUTION] Melewati penyimpanan kontribusi karena target_id kosong');
+            } else {
+              print('🎯 [CONTRIBUTION] Action: $actionType, Target: $targetId');
+              
+              // Create changes map for tracking what was modified
+               final changes = <String, dynamic>{
+                'nama_usaha': namaUsaha,
+                'alamat': alamatFromGeocode ?? alamat,
+                'latitude': point.latitude,
+                'longitude': point.longitude,
+                'timestamp': DateTime.now().toIso8601String(),
+              };
+              
+              if (existingDirectory != null) {
+                // For updates, track what changed
+                if (existingDirectory.namaUsaha != namaUsaha) {
+                  changes['old_nama_usaha'] = existingDirectory.namaUsaha;
+                }
+                if (existingDirectory.alamat != (alamatFromGeocode ?? alamat)) {
+                  changes['old_alamat'] = existingDirectory.alamat;
+                }
+              }
+              
+              print('📝 [CONTRIBUTION] Changes: $changes');
+              
+              // Create contribution event using the early reference
+              contributionBloc.add(CreateContributionEvent(
+                actionType: actionType,
+                targetType: 'directory',
+                targetId: targetId,
+                changes: changes,
+                latitude: point.latitude,
+                longitude: point.longitude,
+              ));
+              
+              print('✅ [CONTRIBUTION] Event kontribusi berhasil dikirim');
+            }
+          } else {
+            print('⚠️ [CONTRIBUTION] ContributionBloc tidak tersedia, melewati penyimpanan kontribusi');
+          }
+        } catch (contributionError) {
+          print('❌ [CONTRIBUTION] Gagal menyimpan kontribusi: $contributionError');
+          // Don't fail the whole operation if contribution fails
+        }
+        
         scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text('Direktori "$namaUsaha" berhasil disimpan'),
