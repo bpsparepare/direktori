@@ -55,6 +55,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   double _offsetX = 0.0;
   double _offsetY = 0.0;
 
+  // Toggle scraped markers visibility
+  bool _showScrapedMarkers = true;
+
   @override
   void initState() {
     super.initState();
@@ -265,7 +268,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
             TileLayer(
               urlTemplate: _currentMapType.urlTemplate,
               userAgentPackageName: 'id.bpsparepare.direktori',
-              maxZoom: _currentMapType.maxZoom.toDouble(),
+              // Allow app to zoom beyond provider's native max zoom by stretching tiles
+              maxZoom: (_currentMapType.maxZoom + 2).toDouble(),
+              maxNativeZoom: _currentMapType.maxZoom,
               subdomains: _currentMapType.subdomains,
               additionalOptions: const {'crossOrigin': 'anonymous'},
               tileBuilder: (context, tileWidget, tile) {
@@ -337,55 +342,99 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                   ),
                 ],
               ),
-            // Draggable markers for places
-            if (widget.places.isNotEmpty)
+            // Draggable markers: split into scraped (below) and main (above)
+            if (widget.places.isNotEmpty) ...[
+              // Scraped markers layer (rendered first = below)
+              if (_showScrapedMarkers)
+                MarkerLayer(
+                  markers: widget.places
+                      .where((p) => p.id.startsWith('scrape:'))
+                      .map((p) {
+                        final isSelected = widget.selectedPlace?.id == p.id;
+                        final Color baseColor = isSelected
+                            ? Colors.blue
+                            : Colors.purple;
+                        return Marker(
+                          point: p.position,
+                          width: isSelected ? 50 : 40,
+                          height: isSelected ? 50 : 40,
+                          child: GestureDetector(
+                            onTap: () => widget.onPlaceTap(p),
+                            child: Container(
+                              decoration: isSelected
+                                  ? BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: baseColor.withOpacity(0.5),
+                                          blurRadius: 10,
+                                          spreadRadius: 2,
+                                        ),
+                                      ],
+                                    )
+                                  : null,
+                              child: Icon(
+                                Icons.location_pin,
+                                color: baseColor,
+                                size: isSelected ? 40 : 32,
+                              ),
+                            ),
+                          ),
+                        );
+                      })
+                      .toList(),
+                ),
+              // Main markers layer (rendered after = above)
               DragMarkers(
-                markers: widget.places.map((p) {
-                  final isSelected = widget.selectedPlace?.id == p.id;
-                  return DragMarker(
-                    point: p.position,
-                    size: Size.square(
-                      isSelected ? 50 : 40,
-                    ), // Larger size for selected
-                    offset: Offset(
-                      0,
-                      isSelected ? -15 : -12,
-                    ), // Adjust offset for larger size
-                    builder: (_, __, isDragging) {
-                      return Container(
-                        decoration: isSelected
-                            ? BoxDecoration(
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.blue.withOpacity(0.5),
-                                    blurRadius: 10,
-                                    spreadRadius: 2,
-                                  ),
-                                ],
-                              )
-                            : null,
-                        child: Icon(
-                          isDragging ? Icons.edit_location : Icons.location_on,
-                          color: isSelected
+                markers: widget.places
+                    .where((p) => !p.id.startsWith('scrape:'))
+                    .map((p) {
+                      final isSelected = widget.selectedPlace?.id == p.id;
+                      return DragMarker(
+                        point: p.position,
+                        size: Size.square(isSelected ? 50 : 40),
+                        offset: Offset(0, isSelected ? -15 : -12),
+                        useLongPress: true,
+                        builder: (_, __, isDragging) {
+                          final Color baseColor = isSelected
                               ? Colors.blue
-                              : Colors.red, // Blue for selected, red for others
-                          size: isSelected
-                              ? 40
-                              : 32, // Larger icon for selected
-                        ),
+                              : Colors.red;
+                          final IconData icon = isDragging
+                              ? Icons.edit_location
+                              : Icons.location_on;
+                          return Container(
+                            decoration: isSelected
+                                ? BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: baseColor.withOpacity(0.5),
+                                        blurRadius: 10,
+                                        spreadRadius: 2,
+                                      ),
+                                    ],
+                                  )
+                                : null,
+                            child: Icon(
+                              icon,
+                              color: baseColor,
+                              size: isSelected ? 40 : 32,
+                            ),
+                          );
+                        },
+                        onTap: (_) => widget.onPlaceTap(p),
+                        onDragEnd: (_, newPoint) =>
+                            widget.onPlaceDragEnd?.call(p, newPoint),
+                        onLongDragEnd: (_, newPoint) =>
+                            widget.onPlaceDragEnd?.call(p, newPoint),
+                        scrollMapNearEdge: true,
+                        scrollNearEdgeRatio: 2.0,
+                        scrollNearEdgeSpeed: 2.0,
                       );
-                    },
-                    onTap: (_) => widget.onPlaceTap(p),
-                    onDragEnd: (_, newPoint) =>
-                        widget.onPlaceDragEnd?.call(p, newPoint),
-                    // Allow smooth map scroll near edges while dragging
-                    scrollMapNearEdge: true,
-                    scrollNearEdgeRatio: 2.0,
-                    scrollNearEdgeSpeed: 2.0,
-                  );
-                }).toList(),
+                    })
+                    .toList(),
               ),
+            ],
             // Keep non-draggable markers (current location and temporary)
             MarkerLayer(
               markers: [
@@ -431,6 +480,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           rotation: _rotation,
           polygonsMeta: widget.polygonsMeta,
           currentMapType: _currentMapType,
+          showScrapedMarkers: _showScrapedMarkers,
           onResetPosition: () {
             // Animate rotation to north smoothly
             _animateToNorth();
@@ -445,6 +495,11 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           onMapTypeChanged: (MapType mapType) {
             setState(() {
               _currentMapType = mapType;
+            });
+          },
+          onToggleScrapedMarkers: (bool value) {
+            setState(() {
+              _showScrapedMarkers = value;
             });
           },
           onOffsetChanged: (double offsetX, double offsetY) {

@@ -22,6 +22,8 @@ class MapControls extends StatefulWidget {
   final Function(double, double)? onOffsetChanged; // Add offset change callback
   final double currentOffsetX; // Current X offset
   final double currentOffsetY; // Current Y offset
+  final bool showScrapedMarkers; // Toggle scraped markers visibility
+  final Function(bool)? onToggleScrapedMarkers; // Toggle callback
 
   const MapControls({
     super.key,
@@ -38,6 +40,8 @@ class MapControls extends StatefulWidget {
     this.onOffsetChanged, // Add to constructor
     this.currentOffsetX = 0.0, // Add to constructor
     this.currentOffsetY = 0.0, // Add to constructor
+    this.showScrapedMarkers = true,
+    this.onToggleScrapedMarkers,
   });
 
   @override
@@ -219,6 +223,36 @@ class _MapControlsState extends State<MapControls> {
                       ),
                     );
                   }).toList(),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Toggle scraped markers visibility
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: Icon(
+                widget.showScrapedMarkers
+                    ? Icons.visibility
+                    : Icons.visibility_off,
+                color: Colors.black87,
+              ),
+              tooltip: widget.showScrapedMarkers
+                  ? 'Sembunyikan Marker Scraping'
+                  : 'Tampilkan Marker Scraping',
+              onPressed: () => widget.onToggleScrapedMarkers?.call(
+                !widget.showScrapedMarkers,
+              ),
             ),
           ),
           const SizedBox(height: 8),

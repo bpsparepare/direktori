@@ -41,11 +41,12 @@ dependencies:
   geolocator: ^13.0.1
   permission_handler: ^11.3.1
   geocoding: ^3.0.0
+  gsheets: ^0.5.0
   
   # Supabase dependencies
   supabase_flutter: ^2.5.6
   google_sign_in: ^6.2.1
-  
+   
   # Environment variables
   flutter_dotenv: ^5.1.0
   
@@ -93,6 +94,7 @@ flutter:
     - assets/geojson/
     - assets/geojson/final_sls.geojson
     - .env
+    - assets/sa/sa-account.json
 
   # To add assets to your application, add an assets section, like this:
   # assets:

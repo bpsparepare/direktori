@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import '../../data/repositories/map_repository_impl.dart';
+import '../../data/repositories/scraping_repository_impl.dart';
 import '../../data/models/direktori_model.dart';
 import '../../domain/usecases/get_initial_map_config.dart';
 import '../../domain/usecases/get_places.dart';
@@ -371,254 +372,269 @@ class MapPage extends StatelessWidget {
                                         padding: const EdgeInsets.all(12.0),
                                         child: Row(
                                           children: [
-                                            // Zoom to location button
-                                            Expanded(
-                                              child: LayoutBuilder(
-                                                builder: (context, constraints) {
-                                                  final isMobile =
-                                                      MediaQuery.of(
-                                                        context,
-                                                      ).size.width <
-                                                      600;
+                                            // Zoom to location button (only for non-scraped directories)
+                                            if (state.selectedPlace != null &&
+                                                !state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              Expanded(
+                                                child: LayoutBuilder(
+                                                  builder: (context, constraints) {
+                                                    final isMobile =
+                                                        MediaQuery.of(
+                                                          context,
+                                                        ).size.width <
+                                                        600;
 
-                                                  if (isMobile) {
-                                                    return ElevatedButton(
-                                                      onPressed: () {
-                                                        // Zoom to the selected place location
-                                                        mapController?.move(
-                                                          state
-                                                              .selectedPlace!
-                                                              .position,
-                                                          18.0, // High zoom level for detailed view
-                                                        );
-                                                      },
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor:
-                                                            Colors.blue,
-                                                        foregroundColor:
-                                                            Colors.white,
-                                                        padding:
-                                                            const EdgeInsets.all(
-                                                              12,
-                                                            ),
-                                                        minimumSize: const Size(
-                                                          48,
-                                                          48,
-                                                        ),
-                                                      ),
-                                                      child: const Icon(
-                                                        Icons.zoom_in,
-                                                        size: 20,
-                                                      ),
-                                                    );
-                                                  } else {
-                                                    return ElevatedButton.icon(
-                                                      onPressed: () {
-                                                        // Zoom to the selected place location
-                                                        mapController?.move(
-                                                          state
-                                                              .selectedPlace!
-                                                              .position,
-                                                          18.0, // High zoom level for detailed view
-                                                        );
-                                                      },
-                                                      icon: const Icon(
-                                                        Icons.zoom_in,
-                                                        size: 18,
-                                                      ),
-                                                      label: const Text(
-                                                        'Zoom To',
-                                                      ),
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor:
-                                                            Colors.blue,
-                                                        foregroundColor:
-                                                            Colors.white,
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              horizontal: 16,
-                                                              vertical: 12,
-                                                            ),
-                                                      ),
-                                                    );
-                                                  }
-                                                },
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            // Navigate to location button
-                                            Expanded(
-                                              child: LayoutBuilder(
-                                                builder: (context, constraints) {
-                                                  final isMobile =
-                                                      MediaQuery.of(
-                                                        context,
-                                                      ).size.width <
-                                                      600;
-
-                                                  if (isMobile) {
-                                                    return ElevatedButton(
-                                                      onPressed: () async {
-                                                        final place = state
-                                                            .selectedPlace!;
-                                                        final lat = place
-                                                            .position
-                                                            .latitude;
-                                                        final lng = place
-                                                            .position
-                                                            .longitude;
-
-                                                        // Create Google Maps URL
-                                                        final googleMapsUrl =
-                                                            Uri.parse(
-                                                              'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
-                                                            );
-
-                                                        try {
-                                                          if (await canLaunchUrl(
-                                                            googleMapsUrl,
-                                                          )) {
-                                                            await launchUrl(
-                                                              googleMapsUrl,
-                                                              mode: LaunchMode
-                                                                  .externalApplication,
-                                                            );
-                                                          } else {
-                                                            // Fallback to generic maps URL
-                                                            final fallbackUrl =
-                                                                Uri.parse(
-                                                                  'https://maps.google.com/?q=$lat,$lng',
-                                                                );
-                                                            await launchUrl(
-                                                              fallbackUrl,
-                                                            );
-                                                          }
-                                                        } catch (e) {
-                                                          // Show error message
-                                                          if (context.mounted) {
-                                                            ScaffoldMessenger.of(
-                                                              context,
-                                                            ).showSnackBar(
-                                                              const SnackBar(
-                                                                content: Text(
-                                                                  'Tidak dapat membuka aplikasi navigasi',
-                                                                ),
-                                                                backgroundColor:
-                                                                    Colors.red,
+                                                    if (isMobile) {
+                                                      return ElevatedButton(
+                                                        onPressed: () {
+                                                          // Zoom to the selected place location
+                                                          mapController?.move(
+                                                            state
+                                                                .selectedPlace!
+                                                                .position,
+                                                            18.0, // High zoom level for detailed view
+                                                          );
+                                                        },
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              Colors.blue,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.all(
+                                                                12,
                                                               ),
-                                                            );
-                                                          }
-                                                        }
-                                                      },
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor:
-                                                            Colors.green,
-                                                        foregroundColor:
-                                                            Colors.white,
-                                                        padding:
-                                                            const EdgeInsets.all(
-                                                              12,
-                                                            ),
-                                                        minimumSize: const Size(
-                                                          48,
-                                                          48,
+                                                          minimumSize: const Size(
+                                                            48,
+                                                            48,
+                                                          ),
                                                         ),
-                                                      ),
-                                                      child: const Icon(
-                                                        Icons.navigation,
-                                                        size: 20,
-                                                      ),
-                                                    );
-                                                  } else {
-                                                    return ElevatedButton.icon(
-                                                      onPressed: () async {
-                                                        final place = state
-                                                            .selectedPlace!;
-                                                        final lat = place
-                                                            .position
-                                                            .latitude;
-                                                        final lng = place
-                                                            .position
-                                                            .longitude;
-
-                                                        // Create Google Maps URL
-                                                        final googleMapsUrl =
-                                                            Uri.parse(
-                                                              'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
-                                                            );
-
-                                                        try {
-                                                          if (await canLaunchUrl(
-                                                            googleMapsUrl,
-                                                          )) {
-                                                            await launchUrl(
-                                                              googleMapsUrl,
-                                                              mode: LaunchMode
-                                                                  .externalApplication,
-                                                            );
-                                                          } else {
-                                                            // Fallback to generic maps URL
-                                                            final fallbackUrl =
-                                                                Uri.parse(
-                                                                  'https://maps.google.com/?q=$lat,$lng',
-                                                                );
-                                                            await launchUrl(
-                                                              fallbackUrl,
-                                                            );
-                                                          }
-                                                        } catch (e) {
-                                                          // Show error message
-                                                          if (context.mounted) {
-                                                            ScaffoldMessenger.of(
-                                                              context,
-                                                            ).showSnackBar(
-                                                              const SnackBar(
-                                                                content: Text(
-                                                                  'Tidak dapat membuka aplikasi navigasi',
-                                                                ),
-                                                                backgroundColor:
-                                                                    Colors.red,
+                                                        child: const Icon(
+                                                          Icons.zoom_in,
+                                                          size: 20,
+                                                        ),
+                                                      );
+                                                    } else {
+                                                      return ElevatedButton.icon(
+                                                        onPressed: () {
+                                                          // Zoom to the selected place location
+                                                          mapController?.move(
+                                                            state
+                                                                .selectedPlace!
+                                                                .position,
+                                                            18.0, // High zoom level for detailed view
+                                                          );
+                                                        },
+                                                        icon: const Icon(
+                                                          Icons.zoom_in,
+                                                          size: 18,
+                                                        ),
+                                                        label: const Text(
+                                                          'Zoom To',
+                                                        ),
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              Colors.blue,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 16,
+                                                                vertical: 12,
                                                               ),
-                                                            );
-                                                          }
-                                                        }
-                                                      },
-                                                      icon: const Icon(
-                                                        Icons.navigation,
-                                                        size: 18,
-                                                      ),
-                                                      label: const Text(
-                                                        'Navigate',
-                                                      ),
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor:
-                                                            Colors.green,
-                                                        foregroundColor:
-                                                            Colors.white,
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              horizontal: 16,
-                                                              vertical: 12,
-                                                            ),
-                                                      ),
-                                                    );
-                                                  }
-                                                },
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                                ),
                                               ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            // Update Regional Data button
-                                            Expanded(
-                                              child: LayoutBuilder(
-                                                builder: (context, constraints) {
-                                                  final isMobile =
-                                                      MediaQuery.of(
-                                                        context,
-                                                      ).size.width <
-                                                      600;
+                                            if (state.selectedPlace != null &&
+                                                !state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              const SizedBox(width: 12),
+                                            // Navigate to location button (only for non-scraped directories)
+                                            if (state.selectedPlace != null &&
+                                                !state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              Expanded(
+                                                child: LayoutBuilder(
+                                                  builder: (context, constraints) {
+                                                    final isMobile =
+                                                        MediaQuery.of(
+                                                          context,
+                                                        ).size.width <
+                                                        600;
 
-                                                  if (isMobile) {
-                                                    return ElevatedButton(
+                                                    if (isMobile) {
+                                                      return ElevatedButton(
+                                                        onPressed: () async {
+                                                          final place = state
+                                                              .selectedPlace!;
+                                                          final lat = place
+                                                              .position
+                                                              .latitude;
+                                                          final lng = place
+                                                              .position
+                                                              .longitude;
+
+                                                          // Create Google Maps URL
+                                                          final googleMapsUrl =
+                                                              Uri.parse(
+                                                                'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
+                                                              );
+
+                                                          try {
+                                                            if (await canLaunchUrl(
+                                                              googleMapsUrl,
+                                                            )) {
+                                                              await launchUrl(
+                                                                googleMapsUrl,
+                                                                mode: LaunchMode
+                                                                    .externalApplication,
+                                                              );
+                                                            } else {
+                                                              // Fallback to generic maps URL
+                                                              final fallbackUrl =
+                                                                  Uri.parse(
+                                                                    'https://maps.google.com/?q=$lat,$lng',
+                                                                  );
+                                                              await launchUrl(
+                                                                fallbackUrl,
+                                                              );
+                                                            }
+                                                          } catch (e) {
+                                                            // Show error message
+                                                            if (context.mounted) {
+                                                              ScaffoldMessenger.of(
+                                                                context,
+                                                              ).showSnackBar(
+                                                                const SnackBar(
+                                                                  content: Text(
+                                                                    'Tidak dapat membuka aplikasi navigasi',
+                                                                  ),
+                                                                  backgroundColor:
+                                                                      Colors.red,
+                                                                ),
+                                                              );
+                                                            }
+                                                          }
+                                                        },
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              Colors.green,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.all(
+                                                                12,
+                                                              ),
+                                                          minimumSize: const Size(
+                                                            48,
+                                                            48,
+                                                          ),
+                                                        ),
+                                                        child: const Icon(
+                                                          Icons.navigation,
+                                                          size: 20,
+                                                        ),
+                                                      );
+                                                    } else {
+                                                      return ElevatedButton.icon(
+                                                        onPressed: () async {
+                                                          final place = state
+                                                              .selectedPlace!;
+                                                          final lat = place
+                                                              .position
+                                                              .latitude;
+                                                          final lng = place
+                                                              .position
+                                                              .longitude;
+
+                                                          // Create Google Maps URL
+                                                          final googleMapsUrl =
+                                                              Uri.parse(
+                                                                'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
+                                                              );
+
+                                                          try {
+                                                            if (await canLaunchUrl(
+                                                              googleMapsUrl,
+                                                            )) {
+                                                              await launchUrl(
+                                                                googleMapsUrl,
+                                                                mode: LaunchMode
+                                                                    .externalApplication,
+                                                              );
+                                                            } else {
+                                                              // Fallback to generic maps URL
+                                                              final fallbackUrl =
+                                                                  Uri.parse(
+                                                                    'https://maps.google.com/?q=$lat,$lng',
+                                                                  );
+                                                              await launchUrl(
+                                                                fallbackUrl,
+                                                              );
+                                                            }
+                                                          } catch (e) {
+                                                            // Show error message
+                                                            if (context.mounted) {
+                                                              ScaffoldMessenger.of(
+                                                                context,
+                                                              ).showSnackBar(
+                                                                const SnackBar(
+                                                                  content: Text(
+                                                                    'Tidak dapat membuka aplikasi navigasi',
+                                                                  ),
+                                                                  backgroundColor:
+                                                                      Colors.red,
+                                                                ),
+                                                              );
+                                                            }
+                                                          }
+                                                        },
+                                                        icon: const Icon(
+                                                          Icons.navigation,
+                                                          size: 18,
+                                                        ),
+                                                        label: const Text(
+                                                          'Navigate',
+                                                        ),
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              Colors.green,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 16,
+                                                                vertical: 12,
+                                                              ),
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                                ),
+                                              ),
+                                            if (state.selectedPlace != null &&
+                                                !state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              const SizedBox(width: 12),
+                                            // Update Regional Data button (only for non-scraped directories)
+                                            if (state.selectedPlace != null &&
+                                                !state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              Expanded(
+                                                child: LayoutBuilder(
+                                                  builder: (context, constraints) {
+                                                    final isMobile =
+                                                        MediaQuery.of(
+                                                          context,
+                                                        ).size.width <
+                                                        600;
+
+                                                    if (isMobile) {
+                                                      return ElevatedButton(
                                                       onPressed: () async {
                                                         final place = state
                                                             .selectedPlace!;
@@ -680,15 +696,312 @@ class MapPage extends StatelessWidget {
                                               ),
                                             ),
                                             const SizedBox(width: 12),
-                                            // Edit directory button
-                                            Expanded(
-                                              child: LayoutBuilder(
-                                                builder: (context, constraints) {
-                                                  final isMobile =
-                                                      MediaQuery.of(
+                                            // Add to Directory button for scraped places
+                                            if (state.selectedPlace != null &&
+                                                state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              Expanded(
+                                                child: LayoutBuilder(
+                                                  builder: (context, constraints) {
+                                                    final isMobile =
+                                                        MediaQuery.of(
+                                                          context,
+                                                        ).size.width <
+                                                        600;
+
+                                                    
+
+                                                    void
+                                                    handleAddFromScrape() async {
+                                                      final place =
+                                                          state.selectedPlace!;
+                                                      String? kategori;
+                                                      String? alamat;
+                                                      String? website;
+                                                      String? telp;
+                                                      final desc =
+                                                          place.description ??
+                                                          '';
+                                                      if (desc.isNotEmpty) {
+                                                        for (final part
+                                                            in desc.split(
+                                                              ' | ',
+                                                            )) {
+                                                          final idx = part
+                                                              .indexOf(':');
+                                                          if (idx > 0) {
+                                                            final key = part
+                                                                .substring(
+                                                                  0,
+                                                                  idx,
+                                                                )
+                                                                .trim()
+                                                                .toLowerCase();
+                                                            final val = part
+                                                                .substring(
+                                                                  idx + 1,
+                                                                )
+                                                                .trim();
+                                                            switch (key) {
+                                                              case 'kategori':
+                                                                kategori = val;
+                                                                break;
+                                                              case 'alamat':
+                                                                alamat = val;
+                                                                break;
+                                                              case 'web':
+                                                                website = val;
+                                                                break;
+                                                              case 'telp':
+                                                                telp = val;
+                                                                break;
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+
+                                                      // Regional codes are unknown for scraped, pass empty
+                                                      _showAddDirektoriForm(
                                                         context,
-                                                      ).size.width <
-                                                      600;
+                                                        place.position,
+                                                        '', // idSls
+                                                        '', // kdProv
+                                                        '', // kdKab
+                                                        '', // kdKec
+                                                        '', // kdDesa
+                                                        '', // kdSls
+                                                        null, // namaSls
+                                                        null, // kodePos
+                                                        alamat, // alamatFromGeocode
+                                                        existingDirectory: null,
+                                                        initialNamaUsaha:
+                                                            place.name,
+                                                        initialAlamat: alamat,
+                                                        initialWebsite: website,
+                                                        initialNomorTelepon:
+                                                            telp,
+                                                        initialUrlGambar:
+                                                            place.urlGambar,
+                                                        initialKategori:
+                                                            kategori,
+                                                        startAtPhase2: true,
+                                                        scrapedPlaceId: place.id,
+                                                      );
+                                                    }
+
+                                                    if (isMobile) {
+                                                      return ElevatedButton(
+                                                        onPressed:
+                                                            handleAddFromScrape,
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              Colors.purple,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.all(
+                                                                12,
+                                                              ),
+                                                          minimumSize:
+                                                              const Size(
+                                                                48,
+                                                                48,
+                                                              ),
+                                                        ),
+                                                        child: const Icon(
+                                                          Icons.playlist_add,
+                                                          size: 20,
+                                                        ),
+                                                      );
+                                                    } else {
+                                                      return ElevatedButton.icon(
+                                                        onPressed:
+                                                            handleAddFromScrape,
+                                                        icon: const Icon(
+                                                          Icons.playlist_add,
+                                                          size: 18,
+                                                        ),
+                                                        label: const Text(
+                                                          'Tambah ke Direktori',
+                                                        ),
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              Colors.purple,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 16,
+                                                                vertical: 12,
+                                                              ),
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                                ),
+                                              ),
+                                            // Scraped-only actions: Hapus/Tutup status in Google Sheets
+                                            if (state.selectedPlace != null &&
+                                                state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              const SizedBox(width: 12),
+                                            if (state.selectedPlace != null &&
+                                                state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              Expanded(
+                                                child: LayoutBuilder(
+                                                  builder: (context, constraints) {
+                                                    final isMobile = MediaQuery.of(context).size.width < 600;
+                                                    if (isMobile) {
+                                                      return ElevatedButton(
+                                                        onPressed: () => _updateScrapeStatus(context, state.selectedPlace!, 'hapus'),
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor: Colors.red.shade700,
+                                                          foregroundColor: Colors.white,
+                                                          padding: const EdgeInsets.all(12),
+                                                          minimumSize: const Size(48, 48),
+                                                        ),
+                                                        child: const Icon(
+                                                          Icons.remove_circle_outline,
+                                                          size: 20,
+                                                        ),
+                                                      );
+                                                    } else {
+                                                      return ElevatedButton.icon(
+                                                        onPressed: () => _updateScrapeStatus(context, state.selectedPlace!, 'hapus'),
+                                                        icon: const Icon(
+                                                          Icons.remove_circle_outline,
+                                                          size: 18,
+                                                        ),
+                                                        label: const Text('Hapus (Scraping)'),
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor: Colors.red.shade700,
+                                                          foregroundColor: Colors.white,
+                                                          padding: const EdgeInsets.symmetric(
+                                                            horizontal: 16,
+                                                            vertical: 12,
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                                ),
+                                              ),
+                                            if (state.selectedPlace != null &&
+                                                state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              const SizedBox(width: 12),
+                                            if (state.selectedPlace != null &&
+                                                state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              Expanded(
+                                                child: LayoutBuilder(
+                                                  builder: (context, constraints) {
+                                                    final isMobile = MediaQuery.of(context).size.width < 600;
+                                                    if (isMobile) {
+                                                      return ElevatedButton(
+                                                        onPressed: () => _updateScrapeStatus(context, state.selectedPlace!, 'tutup'),
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor: Colors.orange,
+                                                          foregroundColor: Colors.white,
+                                                          padding: const EdgeInsets.all(12),
+                                                          minimumSize: const Size(48, 48),
+                                                        ),
+                                                        child: const Icon(
+                                                          Icons.cancel_outlined,
+                                                          size: 20,
+                                                        ),
+                                                      );
+                                                    } else {
+                                                      return ElevatedButton.icon(
+                                                        onPressed: () => _updateScrapeStatus(context, state.selectedPlace!, 'tutup'),
+                                                        icon: const Icon(
+                                                          Icons.cancel_outlined,
+                                                          size: 18,
+                                                        ),
+                                                        label: const Text('Tutup (Scraping)'),
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor: Colors.orange,
+                                                          foregroundColor: Colors.white,
+                                                          padding: const EdgeInsets.symmetric(
+                                                            horizontal: 16,
+                                                            vertical: 12,
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                                ),
+                                              ),
+                                            if (state.selectedPlace != null &&
+                                                state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              const SizedBox(width: 12),
+                                            // Open Google Maps link (only for scraped markers)
+                                            if (state.selectedPlace != null &&
+                                                state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              Expanded(
+                                                child: LayoutBuilder(
+                                                  builder: (context, constraints) {
+                                                    final isMobile = MediaQuery.of(context).size.width < 600;
+                                                    if (isMobile) {
+                                                      return ElevatedButton(
+                                                        onPressed: () => _openScrapeGoogleMapsLink(
+                                                          context,
+                                                          state.selectedPlace!,
+                                                        ),
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor: Colors.green,
+                                                          foregroundColor: Colors.white,
+                                                          padding: const EdgeInsets.all(12),
+                                                          minimumSize: const Size(48, 48),
+                                                        ),
+                                                        child: const Icon(
+                                                          Icons.map,
+                                                          size: 20,
+                                                        ),
+                                                      );
+                                                    } else {
+                                                      return ElevatedButton.icon(
+                                                        onPressed: () => _openScrapeGoogleMapsLink(
+                                                          context,
+                                                          state.selectedPlace!,
+                                                        ),
+                                                        icon: const Icon(
+                                                          Icons.map,
+                                                          size: 18,
+                                                        ),
+                                                        label: const Text('Buka Google Maps'),
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor: Colors.green,
+                                                          foregroundColor: Colors.white,
+                                                          padding: const EdgeInsets.symmetric(
+                                                            horizontal: 16,
+                                                            vertical: 12,
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                                ),
+                                              ),
+                                            if (state.selectedPlace != null &&
+                                                state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              const SizedBox(width: 12),
+                                            // Edit directory button (only for non-scraped directories)
+                                            if (state.selectedPlace != null &&
+                                                !state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              Expanded(
+                                                child: LayoutBuilder(
+                                                  builder: (context, constraints) {
+                                                    final isMobile =
+                                                        MediaQuery.of(
+                                                          context,
+                                                        ).size.width <
+                                                        600;
 
                                                   if (isMobile) {
                                                     return ElevatedButton(
@@ -920,14 +1233,20 @@ class MapPage extends StatelessWidget {
                                                 },
                                               ),
                                             ),
-                                            const SizedBox(width: 12),
-                                            // Delete or mark closed button
-                                            Expanded(
-                                              child: LayoutBuilder(
-                                                builder: (context, constraints) {
-                                                  final isMobile =
-                                                      MediaQuery.of(
-                                                        context,
+                                            if (state.selectedPlace != null &&
+                                                !state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              const SizedBox(width: 12),
+                                            // Delete or mark closed button (only for non-scraped directories)
+                                            if (state.selectedPlace != null &&
+                                                !state.selectedPlace!.id
+                                                    .startsWith('scrape:'))
+                                              Expanded(
+                                                child: LayoutBuilder(
+                                                  builder: (context, constraints) {
+                                                    final isMobile =
+                                                        MediaQuery.of(
+                                                          context,
                                                       ).size.width <
                                                       600;
 
@@ -1714,6 +2033,16 @@ class MapPage extends StatelessWidget {
     String? kodePos,
     String? alamatFromGeocode, {
     DirektoriModel? existingDirectory,
+    // Optional initial values for prefill (e.g., from scraped place)
+    String? initialNamaUsaha,
+    String? initialAlamat,
+    String? initialWebsite,
+    String? initialNomorTelepon,
+    String? initialUrlGambar,
+    String? initialKategori,
+    bool startAtPhase2 = false,
+    // If invoked from scraped marker, pass its placeId to update Sheets status after save
+    String? scrapedPlaceId,
   }) {
     final namaUsahaController = TextEditingController();
     final alamatController = TextEditingController();
@@ -1789,6 +2118,30 @@ class MapPage extends StatelessWidget {
       }
     }
 
+    // Apply initial prefill values (e.g., from scraped place)
+    if (existingDirectory == null) {
+      if (initialNamaUsaha != null && initialNamaUsaha.isNotEmpty) {
+        namaUsahaController.text = initialNamaUsaha;
+      }
+      if (initialAlamat != null && initialAlamat.isNotEmpty) {
+        alamatController.text = initialAlamat;
+      } else if (alamatFromGeocode != null && alamatFromGeocode.isNotEmpty) {
+        alamatController.text = alamatFromGeocode;
+      }
+      if (initialWebsite != null && initialWebsite.isNotEmpty) {
+        websiteController.text = initialWebsite;
+      }
+      if (initialNomorTelepon != null && initialNomorTelepon.isNotEmpty) {
+        nomorTeleponController.text = initialNomorTelepon;
+      }
+      if (initialUrlGambar != null && initialUrlGambar.isNotEmpty) {
+        urlGambarController.text = initialUrlGambar;
+      }
+      if (initialKategori != null && initialKategori.isNotEmpty) {
+        kategoriController.text = initialKategori;
+      }
+    }
+
     // Variables for autocomplete functionality
     List<DirektoriModel> searchResults = [];
     bool isSearching = false;
@@ -1801,6 +2154,16 @@ class MapPage extends StatelessWidget {
     DirektoriModel? selectedExistingBusiness;
     bool showFollowUpQuestions =
         false; // Controls follow-up questions visibility
+
+    // If instructed to start at phase 2 (e.g., scraped place), configure flow
+    if (existingDirectory == null &&
+        (startAtPhase2 ||
+            (initialNamaUsaha != null && initialNamaUsaha.isNotEmpty))) {
+      currentPhase = 2;
+      businessNameSelected = true;
+      selectedBusinessType = 'new';
+      selectedExistingBusiness = null;
+    }
 
     showModalBottomSheet(
       context: context,
@@ -4361,6 +4724,7 @@ class MapPage extends StatelessWidget {
     String? kbli, // New KBLI parameter
     List<String>? tag, // New tag parameter
     String? urlGambar, // New URL gambar parameter
+    String? scrapedPlaceId, // Optional scraped place id for Sheets status update
     DirektoriModel? existingDirectory,
     DirektoriModel? selectedExistingBusiness,
   }) async {
@@ -4541,7 +4905,9 @@ class MapPage extends StatelessWidget {
         newDirectoryId = await repository.insertDirectoryAndGetId(directory);
         success = newDirectoryId != null;
         if (success) {
-          print('✅ [DEBUG] Direktori baru berhasil disimpan dengan ID: $newDirectoryId');
+          print(
+            '✅ [DEBUG] Direktori baru berhasil disimpan dengan ID: $newDirectoryId',
+          );
         }
       }
 
@@ -4551,31 +4917,38 @@ class MapPage extends StatelessWidget {
         print(
           '✅ [DEBUG] Direktori berhasil disimpan, menampilkan SnackBar sukses',
         );
-        
+
         // Save contribution after successful directory save
         try {
           print('💾 [CONTRIBUTION] Menyimpan kontribusi...');
-          
+
           if (contributionBloc != null) {
             // Determine action type and changes
-            final actionType = existingDirectory != null ? 'edit_location' : 'add_location';
+            final actionType = existingDirectory != null
+                ? 'edit_location'
+                : 'add_location';
             final targetId = existingDirectory?.id ?? newDirectoryId ?? '';
-            
+
             // Skip contribution if we don't have a valid target_id
             if (targetId.isEmpty) {
-              print('⚠️ [CONTRIBUTION] Melewati penyimpanan kontribusi karena target_id kosong');
+              print(
+                '⚠️ [CONTRIBUTION] Melewati penyimpanan kontribusi karena target_id kosong',
+              );
             } else {
               print('🎯 [CONTRIBUTION] Action: $actionType, Target: $targetId');
-              
+
               // Create changes map for tracking what was modified
-               final changes = <String, dynamic>{
+              final changes = <String, dynamic>{
                 'nama_usaha': namaUsaha,
                 'alamat': alamatFromGeocode ?? alamat,
                 'latitude': point.latitude,
                 'longitude': point.longitude,
+                // Keep UUID reference because contributions table uses BIGINT target_id
+                // This allows us to trace back to the new directory even if target_id is null
+                'target_uuid': targetId,
                 'timestamp': DateTime.now().toIso8601String(),
               };
-              
+
               if (existingDirectory != null) {
                 // For updates, track what changed
                 if (existingDirectory.namaUsaha != namaUsaha) {
@@ -4585,35 +4958,56 @@ class MapPage extends StatelessWidget {
                   changes['old_alamat'] = existingDirectory.alamat;
                 }
               }
-              
+
               print('📝 [CONTRIBUTION] Changes: $changes');
-              
+
               // Create contribution event using the early reference
-              contributionBloc.add(CreateContributionEvent(
-                actionType: actionType,
-                targetType: 'directory',
-                targetId: targetId,
-                changes: changes,
-                latitude: point.latitude,
-                longitude: point.longitude,
-              ));
-              
+              contributionBloc.add(
+                CreateContributionEvent(
+                  actionType: actionType,
+                  targetType: 'directory',
+                  targetId: targetId,
+                  changes: changes,
+                  latitude: point.latitude,
+                  longitude: point.longitude,
+                ),
+              );
+
               print('✅ [CONTRIBUTION] Event kontribusi berhasil dikirim');
             }
           } else {
-            print('⚠️ [CONTRIBUTION] ContributionBloc tidak tersedia, melewati penyimpanan kontribusi');
+            print(
+              '⚠️ [CONTRIBUTION] ContributionBloc tidak tersedia, melewati penyimpanan kontribusi',
+            );
           }
         } catch (contributionError) {
-          print('❌ [CONTRIBUTION] Gagal menyimpan kontribusi: $contributionError');
+          print(
+            '❌ [CONTRIBUTION] Gagal menyimpan kontribusi: $contributionError',
+          );
           // Don't fail the whole operation if contribution fails
         }
-        
+
         scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text('Direktori "$namaUsaha" berhasil disimpan'),
             backgroundColor: Colors.green,
           ),
         );
+
+        // If this save originated from a scraped place, mark status in Google Sheets
+        if (scrapedPlaceId != null && scrapedPlaceId.startsWith('scrape:')) {
+          try {
+            debugPrint(
+                'Sheets: updating status to "ditambah" for $scrapedPlaceId');
+            final ok = await ScrapingRepositoryImpl()
+                .updateStatusByPlaceId(scrapedPlaceId, 'ditambah');
+            if (!ok) {
+              debugPrint('Sheets: failed to update status for $scrapedPlaceId');
+            }
+          } catch (e) {
+            debugPrint('Sheets: error updating status: $e');
+          }
+        }
 
         print('🔄 [DEBUG] Memuat ulang data peta...');
         // Refresh the map data dengan delay kecil untuk memastikan database sudah commit
@@ -4771,6 +5165,81 @@ class MapPage extends StatelessWidget {
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
+    }
+  }
+
+  // Update Google Sheets status for a scraped marker by its placeId
+  Future<void> _updateScrapeStatus(
+    BuildContext context,
+    Place place,
+    String status,
+  ) async {
+    try {
+      final ok = await ScrapingRepositoryImpl().updateStatusByPlaceId(
+        place.id,
+        status,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ok
+                ? 'Status "$status" terkirim ke Google Sheets'
+                : 'Gagal mengirim status ke Google Sheets',
+          ),
+          backgroundColor: ok ? Colors.green : Colors.red,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error update status: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Open Google Maps link for a scraped marker using its cached scraped data.
+  Future<void> _openScrapeGoogleMapsLink(BuildContext context, Place place) async {
+    try {
+      final repo = ScrapingRepositoryImpl();
+      final sp = await repo.getByPlaceId(place.id);
+
+      String? urlStr = sp?.link;
+      Uri? uri;
+      if (urlStr != null && urlStr.trim().isNotEmpty) {
+        uri = Uri.tryParse(urlStr.trim());
+      }
+
+      // Fallback to lat/lng search if link is missing or invalid
+      uri ??= Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=${place.position.latitude},${place.position.longitude}',
+      );
+
+      final can = await canLaunchUrl(uri);
+      if (can) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Membuka Google Maps'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tidak dapat membuka Google Maps'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error membuka link: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 }

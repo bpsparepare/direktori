@@ -9,6 +9,7 @@ import '../../domain/entities/polygon_data.dart';
 import '../models/direktori_model.dart';
 import '../../../../core/config/supabase_config.dart';
 import 'package:flutter/foundation.dart';
+import 'scraping_repository_impl.dart';
 
 class MapRepositoryImpl implements MapRepository {
   final SupabaseClient _supabaseClient = SupabaseConfig.client;
@@ -334,7 +335,25 @@ class MapRepositoryImpl implements MapRepository {
         debugPrint(
           'MapRepository: No valid places found, returning empty list',
         );
-        return [];
+        // Tetap coba load scraped places meski direktori kosong
+        try {
+          final scraped = await ScrapingRepositoryImpl()
+              .getScrapedPlacesAsPlace();
+          debugPrint('MapRepository: Loaded ${scraped.length} scraped places');
+          return scraped;
+        } catch (e) {
+          debugPrint('MapRepository: Failed to load scraped places: $e');
+          return [];
+        }
+      }
+      // Gabungkan dengan tempat hasil scraping
+      try {
+        final scraped = await ScrapingRepositoryImpl()
+            .getScrapedPlacesAsPlace();
+        debugPrint('MapRepository: Loaded ${scraped.length} scraped places');
+        places.addAll(scraped);
+      } catch (e) {
+        debugPrint('MapRepository: Failed to load scraped places: $e');
       }
 
       return places;
