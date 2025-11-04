@@ -26,9 +26,7 @@ class _ContributionPageState extends State<ContributionPage>
     _tabController = TabController(length: 3, vsync: this);
 
     // Load initial data
-    context.read<ContributionBloc>().add(
-      const GetUserContributionsEvent(),
-    );
+    context.read<ContributionBloc>().add(const GetUserContributionsEvent());
   }
 
   @override

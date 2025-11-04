@@ -41,10 +41,7 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget>
 
   void _loadLeaderboard() {
     context.read<ContributionBloc>().add(
-      GetLeaderboardEvent(
-        period: _selectedPeriod,
-        limit: widget.limit,
-      ),
+      GetLeaderboardEvent(period: _selectedPeriod, limit: widget.limit),
     );
   }
 
@@ -65,9 +62,7 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget>
           child: BlocBuilder<ContributionBloc, ContributionState>(
             builder: (context, state) {
               if (state is ContributionLoading) {
-                return const Center(
-                  child: CircularProgressIndicator(),
-                );
+                return const Center(child: CircularProgressIndicator());
               }
 
               if (state is ContributionError) {
@@ -75,10 +70,11 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget>
               }
 
               List<LeaderboardEntry> entries = [];
-              
+
               if (state is LeaderboardLoaded) {
                 entries = state.leaderboard;
-              } else if (state is ContributionLoaded && state.leaderboard != null) {
+              } else if (state is ContributionLoaded &&
+                  state.leaderboard != null) {
                 entries = state.leaderboard!;
               }
 
@@ -113,13 +109,15 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget>
 
   Widget _buildPeriodTab(String label, String period) {
     final isSelected = _selectedPeriod == period;
-    
+
     return GestureDetector(
       onTap: () => _onPeriodChanged(period),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? Theme.of(context).primaryColor : Colors.transparent,
+          color: isSelected
+              ? Theme.of(context).primaryColor
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -150,7 +148,7 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget>
 
   Widget _buildLeaderboardItem(LeaderboardEntry entry, int rank) {
     final isTopThree = rank <= 3;
-    
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       elevation: isTopThree ? 4 : 1,
@@ -166,7 +164,10 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget>
               )
             : null,
         child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 8,
+          ),
           leading: _buildRankBadge(rank),
           title: Text(
             entry.userName,
@@ -214,7 +215,9 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget>
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: isTopThree ? Colors.white : Theme.of(context).primaryColor,
+                  color: isTopThree
+                      ? Colors.white
+                      : Theme.of(context).primaryColor,
                 ),
               ),
               Text(
@@ -233,7 +236,7 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget>
 
   Widget _buildRankBadge(int rank) {
     Widget child;
-    
+
     if (rank <= 3) {
       child = Container(
         width: 40,
@@ -249,9 +252,7 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget>
             ),
           ],
         ),
-        child: Center(
-          child: _getRankIcon(rank),
-        ),
+        child: Center(child: _getRankIcon(rank)),
       );
     } else {
       child = CircleAvatar(
@@ -300,11 +301,7 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.leaderboard_outlined,
-            size: 64,
-            color: Colors.grey[400],
-          ),
+          Icon(Icons.leaderboard_outlined, size: 64, color: Colors.grey[400]),
           const SizedBox(height: 16),
           Text(
             'Belum ada data leaderboard',
@@ -313,9 +310,9 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget>
           const SizedBox(height: 8),
           Text(
             'Mulai berkontribusi untuk muncul di leaderboard',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.grey[600],
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
             textAlign: TextAlign.center,
           ),
         ],
@@ -328,11 +325,7 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.error_outline,
-            size: 64,
-            color: Colors.grey[400],
-          ),
+          Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
           const SizedBox(height: 16),
           Text(
             'Gagal memuat leaderboard',
@@ -341,9 +334,9 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget>
           const SizedBox(height: 8),
           Text(
             message,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.grey[600],
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),

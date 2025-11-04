@@ -57,21 +57,22 @@ class ContributionLoaded extends ContributionState {
       leaderboard: leaderboard ?? this.leaderboard,
       contributionStats: contributionStats ?? this.contributionStats,
       userRank: userRank ?? this.userRank,
-      isCreatingContribution: isCreatingContribution ?? this.isCreatingContribution,
+      isCreatingContribution:
+          isCreatingContribution ?? this.isCreatingContribution,
       isUpdatingStatus: isUpdatingStatus ?? this.isUpdatingStatus,
     );
   }
 
   @override
   List<Object?> get props => [
-        contributions,
-        userStats,
-        leaderboard,
-        contributionStats,
-        userRank,
-        isCreatingContribution,
-        isUpdatingStatus,
-      ];
+    contributions,
+    userStats,
+    leaderboard,
+    contributionStats,
+    userRank,
+    isCreatingContribution,
+    isUpdatingStatus,
+  ];
 }
 
 /// State ketika berhasil membuat kontribusi
@@ -113,10 +114,7 @@ class LeaderboardLoaded extends ContributionState {
   final List<LeaderboardEntry> leaderboard;
   final String period;
 
-  const LeaderboardLoaded({
-    required this.leaderboard,
-    this.period = 'monthly',
-  });
+  const LeaderboardLoaded({required this.leaderboard, this.period = 'monthly'});
 
   @override
   List<Object?> get props => [leaderboard, period];
@@ -147,10 +145,7 @@ class ContributionError extends ContributionState {
   final String message;
   final String? errorCode;
 
-  const ContributionError({
-    required this.message,
-    this.errorCode,
-  });
+  const ContributionError({required this.message, this.errorCode});
 
   @override
   List<Object?> get props => [message, errorCode];
@@ -174,9 +169,7 @@ class ContributionOperationInProgress extends ContributionState {
 class ContributionEmpty extends ContributionState {
   final String message;
 
-  const ContributionEmpty({
-    this.message = 'Belum ada kontribusi',
-  });
+  const ContributionEmpty({this.message = 'Belum ada kontribusi'});
 
   @override
   List<Object?> get props => [message];

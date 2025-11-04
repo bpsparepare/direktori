@@ -8,13 +8,7 @@ class GetLeaderboardUseCase {
 
   GetLeaderboardUseCase(this.repository);
 
-  Future<List<LeaderboardEntry>> call({
-    int limit = 10,
-    int offset = 0,
-  }) async {
-    return await repository.getLeaderboard(
-      limit: limit,
-      offset: offset,
-    );
+  Future<List<LeaderboardEntry>> call({int limit = 10, int offset = 0}) async {
+    return await repository.getLeaderboard(limit: limit, offset: offset);
   }
 }

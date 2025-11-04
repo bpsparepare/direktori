@@ -25,7 +25,7 @@ class LeaderboardEntry {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    
+
     return other is LeaderboardEntry &&
         other.userId == userId &&
         other.userName == userName &&

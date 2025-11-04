@@ -30,13 +30,13 @@ class CreateContributionEvent extends ContributionEvent {
 
   @override
   List<Object?> get props => [
-        actionType,
-        targetType,
-        targetId,
-        changes,
-        latitude,
-        longitude,
-      ];
+    actionType,
+    targetType,
+    targetId,
+    changes,
+    latitude,
+    longitude,
+  ];
 }
 
 /// Event untuk mendapatkan kontribusi pengguna
@@ -129,11 +129,7 @@ class GetContributionStatsEvent extends ContributionEvent {
   final DateTime? startDate;
   final DateTime? endDate;
 
-  const GetContributionStatsEvent({
-    this.userId,
-    this.startDate,
-    this.endDate,
-  });
+  const GetContributionStatsEvent({this.userId, this.startDate, this.endDate});
 
   @override
   List<Object?> get props => [userId, startDate, endDate];
@@ -144,10 +140,7 @@ class GetRecentContributionsEvent extends ContributionEvent {
   final int limit;
   final String? actionType;
 
-  const GetRecentContributionsEvent({
-    this.limit = 10,
-    this.actionType,
-  });
+  const GetRecentContributionsEvent({this.limit = 10, this.actionType});
 
   @override
   List<Object?> get props => [limit, actionType];

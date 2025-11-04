@@ -32,19 +32,19 @@ class UserContribution extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        userId,
-        actionType,
-        targetType,
-        targetId,
-        changes,
-        points,
-        status,
-        latitude,
-        longitude,
-        createdAt,
-        updatedAt,
-      ];
+    id,
+    userId,
+    actionType,
+    targetType,
+    targetId,
+    changes,
+    points,
+    status,
+    latitude,
+    longitude,
+    createdAt,
+    updatedAt,
+  ];
 
   UserContribution copyWith({
     String? id,

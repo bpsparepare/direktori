@@ -28,17 +28,17 @@ class ContributionSummary extends Equatable {
 
   @override
   List<Object?> get props => [
-        userId,
-        userName,
-        userEmail,
-        totalContributions,
-        totalPoints,
-        currentLevel,
-        levelName,
-        rank,
-        contributionsByType,
-        lastContributionDate,
-      ];
+    userId,
+    userName,
+    userEmail,
+    totalContributions,
+    totalPoints,
+    currentLevel,
+    levelName,
+    rank,
+    contributionsByType,
+    lastContributionDate,
+  ];
 
   ContributionSummary copyWith({
     String? userId,

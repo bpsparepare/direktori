@@ -26,7 +26,7 @@ class _ContributionFormWidgetState extends State<ContributionFormWidget> {
   final _formKey = GlobalKey<FormState>();
   final _targetIdController = TextEditingController();
   final _changesController = TextEditingController();
-  
+
   String _selectedActionType = 'create';
   String _selectedTargetType = 'direktori';
   Position? _currentPosition;
@@ -115,7 +115,9 @@ class _ContributionFormWidgetState extends State<ContributionFormWidget> {
     if (_currentPosition == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Lokasi belum tersedia. Silakan tunggu atau coba lagi.'),
+          content: Text(
+            'Lokasi belum tersedia. Silakan tunggu atau coba lagi.',
+          ),
           backgroundColor: Colors.orange,
         ),
       );
@@ -177,9 +179,8 @@ class _ContributionFormWidgetState extends State<ContributionFormWidget> {
                   Expanded(
                     child: Text(
                       'Tambah Kontribusi',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                   ),
                   IconButton(
@@ -193,16 +194,19 @@ class _ContributionFormWidgetState extends State<ContributionFormWidget> {
               // Action Type
               Text(
                 'Jenis Aksi',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 value: _selectedActionType,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
                 items: _actionTypes.map((type) {
                   return DropdownMenuItem<String>(
@@ -221,16 +225,19 @@ class _ContributionFormWidgetState extends State<ContributionFormWidget> {
               // Target Type
               Text(
                 'Jenis Target',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 value: _selectedTargetType,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
                 items: _targetTypes.map((type) {
                   return DropdownMenuItem<String>(
@@ -249,9 +256,9 @@ class _ContributionFormWidgetState extends State<ContributionFormWidget> {
               // Target ID
               Text(
                 'ID Target',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
               TextFormField(
@@ -259,7 +266,10 @@ class _ContributionFormWidgetState extends State<ContributionFormWidget> {
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
                   hintText: 'Masukkan ID target (contoh: direktori_123)',
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
@@ -273,9 +283,9 @@ class _ContributionFormWidgetState extends State<ContributionFormWidget> {
               // Changes/Description
               Text(
                 'Deskripsi Perubahan (Opsional)',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
               TextFormField(
@@ -284,7 +294,10 @@ class _ContributionFormWidgetState extends State<ContributionFormWidget> {
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
                   hintText: 'Jelaskan perubahan yang dilakukan...',
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -301,7 +314,9 @@ class _ContributionFormWidgetState extends State<ContributionFormWidget> {
                   children: [
                     Icon(
                       Icons.location_on,
-                      color: _currentPosition != null ? Colors.green : Colors.orange,
+                      color: _currentPosition != null
+                          ? Colors.green
+                          : Colors.orange,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -310,19 +325,17 @@ class _ContributionFormWidgetState extends State<ContributionFormWidget> {
                         children: [
                           Text(
                             'Lokasi',
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
                           ),
                           Text(
                             _isLoadingLocation
                                 ? 'Mendapatkan lokasi...'
                                 : _currentPosition != null
-                                    ? '${_currentPosition!.latitude.toStringAsFixed(6)}, ${_currentPosition!.longitude.toStringAsFixed(6)}'
-                                    : 'Lokasi tidak tersedia',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.grey[600],
-                            ),
+                                ? '${_currentPosition!.latitude.toStringAsFixed(6)}, ${_currentPosition!.longitude.toStringAsFixed(6)}'
+                                : 'Lokasi tidak tersedia',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: Colors.grey[600]),
                           ),
                         ],
                       ),
@@ -347,8 +360,10 @@ class _ContributionFormWidgetState extends State<ContributionFormWidget> {
               // Submit Button
               BlocBuilder<ContributionBloc, ContributionState>(
                 builder: (context, state) {
-                  final isLoading = state is ContributionLoading ||
-                      (state is ContributionLoaded && state.isCreatingContribution);
+                  final isLoading =
+                      state is ContributionLoading ||
+                      (state is ContributionLoaded &&
+                          state.isCreatingContribution);
 
                   return ElevatedButton(
                     onPressed: isLoading ? null : _submitForm,
@@ -367,7 +382,9 @@ class _ContributionFormWidgetState extends State<ContributionFormWidget> {
                                 height: 16,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
                                 ),
                               ),
                               SizedBox(width: 8),

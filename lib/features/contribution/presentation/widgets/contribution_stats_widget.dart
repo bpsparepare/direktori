@@ -15,7 +15,7 @@ class ContributionStatsWidget extends StatelessWidget {
       builder: (context, state) {
         UserStats? userStats;
         int? userRank;
-        
+
         if (state is ContributionLoaded) {
           userStats = state.userStats;
           userRank = state.userRank;
@@ -67,17 +67,17 @@ class ContributionStatsWidget extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Level and Progress
                 _buildLevelSection(context, userStats),
-                
+
                 const SizedBox(height: 20),
-                
+
                 // Stats Grid
                 _buildStatsGrid(context, userStats, userRank),
-                
+
                 const SizedBox(height: 20),
-                
+
                 // Streak Section
                 _buildStreakSection(context, userStats),
               ],
@@ -112,9 +112,9 @@ class ContributionStatsWidget extends StatelessWidget {
                 ),
                 Text(
                   levelName,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.grey[600],
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
                 ),
               ],
             ),
@@ -135,7 +135,7 @@ class ContributionStatsWidget extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        
+
         // Progress Bar
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -149,9 +149,9 @@ class ContributionStatsWidget extends StatelessWidget {
                 ),
                 Text(
                   '$pointsToNext poin lagi',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[600],
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                 ),
               ],
             ),
@@ -169,7 +169,11 @@ class ContributionStatsWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildStatsGrid(BuildContext context, UserStats userStats, int? userRank) {
+  Widget _buildStatsGrid(
+    BuildContext context,
+    UserStats userStats,
+    int? userRank,
+  ) {
     return Row(
       children: [
         Expanded(
@@ -222,9 +226,9 @@ class ContributionStatsWidget extends StatelessWidget {
           ),
           Text(
             title,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Colors.grey[600],
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
           ),
         ],
       ),
@@ -236,10 +240,7 @@ class ContributionStatsWidget extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            Colors.green.withOpacity(0.1),
-            Colors.teal.withOpacity(0.1),
-          ],
+          colors: [Colors.green.withOpacity(0.1), Colors.teal.withOpacity(0.1)],
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.green.withOpacity(0.3)),
@@ -272,9 +273,9 @@ class ContributionStatsWidget extends StatelessWidget {
                     const SizedBox(width: 16),
                     Text(
                       'Terpanjang: ${userStats.longestStreak} hari',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[600],
-                      ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
                     ),
                   ],
                 ),

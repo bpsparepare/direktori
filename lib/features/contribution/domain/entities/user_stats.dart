@@ -28,17 +28,17 @@ class UserStats extends Equatable {
 
   @override
   List<Object?> get props => [
-        userId,
-        totalContributions,
-        totalPoints,
-        currentLevel,
-        levelProgress,
-        currentStreak,
-        longestStreak,
-        lastContributionDate,
-        createdAt,
-        updatedAt,
-      ];
+    userId,
+    totalContributions,
+    totalPoints,
+    currentLevel,
+    levelProgress,
+    currentStreak,
+    longestStreak,
+    lastContributionDate,
+    createdAt,
+    updatedAt,
+  ];
 
   UserStats copyWith({
     String? userId,
@@ -85,46 +85,68 @@ class UserStats extends Equatable {
     final currentLevel = calculateLevel(totalPoints);
     final currentLevelMinPoints = _getLevelMinPoints(currentLevel);
     final nextLevelMinPoints = _getLevelMinPoints(currentLevel + 1);
-    
+
     if (currentLevel >= 10) return 1.0; // Level maksimum
-    
+
     final pointsInCurrentLevel = totalPoints - currentLevelMinPoints;
     final pointsNeededForNextLevel = nextLevelMinPoints - currentLevelMinPoints;
-    
+
     return pointsInCurrentLevel / pointsNeededForNextLevel;
   }
 
   /// Mendapatkan poin minimum untuk level tertentu
   static int _getLevelMinPoints(int level) {
     switch (level) {
-      case 1: return 0;
-      case 2: return 100;
-      case 3: return 250;
-      case 4: return 500;
-      case 5: return 1000;
-      case 6: return 2000;
-      case 7: return 5000;
-      case 8: return 10000;
-      case 9: return 20000;
-      case 10: return 50000;
-      default: return 50000; // Level maksimum
+      case 1:
+        return 0;
+      case 2:
+        return 100;
+      case 3:
+        return 250;
+      case 4:
+        return 500;
+      case 5:
+        return 1000;
+      case 6:
+        return 2000;
+      case 7:
+        return 5000;
+      case 8:
+        return 10000;
+      case 9:
+        return 20000;
+      case 10:
+        return 50000;
+      default:
+        return 50000; // Level maksimum
     }
   }
 
   /// Mendapatkan nama level
   String get levelName {
     switch (currentLevel) {
-      case 1: return 'Pemula';
-      case 2: return 'Kontributor';
-      case 3: return 'Aktif';
-      case 4: return 'Berpengalaman';
-      case 5: return 'Ahli';
-      case 6: return 'Master';
-      case 7: return 'Veteran';
-      case 8: return 'Elite';
-      case 9: return 'Champion';
-      case 10: return 'Legend';
-      default: return 'Unknown';
+      case 1:
+        return 'Pemula';
+      case 2:
+        return 'Kontributor';
+      case 3:
+        return 'Aktif';
+      case 4:
+        return 'Berpengalaman';
+      case 5:
+        return 'Ahli';
+      case 6:
+        return 'Master';
+      case 7:
+        return 'Veteran';
+      case 8:
+        return 'Elite';
+      case 9:
+        return 'Champion';
+      case 10:
+        return 'Legend';
+      default:
+        return 'Unknown';
     }
   }
 

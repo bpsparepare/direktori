@@ -8,7 +8,7 @@ abstract class ContributionRepository {
   /// Mendapatkan ID pengguna yang sedang login
   String? getCurrentUserId();
   // === User Contributions ===
-  
+
   /// Membuat kontribusi baru
   Future<UserContribution> createContribution({
     required String userId,
@@ -38,7 +38,7 @@ abstract class ContributionRepository {
   });
 
   // === User Stats ===
-  
+
   /// Mendapatkan statistik pengguna
   Future<UserStats?> getUserStats(String userId);
 
@@ -46,7 +46,7 @@ abstract class ContributionRepository {
   Future<bool> updateUserStats(String userId);
 
   // === Contribution Summary & Leaderboard ===
-  
+
   /// Mendapatkan ringkasan kontribusi pengguna
   Future<ContributionSummary?> getContributionSummary(String userId);
 
@@ -60,7 +60,7 @@ abstract class ContributionRepository {
   Future<int> getUserRank(String userId);
 
   // === Analytics ===
-  
+
   /// Mendapatkan statistik kontribusi per periode
   Future<Map<String, int>> getContributionStats({
     String? userId,

@@ -84,10 +84,16 @@ class MyApp extends StatelessWidget {
         BlocProvider<ContributionBloc>(
           create: (context) => ContributionBloc(
             repository: contributionRepository,
-            createContributionUseCase: CreateContributionUseCase(contributionRepository),
+            createContributionUseCase: CreateContributionUseCase(
+              contributionRepository,
+            ),
             getUserStatsUseCase: GetUserStatsUseCase(contributionRepository),
-            getUserContributionsUseCase: GetUserContributionsUseCase(contributionRepository),
-            getLeaderboardUseCase: GetLeaderboardUseCase(contributionRepository),
+            getUserContributionsUseCase: GetUserContributionsUseCase(
+              contributionRepository,
+            ),
+            getLeaderboardUseCase: GetLeaderboardUseCase(
+              contributionRepository,
+            ),
           ),
         ),
       ],
