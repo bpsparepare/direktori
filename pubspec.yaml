@@ -93,7 +93,6 @@ flutter:
   assets:
     - assets/geojson/
     - assets/geojson/final_sls.geojson
-    - .env
     - assets/sa/sa-account.json
 
   # To add assets to your application, add an assets section, like this:

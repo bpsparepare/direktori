@@ -1,0 +1,5 @@
+# Ignore all service account and secret files in this folder
+*
+
+# Keep this .gitignore
+!.gitignore

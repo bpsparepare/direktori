@@ -1,14 +1,11 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'env.dart';
 
 class UploadApiConfig {
   /// Base URL of the upload API, e.g., https://api.parepare.stat7300.net
-  static String get baseUrl =>
-      dotenv.env['UPLOAD_API_BASE_URL']?.trim() ??
-      'https://api.parepare.stat7300.net';
+  static String get baseUrl => Env.uploadApiBaseUrl;
 
   /// Upload path, defaults to '/upload' (pretty URL)
-  static String get uploadPath =>
-      dotenv.env['UPLOAD_API_UPLOAD_PATH']?.trim() ?? '/upload';
+  static String get uploadPath => Env.uploadApiUploadPath;
 
   /// Full endpoint URL for upload
   static String get uploadEndpoint {
@@ -23,9 +20,6 @@ class UploadApiConfig {
 
   /// Maximum file size (bytes) — should match server side (10MB default)
   static int get maxFileSizeBytes {
-    final v = dotenv.env['UPLOAD_API_MAX_BYTES'];
-    if (v == null) return 10 * 1024 * 1024;
-    final parsed = int.tryParse(v);
-    return parsed ?? 10 * 1024 * 1024;
+    return Env.uploadApiMaxBytes;
   }
 }

@@ -1,14 +1,12 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'env.dart';
 
 class SupabaseConfig {
-  static String get supabaseUrl => dotenv.env['SUPABASE_URL'] ?? '';
-  static String get supabaseAnonKey => dotenv.env['SUPABASE_ANON_KEY'] ?? '';
-  static String get googleClientId => dotenv.env['GOOGLE_CLIENT_ID'] ?? '';
+  static String get supabaseUrl => Env.supabaseUrl;
+  static String get supabaseAnonKey => Env.supabaseAnonKey;
+  static String get googleClientId => Env.googleClientId;
 
   static Future<void> initialize() async {
-    await dotenv.load(fileName: ".env");
-
     await Supabase.initialize(
       url: supabaseUrl,
       anonKey: supabaseAnonKey,

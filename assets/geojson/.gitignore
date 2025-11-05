@@ -1,0 +1,7 @@
+# Ignore GeoJSON and backup files in this assets folder
+*.geojson
+*.JSON
+*.bak
+
+# Keep this .gitignore
+!.gitignore
