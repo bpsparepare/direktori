@@ -22,7 +22,8 @@ import '../../domain/usecases/get_all_polygons_meta_from_geojson.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 
 class MainPage extends StatefulWidget {
-  const MainPage({super.key});
+  final int? initialTabIndex;
+  const MainPage({super.key, this.initialTabIndex});
 
   @override
   State<MainPage> createState() => _MainPageState();
@@ -31,6 +32,7 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   int _selectedIndex = 0;
   late MapController _sharedMapController; // Add shared MapController
+  bool _handledFocusArgs = false; // Ensure focus-by-args runs once
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   List<Place> _searchResults = [];
@@ -43,7 +45,69 @@ class _MainPageState extends State<MainPage> {
   void initState() {
     super.initState();
     _sharedMapController = MapController();
+    _selectedIndex = widget.initialTabIndex ?? 0;
     _loadPlaces();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Read route arguments here (available after build) and focus map once
+    if (!_handledFocusArgs) {
+      _handledFocusArgs = true;
+      _focusDirectoryIfProvided();
+    }
+  }
+
+  void _focusDirectoryIfProvided() async {
+    // Check route settings for focusDirectoryId passed via arguments
+    final args = ModalRoute.of(context)?.settings.arguments;
+    String? focusDirectoryId;
+    if (args is Map && args['focusDirectoryId'] != null) {
+      focusDirectoryId = args['focusDirectoryId']?.toString();
+    }
+
+    if (focusDirectoryId == null || focusDirectoryId.isEmpty) return;
+
+    try {
+      final repo = MapRepositoryImpl();
+      final dir = await repo.getDirectoryById(focusDirectoryId);
+      if (dir == null) {
+        return;
+      }
+      // Ensure map tab is active
+      if (_selectedIndex != 0) {
+        setState(() {
+          _selectedIndex = 0;
+        });
+      }
+
+      if (dir.hasValidCoordinates) {
+        final place = dir.toPlace();
+        // Zoom to the selected place location (similar to MapPage behavior)
+        _sharedMapController.move(place.position, 18.0);
+        if (mounted) {
+          context.read<MapBloc>().add(PlaceSelected(place));
+        }
+      } else {
+        setState(() {
+          _pendingCoordinateDirectory = dir;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Direktori belum memiliki koordinat. Geser peta ke lokasi lalu tekan Simpan.',
+              ),
+              backgroundColor: Colors.blue,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      // Silent fail to avoid disrupting navigation
+    }
   }
 
   void _loadPlaces() async {

@@ -73,4 +73,10 @@ abstract class ContributionRepository {
     int limit = 10,
     String? actionType,
   });
+
+  // === Linking Helpers ===
+  /// Melink kontribusi yang belum punya FK (target_uuid IS NULL)
+  /// ke direktori tertentu berdasarkan nilai `changes->>'target_uuid'`.
+  /// Mengembalikan jumlah baris yang ter-update.
+  Future<int> linkContributionsToDirectory(String directoryId);
 }

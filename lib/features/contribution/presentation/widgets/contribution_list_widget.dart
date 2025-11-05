@@ -5,6 +5,7 @@ import '../../domain/entities/user_contribution.dart';
 import '../bloc/contribution_bloc.dart';
 import '../bloc/contribution_event.dart';
 import '../bloc/contribution_state.dart';
+import '../../../map/presentation/pages/main_page.dart';
 
 /// Widget untuk menampilkan daftar kontribusi pengguna
 class ContributionListWidget extends StatefulWidget {
@@ -35,6 +36,39 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
     if (!widget.isCompact) {
       _scrollController.addListener(_onScroll);
     }
+  }
+
+  String _formatRelativeTime(DateTime createdAt, [String? timestampStr]) {
+    DateTime base = createdAt;
+    if (timestampStr != null && timestampStr.isNotEmpty) {
+      try {
+        base = DateTime.parse(timestampStr);
+      } catch (_) {
+        // ignore parse error, fallback to createdAt
+      }
+    }
+
+    final now = DateTime.now();
+    final diff = now.difference(base);
+
+    if (diff.inSeconds < 60) {
+      return 'baru saja';
+    }
+    if (diff.inMinutes < 60) {
+      return '${diff.inMinutes} menit lalu';
+    }
+    if (diff.inHours < 24) {
+      return '${diff.inHours} jam lalu';
+    }
+    if (diff.inDays < 30) {
+      return '${diff.inDays} hari lalu';
+    }
+    final months = diff.inDays ~/ 30;
+    if (months < 12) {
+      return '$months bulan lalu';
+    }
+    final years = diff.inDays ~/ 365;
+    return '$years tahun lalu';
   }
 
   @override
@@ -150,56 +184,198 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
     BuildContext context,
     UserContribution contribution,
   ) {
+    final changes = contribution.changes ?? {};
+    final namaUsaha = (changes['nama_usaha']?.toString() ?? '').trim();
+    final alamat = (changes['alamat']?.toString() ?? '').trim();
+    final waktuLabel = _formatRelativeTime(
+      contribution.createdAt,
+      changes['timestamp']?.toString(),
+    );
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: _buildActionIcon(contribution.actionType),
-        title: Text(
-          _getActionTitle(contribution.actionType, contribution.targetType),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Target: ${contribution.targetId}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                _buildStatusChip(contribution.status),
-                const SizedBox(width: 8),
-                Text(
-                  _dateFormat.format(contribution.createdAt),
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+      child: InkWell(
+        onTap: () => _openMapForContribution(context, contribution),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildActionIcon(contribution.actionType),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      namaUsaha.isNotEmpty
+                          ? namaUsaha
+                          : _getActionTitle(
+                              contribution.actionType,
+                              contribution.targetType,
+                            ),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                    if (alamat.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child: Text(
+                          alamat,
+                          style: const TextStyle(fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
+                        ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.access_time,
+                            size: 14,
+                            color: Colors.grey[700],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            waktuLabel,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ],
-        ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              '+${contribution.points}',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: Colors.green[700],
-                fontWeight: FontWeight.bold,
               ),
-            ),
-            Text(
-              'poin',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-            ),
-          ],
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '+${contribution.points}',
+                    style: TextStyle(
+                      color: Colors.green[700],
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Text(
+                    'poin',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 6),
+                  _buildStatusChip(contribution.status),
+                ],
+              ),
+            ],
+          ),
         ),
-        onTap: () => _showContributionDetails(context, contribution),
       ),
     );
+  }
+
+  void _openMapForContribution(
+    BuildContext context,
+    UserContribution c,
+  ) {
+    final dirId = _extractDirectoryId(c);
+    if (dirId == null || dirId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tidak ada direktori.id terkait kontribusi ini'),
+        ),
+      );
+      return;
+    }
+
+    // Navigasi ke halaman utama peta dan fokus pada direktori tersebut
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const MainPage(
+          initialTabIndex: 0,
+        ),
+        settings: RouteSettings(arguments: {'focusDirectoryId': dirId}),
+      ),
+    );
+  }
+
+  String? _extractDirectoryId(UserContribution c) {
+    // Prioritas: targetId (langsung), fallback ke changes['target_uuid']
+    final targetId = c.targetId;
+    if (targetId.isNotEmpty) return targetId;
+    final changes = c.changes;
+    final fromChanges = changes != null ? changes['target_uuid']?.toString() : null;
+    return fromChanges;
+  }
+
+  /// Menampilkan ringkasan isi `changes` (contoh: nama_usaha, alamat, koordinat, timestamp, target_uuid)
+  Widget _buildChangesPreview(
+    BuildContext context,
+    Map<String, dynamic> changes,
+  ) {
+    final namaUsaha = changes['nama_usaha']?.toString();
+    final alamat = changes['alamat']?.toString();
+    final lat = changes['latitude'];
+    final lng = changes['longitude'];
+    final timestampStr = changes['timestamp']?.toString();
+    final targetUuid = changes['target_uuid']?.toString();
+
+    String? coords;
+    if (lat is num && lng is num) {
+      coords =
+          '${lat.toDouble().toStringAsFixed(6)}, ${lng.toDouble().toStringAsFixed(6)}';
+    }
+
+    String? waktu;
+    if (timestampStr != null && timestampStr.isNotEmpty) {
+      try {
+        final dt = DateTime.parse(timestampStr);
+        waktu = _formatRelativeTime(dt);
+      } catch (_) {
+        waktu = timestampStr; // fallback tampilkan apa adanya
+      }
+    }
+
+    final textStyle = Theme.of(context).textTheme.bodySmall;
+    final greyStyle = textStyle?.copyWith(color: Colors.grey[700]);
+
+    final rows = <Widget>[];
+    if (namaUsaha != null && namaUsaha.isNotEmpty) {
+      rows.add(Text('Nama: $namaUsaha', style: textStyle));
+    }
+    if (alamat != null && alamat.isNotEmpty) {
+      rows.add(Text('Alamat: $alamat', style: textStyle));
+    }
+    if (coords != null) {
+      rows.add(Text('Koordinat: $coords', style: greyStyle));
+    }
+    if (waktu != null) {
+      rows.add(Text('Waktu: $waktu', style: greyStyle));
+    }
+    if (targetUuid != null && targetUuid.isNotEmpty) {
+      rows.add(Text('UUID Target: $targetUuid', style: greyStyle));
+    }
+
+    // Jika tidak ada key yang dikenal, tampilkan ringkas seluruh changes
+    if (rows.isEmpty) {
+      rows.add(
+        Text(
+          'Perubahan: ${changes.toString()}',
+          style: textStyle,
+          overflow: TextOverflow.ellipsis,
+          maxLines: 3,
+        ),
+      );
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
   }
 
   Widget _buildActionIcon(String actionType) {

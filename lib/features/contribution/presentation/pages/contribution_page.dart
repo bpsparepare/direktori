@@ -6,7 +6,6 @@ import '../bloc/contribution_state.dart';
 import '../widgets/contribution_stats_widget.dart';
 import '../widgets/contribution_list_widget.dart';
 import '../widgets/leaderboard_widget.dart';
-import '../widgets/contribution_form_widget.dart';
 
 /// Halaman utama untuk fitur kontribusi
 class ContributionPage extends StatefulWidget {
@@ -142,19 +141,5 @@ class _ContributionPageState extends State<ContributionPage>
     );
   }
 
-  void _showContributionForm(BuildContext context, {String? actionType}) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: ContributionFormWidget(),
-      ),
-    );
-  }
+  // Form kontribusi dinonaktifkan sesuai keputusan; helper dihapus.
 }

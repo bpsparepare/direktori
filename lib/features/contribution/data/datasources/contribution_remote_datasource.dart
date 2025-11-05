@@ -31,6 +31,10 @@ abstract class ContributionRemoteDataSource {
     DateTime? startDate,
     DateTime? endDate,
   });
+
+  /// Link kontribusi yang belum punya target_uuid ke direktori berdasarkan changes->>'target_uuid'.
+  /// Return jumlah baris yang ter-update.
+  Future<int> linkContributionsToDirectory(String directoryId);
 }
 
 /// Implementasi remote data source menggunakan Supabase
@@ -213,4 +217,29 @@ class ContributionRemoteDataSourceImpl implements ContributionRemoteDataSource {
 
   /// Helper method untuk check apakah user sudah login
   bool get isUserLoggedIn => _supabaseClient.auth.currentUser != null;
+
+  @override
+  Future<int> linkContributionsToDirectory(String directoryId) async {
+    try {
+      // Update baris yang belum memiliki target_uuid, tapi memiliki changes->>'target_uuid' = directoryId
+      final response = await _supabaseClient
+          .from('direktori_user_contributions')
+          .update({
+            'target_uuid': directoryId,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          // Filter null menggunakan operator 'is' agar kompatibel lintas versi
+          .filter('target_uuid', 'is', null)
+          .filter('changes->>target_uuid', 'eq', directoryId)
+          .select();
+
+      // Supabase Postgrest mengembalikan array baris yang diupdate
+      final updatedCount = (response as List).length;
+      print('🔗 [DATASOURCE] Linked $updatedCount contributions to directory $directoryId');
+      return updatedCount;
+    } catch (e) {
+      print('❌ [DATASOURCE] Failed to link contributions: $e');
+      throw Exception('Failed to link contributions: $e');
+    }
+  }
 }

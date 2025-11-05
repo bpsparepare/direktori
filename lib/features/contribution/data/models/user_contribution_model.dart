@@ -19,14 +19,24 @@ class UserContributionModel extends UserContribution {
 
   /// Factory constructor dari JSON
   factory UserContributionModel.fromJson(Map<String, dynamic> json) {
+    // Denormalisasi agar nilai yang dibaca dari DB konsisten dengan label UI
+    final dbActionType = (json['action_type'] as String?) ?? '';
+    final dbTargetType = (json['target_type'] as String?) ?? '';
+    // Prefer target_uuid (uuid) jika tersedia, fallback ke target_id (bigint)
+    final rawTargetUuid = json['target_uuid'];
+    final rawTargetId = json['target_id'];
+    final parsedTargetIdString = rawTargetUuid != null
+        ? rawTargetUuid.toString()
+        : (rawTargetId != null ? rawTargetId.toString() : '');
+
     return UserContributionModel(
       // id di DB bertipe BIGSERIAL (integer), konversi ke String
       id: json['id']?.toString() ?? '',
       userId: json['user_id'] as String,
-      actionType: json['action_type'] as String,
-      targetType: json['target_type'] as String,
-      // target_id di DB bertipe BIGINT (integer), konversi ke String jika ada
-      targetId: json['target_id'] != null ? json['target_id'].toString() : '',
+      actionType: _denormalizeActionType(dbActionType),
+      targetType: _denormalizeTargetType(dbTargetType),
+      // Gunakan target_uuid (uuid) bila ada; jika tidak, gunakan target_id (bigint)
+      targetId: parsedTargetIdString,
       changes: json['changes'] as Map<String, dynamic>?,
       points: json['points_earned'] as int,
       status: json['status'] as String,
@@ -43,13 +53,15 @@ class UserContributionModel extends UserContribution {
     final normalizedActionType = _normalizeActionType(actionType);
     final normalizedTargetType = _normalizeTargetType(targetType);
     final parsedTargetId = _parseTargetId(targetId);
+    final parsedTargetUuid = _parseTargetUuid(targetId);
 
     final Map<String, dynamic> data = {
       // Jangan kirim 'id' jika kosong; biarkan DB generate (BIGSERIAL)
       'user_id': userId,
       'action_type': normalizedActionType,
       'target_type': normalizedTargetType,
-      // target_id bertipe BIGINT di DB; hanya kirim jika bisa diparse ke int
+      // Kirim kedua kolom: target_uuid (uuid) bila format UUID, target_id (bigint) bila angka
+      'target_uuid': parsedTargetUuid,
       'target_id': parsedTargetId,
       'changes': changes,
       'points_earned': points,
@@ -138,12 +150,23 @@ class UserContributionModel extends UserContribution {
   // Helper: normalisasi action type agar sesuai CHECK constraint DB
   static String _normalizeActionType(String actionType) {
     switch (actionType) {
+      case 'create':
+        return 'add';
+      case 'update':
+        return 'edit';
+      case 'verify':
+        // Tidak ada nilai 'verify' di DB, gunakan 'edit' sebagai representasi
+        return 'edit';
       case 'add_location':
         return 'add';
       case 'edit_location':
         return 'edit';
       case 'delete_location':
         return 'delete';
+      case 'add':
+      case 'edit':
+      case 'delete':
+        return actionType;
       default:
         return actionType; // fallback: kirim apa adanya
     }
@@ -154,6 +177,10 @@ class UserContributionModel extends UserContribution {
     switch (targetType) {
       case 'directory':
         return 'direktori';
+      case 'business':
+        return 'direktori';
+      case 'location':
+        return 'wilayah';
       default:
         return targetType;
     }
@@ -163,5 +190,39 @@ class UserContributionModel extends UserContribution {
   static int? _parseTargetId(String targetId) {
     if (targetId.isEmpty) return null;
     return int.tryParse(targetId);
+  }
+
+  // Helper: parse target_uuid bila string tampak seperti UUID v4
+  static String? _parseTargetUuid(String targetId) {
+    if (targetId.isEmpty) return null;
+    // Sederhana: jika mengandung 4 tanda '-' dan panjang tipikal 36, asumsikan UUID
+    final isLikelyUuid = targetId.length == 36 && targetId.split('-').length == 5;
+    return isLikelyUuid ? targetId : null;
+  }
+
+  // Helper: denormalisasi action type dari DB ke label UI
+  static String _denormalizeActionType(String dbActionType) {
+    switch (dbActionType) {
+      case 'add':
+        return 'create';
+      case 'edit':
+        return 'update';
+      case 'delete':
+        return 'delete';
+      default:
+        return dbActionType;
+    }
+  }
+
+  // Helper: denormalisasi target type dari DB ke label UI
+  static String _denormalizeTargetType(String dbTargetType) {
+    switch (dbTargetType) {
+      case 'direktori':
+        return 'direktori';
+      case 'wilayah':
+        return 'location';
+      default:
+        return dbTargetType;
+    }
   }
 }

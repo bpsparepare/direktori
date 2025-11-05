@@ -240,16 +240,14 @@ class ContributionRepositoryImpl implements ContributionRepository {
 
   /// Helper method untuk menghitung poin berdasarkan jenis aksi
   int _calculatePoints(String actionType) {
+    // Hanya pertahankan aksi yang aktif dipakai di UI saat ini
     switch (actionType) {
       case 'add_location':
         return 10;
       case 'edit_location':
         return 5;
-      case 'verify_location':
-        return 3;
-      case 'report_issue':
-        return 2;
       default:
+        // Fallback untuk aksi lain yang tidak didukung/ tidak digunakan
         return 1;
     }
   }
@@ -261,5 +259,15 @@ class ContributionRepositoryImpl implements ContributionRepository {
           .isUserLoggedIn;
     }
     return false;
+  }
+
+  @override
+  Future<int> linkContributionsToDirectory(String directoryId) async {
+    try {
+      final count = await _remoteDataSource.linkContributionsToDirectory(directoryId);
+      return count;
+    } catch (e) {
+      throw Exception('Failed to link contributions to directory: $e');
+    }
   }
 }
