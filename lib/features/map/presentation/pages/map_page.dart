@@ -5215,10 +5215,33 @@ class MapPage extends StatelessWidget {
       uri ??= Uri.parse(
         'https://www.google.com/maps/search/?api=1&query=${place.position.latitude},${place.position.longitude}',
       );
+      // Coba buka melalui aplikasi eksternal terlebih dahulu.
+      // Jika gagal, fallback ke browser (platform default).
+      bool launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
 
-      final can = await canLaunchUrl(uri);
-      if (can) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        // Jika tetap gagal, coba buka dengan mode default (browser/webview).
+        launched = await launchUrl(
+          uri,
+          mode: LaunchMode.platformDefault,
+        );
+      }
+
+      if (!launched) {
+        // Fallback terakhir: paksa URL pencarian Google Maps berbasis lat/lng.
+        final fallbackUrl = Uri.parse(
+          'https://maps.google.com/?q=${place.position.latitude},${place.position.longitude}',
+        );
+        launched = await launchUrl(
+          fallbackUrl,
+          mode: LaunchMode.platformDefault,
+        );
+      }
+
+      if (launched) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Membuka Google Maps'),
