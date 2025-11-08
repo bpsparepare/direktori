@@ -6,6 +6,8 @@ import '../bloc/contribution_state.dart';
 import '../widgets/contribution_stats_widget.dart';
 import '../widgets/contribution_list_widget.dart';
 import '../widgets/leaderboard_widget.dart';
+import 'contribution_history_page.dart';
+import 'leaderboard_page.dart';
 
 /// Halaman utama untuk fitur kontribusi
 class ContributionPage extends StatefulWidget {
@@ -15,22 +17,21 @@ class ContributionPage extends StatefulWidget {
   State<ContributionPage> createState() => _ContributionPageState();
 }
 
-class _ContributionPageState extends State<ContributionPage>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
+class _ContributionPageState extends State<ContributionPage> {
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-
-    // Load initial data
-    context.read<ContributionBloc>().add(const GetUserContributionsEvent());
+    // Load initial data for summary: stats and recent contributions
+    context.read<ContributionBloc>().add(const GetUserStatsEvent());
+    // Ambil hanya 5 kontribusi terbaru untuk ringkasan
+    context.read<ContributionBloc>().add(
+      const GetUserContributionsEvent(limit: 5),
+    );
+    context.read<ContributionBloc>().add(const GetUserRankEvent());
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -56,8 +57,8 @@ class _ContributionPageState extends State<ContributionPage>
           }
         },
         builder: (context, state) {
-          // Tampilkan hanya Riwayat kontribusi
-          return _buildHistoryTab(state);
+          // Tampilkan ringkasan pribadi (stats + sebagian history)
+          return _buildDashboardTab(state);
         },
       ),
     );
@@ -76,8 +77,18 @@ class _ContributionPageState extends State<ContributionPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Stats Widget
-            const ContributionStatsWidget(),
+            // Stats Widget (dengan tombol Leaderboard di header)
+            ContributionStatsWidget(
+              onViewLeaderboard: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const LeaderboardPage()),
+                );
+                // Pastikan daftar ringkas kembali ke 5 teratas setelah kembali
+                context.read<ContributionBloc>().add(
+                  const GetUserContributionsEvent(limit: 5),
+                );
+              },
+            ),
 
             const SizedBox(height: 24),
 
@@ -96,7 +107,17 @@ class _ContributionPageState extends State<ContributionPage>
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         TextButton(
-                          onPressed: () => _tabController.animateTo(1),
+                          onPressed: () async {
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const ContributionHistoryPage(),
+                              ),
+                            );
+                            // Refresh kembali daftar ringkas 5 item
+                            context.read<ContributionBloc>().add(
+                              const GetUserContributionsEvent(limit: 5),
+                            );
+                          },
                           child: const Text('Lihat Semua'),
                         ),
                       ],
@@ -109,8 +130,6 @@ class _ContributionPageState extends State<ContributionPage>
             ),
 
             const SizedBox(height: 24),
-
-            // (Aksi Cepat dihapus sesuai permintaan)
           ],
         ),
       ),

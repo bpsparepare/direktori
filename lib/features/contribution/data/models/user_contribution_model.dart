@@ -163,6 +163,30 @@ class UserContributionModel extends UserContribution {
         return 'edit';
       case 'delete_location':
         return 'delete';
+      // Pemetaan actionType baru ke nilai yang diizinkan DB
+      case 'set_first_coordinates':
+      case 'update_coordinates_major':
+      case 'update_coordinates_minor':
+        return 'edit';
+      case 'confirm_closed':
+      case 'confirm_not_found':
+      case 'confirm_open':
+      case 'confirm_uncertain':
+        return 'edit';
+      case 'add_directory_manual':
+      case 'add_directory_scrape':
+        return 'add';
+      case 'scrape_update_status':
+        return 'edit';
+      case 'add_kbli':
+      case 'update_kbli':
+      case 'add_description':
+      case 'update_description':
+      case 'add_address':
+      case 'update_address':
+      case 'add_photo':
+      case 'update_photo':
+        return 'edit';
       case 'add':
       case 'edit':
       case 'delete':

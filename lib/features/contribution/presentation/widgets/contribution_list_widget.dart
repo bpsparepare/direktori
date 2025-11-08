@@ -94,6 +94,11 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<ContributionBloc, ContributionState>(
+      buildWhen: (previous, current) =>
+          current is ContributionLoading ||
+          current is ContributionLoaded ||
+          current is ContributionEmpty ||
+          current is ContributionError,
       builder: (context, state) {
         if (state is ContributionLoading) {
           return const Center(child: CircularProgressIndicator());
@@ -128,15 +133,22 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
           );
         }
 
-        List<UserContribution> contributions = [];
-
-        if (state is ContributionLoaded) {
-          contributions = state.contributions;
-        } else if (state is ContributionEmpty) {
+        if (state is ContributionEmpty) {
           return _buildEmptyState();
         }
 
-        if (contributions.isEmpty) {
+        if (state is! ContributionLoaded) {
+          // Pada state awal atau state non-kontribusi, tampilkan loader agar tidak terlihat kosong
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final List<UserContribution> contributions = state.contributions;
+        final List<UserContribution> displayContributions =
+            (widget.limit != null && contributions.isNotEmpty)
+            ? contributions.take(widget.limit!).toList()
+            : contributions;
+
+        if (displayContributions.isEmpty) {
           return _buildEmptyState();
         }
 
@@ -146,9 +158,9 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
           physics: widget.isCompact
               ? const NeverScrollableScrollPhysics()
               : const AlwaysScrollableScrollPhysics(),
-          itemCount: contributions.length,
+          itemCount: displayContributions.length,
           itemBuilder: (context, index) {
-            final contribution = contributions[index];
+            final contribution = displayContributions[index];
             return _buildContributionCard(context, contribution);
           },
         );
@@ -280,10 +292,7 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
     );
   }
 
-  void _openMapForContribution(
-    BuildContext context,
-    UserContribution c,
-  ) {
+  void _openMapForContribution(BuildContext context, UserContribution c) {
     final dirId = _extractDirectoryId(c);
     if (dirId == null || dirId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -298,9 +307,7 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const MainPage(
-          initialTabIndex: 0,
-        ),
+        builder: (_) => const MainPage(initialTabIndex: 0),
         settings: RouteSettings(arguments: {'focusDirectoryId': dirId}),
       ),
     );
@@ -311,7 +318,9 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
     final targetId = c.targetId;
     if (targetId.isNotEmpty) return targetId;
     final changes = c.changes;
-    final fromChanges = changes != null ? changes['target_uuid']?.toString() : null;
+    final fromChanges = changes != null
+        ? changes['target_uuid']?.toString()
+        : null;
     return fromChanges;
   }
 

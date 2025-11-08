@@ -54,6 +54,7 @@ abstract class ContributionRepository {
   Future<List<LeaderboardEntry>> getLeaderboard({
     int limit = 10,
     int offset = 0,
+    String period = 'monthly',
   });
 
   /// Mendapatkan ranking pengguna

@@ -39,6 +39,16 @@ class CreateContributionEvent extends ContributionEvent {
   ];
 }
 
+/// Event untuk menautkan (link) kontribusi ke direktori berdasarkan UUID
+class LinkContributionsToDirectoryEvent extends ContributionEvent {
+  final String directoryId;
+
+  const LinkContributionsToDirectoryEvent({required this.directoryId});
+
+  @override
+  List<Object?> get props => [directoryId];
+}
+
 /// Event untuk mendapatkan kontribusi pengguna
 class GetUserContributionsEvent extends ContributionEvent {
   final String? userId;

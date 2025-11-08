@@ -30,6 +30,7 @@ class ContributionBloc extends Bloc<ContributionEvent, ContributionState> {
        super(const ContributionInitial()) {
     // Register event handlers
     on<CreateContributionEvent>(_onCreateContribution);
+    on<LinkContributionsToDirectoryEvent>(_onLinkContributionsToDirectory);
     on<GetUserContributionsEvent>(_onGetUserContributions);
     on<UpdateContributionStatusEvent>(_onUpdateContributionStatus);
     on<GetUserStatsEvent>(_onGetUserStats);
@@ -95,8 +96,8 @@ class ContributionBloc extends Bloc<ContributionEvent, ContributionState> {
       // Refresh data after creating contribution
       print('🔄 [BLOC] Memperbarui data kontribusi...');
       add(const RefreshAllContributionDataEvent());
-    } catch (e) {
-      print('❌ [BLOC] Gagal membuat kontribusi: $e');
+    } catch (e, st) {
+      _logError('CreateContribution', e, st);
       emit(
         ContributionError(message: 'Gagal membuat kontribusi: ${e.toString()}'),
       );
@@ -135,8 +136,8 @@ class ContributionBloc extends Bloc<ContributionEvent, ContributionState> {
       print('✅ [BLOC] Berhasil mengambil ${contributions.length} kontribusi');
 
       emit(ContributionLoaded(contributions: contributions));
-    } catch (e) {
-      print('❌ [BLOC] Gagal mengambil kontribusi: $e');
+    } catch (e, st) {
+      _logError('GetUserContributions', e, st);
       emit(
         ContributionError(message: 'Gagal memuat kontribusi: ${e.toString()}'),
       );
@@ -182,7 +183,8 @@ class ContributionBloc extends Bloc<ContributionEvent, ContributionState> {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, st) {
+      _logError('UpdateContributionStatus', e, st);
       emit(
         ContributionError(message: 'Gagal memperbarui status: ${e.toString()}'),
       );
@@ -212,7 +214,8 @@ class ContributionBloc extends Bloc<ContributionEvent, ContributionState> {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, st) {
+      _logError('GetUserStats', e, st);
       emit(
         ContributionError(message: 'Gagal memuat statistik: ${e.toString()}'),
       );
@@ -233,7 +236,8 @@ class ContributionBloc extends Bloc<ContributionEvent, ContributionState> {
 
       // Get updated stats
       add(GetUserStatsEvent(userId: userId));
-    } catch (e) {
+    } catch (e, st) {
+      _logError('RefreshUserStats', e, st);
       emit(
         ContributionError(message: 'Gagal refresh statistik: ${e.toString()}'),
       );
@@ -249,10 +253,12 @@ class ContributionBloc extends Bloc<ContributionEvent, ContributionState> {
       final leaderboard = await _getLeaderboardUseCase(
         limit: event.limit,
         offset: event.offset,
+        period: event.period,
       );
 
       emit(LeaderboardLoaded(leaderboard: leaderboard, period: event.period));
-    } catch (e) {
+    } catch (e, st) {
+      _logError('GetLeaderboard', e, st);
       emit(
         ContributionError(message: 'Gagal memuat leaderboard: ${e.toString()}'),
       );
@@ -273,7 +279,8 @@ class ContributionBloc extends Bloc<ContributionEvent, ContributionState> {
 
       final rank = await _repository.getUserRank(userId);
       emit(UserRankLoaded(rank: rank));
-    } catch (e) {
+    } catch (e, st) {
+      _logError('GetUserRank', e, st);
       emit(ContributionError(message: 'Gagal memuat ranking: ${e.toString()}'));
     }
   }
@@ -293,7 +300,8 @@ class ContributionBloc extends Bloc<ContributionEvent, ContributionState> {
       );
 
       emit(ContributionStatsLoaded(stats: stats));
-    } catch (e) {
+    } catch (e, st) {
+      _logError('GetContributionStats', e, st);
       emit(
         ContributionError(message: 'Gagal memuat statistik: ${e.toString()}'),
       );
@@ -312,7 +320,8 @@ class ContributionBloc extends Bloc<ContributionEvent, ContributionState> {
       );
 
       emit(ContributionLoaded(contributions: contributions));
-    } catch (e) {
+    } catch (e, st) {
+      _logError('GetRecentContributions', e, st);
       emit(
         ContributionError(
           message: 'Gagal memuat kontribusi terbaru: ${e.toString()}',
@@ -366,6 +375,28 @@ class ContributionBloc extends Bloc<ContributionEvent, ContributionState> {
       debugPrint('ContributionBloc: _onRefreshAllData error: $e');
       debugPrintStack(label: 'ContributionBloc stack', stackTrace: st);
       emit(ContributionError(message: 'Gagal refresh data1: ${e.toString()}'));
+    }
+  }
+
+  // Helper untuk logging error terstruktur
+  void _logError(String scope, Object error, StackTrace stack) {
+    debugPrint('❌ [BLOC] $scope error: $error');
+    debugPrintStack(label: 'ContributionBloc $scope stack', stackTrace: stack);
+  }
+
+  /// Handler untuk menautkan kontribusi ke direktori berdasarkan UUID
+  Future<void> _onLinkContributionsToDirectory(
+    LinkContributionsToDirectoryEvent event,
+    Emitter<ContributionState> emit,
+  ) async {
+    try {
+      debugPrint('🔗 [BLOC] LinkContributionsToDirectoryEvent: ${event.directoryId}');
+      final count = await _repository.linkContributionsToDirectory(event.directoryId);
+      debugPrint('🔗 [BLOC] Linked $count contributions to directory ${event.directoryId}');
+      // No state change required; this is a background reconciliation step.
+    } catch (e, st) {
+      _logError('LinkContributionsToDirectory', e, st);
+      // Keep UX stable; do not emit error state for background linking.
     }
   }
 }

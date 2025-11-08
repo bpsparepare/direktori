@@ -6,24 +6,42 @@ import '../bloc/contribution_event.dart';
 import '../bloc/contribution_state.dart';
 
 /// Widget untuk menampilkan statistik kontribusi pengguna
-class ContributionStatsWidget extends StatelessWidget {
-  const ContributionStatsWidget({super.key});
+class ContributionStatsWidget extends StatefulWidget {
+  const ContributionStatsWidget({super.key, this.onViewLeaderboard});
+
+  /// Aksi opsional untuk membuka halaman leaderboard dari header stats
+  final VoidCallback? onViewLeaderboard;
+
+  @override
+  State<ContributionStatsWidget> createState() =>
+      _ContributionStatsWidgetState();
+}
+
+class _ContributionStatsWidgetState extends State<ContributionStatsWidget> {
+  UserStats? _cachedStats;
+  int? _cachedRank;
 
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<ContributionBloc, ContributionState>(
+      buildWhen: (previous, current) {
+        // Rebuild hanya saat stats/rank berubah untuk mengurangi flicker
+        return current is ContributionLoaded ||
+            current is UserStatsLoaded ||
+            current is UserRankLoaded;
+      },
       builder: (context, state) {
-        UserStats? userStats;
-        int? userRank;
-
         if (state is ContributionLoaded) {
-          userStats = state.userStats;
-          userRank = state.userRank;
+          _cachedStats = state.userStats ?? _cachedStats;
+          _cachedRank = state.userRank ?? _cachedRank;
         } else if (state is UserStatsLoaded) {
-          userStats = state.userStats;
+          _cachedStats = state.userStats;
         } else if (state is UserRankLoaded) {
-          userRank = state.rank;
+          _cachedRank = state.rank;
         }
+
+        final userStats = _cachedStats;
+        final userRank = _cachedRank;
 
         if (userStats == null) {
           return Card(
@@ -56,29 +74,40 @@ class ContributionStatsWidget extends StatelessWidget {
                       'Statistik Saya',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.refresh),
-                      onPressed: () {
-                        context.read<ContributionBloc>().add(
-                          const RefreshUserStatsEvent(),
-                        );
-                      },
+                    Row(
+                      children: [
+                        if (widget.onViewLeaderboard != null)
+                          IconButton(
+                            tooltip: 'Lihat Leaderboard',
+                            icon: const Icon(Icons.leaderboard),
+                            onPressed: widget.onViewLeaderboard,
+                          ),
+                        IconButton(
+                          tooltip: 'Refresh Statistik',
+                          icon: const Icon(Icons.refresh),
+                          onPressed: () {
+                            context.read<ContributionBloc>().add(
+                              const RefreshUserStatsEvent(),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
 
-                // Level and Progress
+                // Level dan Progress
                 _buildLevelSection(context, userStats),
 
                 const SizedBox(height: 20),
 
-                // Stats Grid
+                // Grid Statistik (termasuk Ranking)
                 _buildStatsGrid(context, userStats, userRank),
 
                 const SizedBox(height: 20),
 
-                // Streak Section
+                // Streak
                 _buildStreakSection(context, userStats),
               ],
             ),

@@ -25,6 +25,7 @@ abstract class ContributionRemoteDataSource {
   Future<List<LeaderboardEntryModel>> getLeaderboard({
     int limit = 10,
     int offset = 0,
+    String period = 'monthly',
   });
   Future<Map<String, dynamic>> getContributionAnalytics(
     String userId, {
@@ -174,12 +175,13 @@ class ContributionRemoteDataSourceImpl implements ContributionRemoteDataSource {
   Future<List<LeaderboardEntryModel>> getLeaderboard({
     int limit = 10,
     int offset = 0,
+    String period = 'monthly',
   }) async {
     try {
       // Menggunakan RPC function untuk leaderboard
       final response = await _supabaseClient.rpc(
         'get_leaderboard',
-        params: {'p_limit': limit, 'p_offset': offset},
+        params: {'p_limit': limit, 'p_offset': offset, 'p_period': period},
       );
 
       return response
@@ -235,7 +237,9 @@ class ContributionRemoteDataSourceImpl implements ContributionRemoteDataSource {
 
       // Supabase Postgrest mengembalikan array baris yang diupdate
       final updatedCount = (response as List).length;
-      print('🔗 [DATASOURCE] Linked $updatedCount contributions to directory $directoryId');
+      print(
+        '🔗 [DATASOURCE] Linked $updatedCount contributions to directory $directoryId',
+      );
       return updatedCount;
     } catch (e) {
       print('❌ [DATASOURCE] Failed to link contributions: $e');
