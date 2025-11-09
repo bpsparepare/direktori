@@ -233,7 +233,30 @@ class _MainPageState extends State<MainPage> {
                                 color: Colors.red,
                               ),
                               title: Text(place.name),
-                              subtitle: Text(place.description),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(place.description),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: const [
+                                      Icon(
+                                        Icons.auto_awesome,
+                                        size: 14,
+                                        color: Colors.deepPurple,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Sumber: Scraping',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.deepPurple,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                               trailing: const Icon(
                                 Icons.map,
                                 color: Colors.green,
@@ -272,6 +295,23 @@ class _MainPageState extends State<MainPage> {
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  Row(
+                                    children: const [
+                                      Icon(
+                                        Icons.dataset,
+                                        size: 14,
+                                        color: Colors.orange,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Sumber: Direktori',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.orange,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                   if (directory.alamat != null)
                                     Text(
                                       directory.alamat!,
@@ -304,26 +344,7 @@ class _MainPageState extends State<MainPage> {
                                 size: 16,
                               ),
                               onTap: () {
-                                // Close bottom sheet
-                                Navigator.pop(context);
-                                // Switch to map tab and enable Add Coordinate mode
-                                setState(() {
-                                  _selectedIndex = 0;
-                                  _pendingCoordinateDirectory = directory;
-                                });
-                                // Inform user how to use the mode
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Geser peta untuk menentukan posisi pusat, lalu tekan Simpan.',
-                                    ),
-                                    backgroundColor: Colors.blue,
-                                    duration: const Duration(seconds: 3),
-                                  ),
-                                );
-                                // Clear search and unfocus
-                                _searchController.clear();
-                                _searchFocusNode.unfocus();
+                                _promptKeberadaanForDirectory(directory);
                               },
                             );
                           }
@@ -334,6 +355,202 @@ class _MainPageState extends State<MainPage> {
           ),
         ),
       ),
+    );
+  }
+
+  void _promptKeberadaanForDirectory(DirektoriModel directory) async {
+    int selected = directory.keberadaanUsaha ?? 1;
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Pilih Status Keberadaan'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RadioListTile<int>(
+                      title: const Text('Aktif'),
+                      value: 1,
+                      groupValue: selected,
+                      onChanged: (val) =>
+                          setStateDialog(() => selected = val ?? 1),
+                    ),
+                    RadioListTile<int>(
+                      title: const Text('Tutup Sementara'),
+                      value: 2,
+                      groupValue: selected,
+                      onChanged: (val) =>
+                          setStateDialog(() => selected = val ?? 2),
+                    ),
+                    RadioListTile<int>(
+                      title: const Text('Belum Beroperasi/Berproduksi'),
+                      value: 3,
+                      groupValue: selected,
+                      onChanged: (val) =>
+                          setStateDialog(() => selected = val ?? 3),
+                    ),
+                    RadioListTile<int>(
+                      title: const Text('Tutup'),
+                      value: 4,
+                      groupValue: selected,
+                      onChanged: (val) =>
+                          setStateDialog(() => selected = val ?? 4),
+                    ),
+                    RadioListTile<int>(
+                      title: const Text('Alih Usaha'),
+                      value: 5,
+                      groupValue: selected,
+                      onChanged: (val) =>
+                          setStateDialog(() => selected = val ?? 5),
+                    ),
+                    RadioListTile<int>(
+                      title: const Text('Tidak Ditemukan'),
+                      value: 6,
+                      groupValue: selected,
+                      onChanged: (val) =>
+                          setStateDialog(() => selected = val ?? 6),
+                    ),
+                    RadioListTile<int>(
+                      title: const Text('Aktif Pindah'),
+                      value: 7,
+                      groupValue: selected,
+                      onChanged: (val) =>
+                          setStateDialog(() => selected = val ?? 7),
+                    ),
+                    RadioListTile<int>(
+                      title: const Text('Aktif Nonrespon'),
+                      value: 8,
+                      groupValue: selected,
+                      onChanged: (val) =>
+                          setStateDialog(() => selected = val ?? 8),
+                    ),
+                    RadioListTile<int>(
+                      title: const Text('Duplikat'),
+                      value: 9,
+                      groupValue: selected,
+                      onChanged: (val) =>
+                          setStateDialog(() => selected = val ?? 9),
+                    ),
+                    RadioListTile<int>(
+                      title: const Text('Salah Kode Wilayah'),
+                      value: 10,
+                      groupValue: selected,
+                      onChanged: (val) =>
+                          setStateDialog(() => selected = val ?? 10),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Status saat ini: ${_getKeberadaanUsahaDescription(directory.keberadaanUsaha)}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Batal'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.of(dialogContext).pop();
+                    // Simpan status tanpa lanjut ke tambah koordinat
+                    final repo = MapRepositoryImpl();
+                    final ok = await repo.updateDirectoryStatus(
+                      directory.id,
+                      selected,
+                    );
+                    if (ok) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Status disimpan: ${_getKeberadaanUsahaDescription(selected)}',
+                          ),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Gagal menyimpan status keberadaan.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                    // Tutup bottom sheet hasil pencarian jika terbuka
+                    Navigator.pop(context);
+                    _searchController.clear();
+                    _searchFocusNode.unfocus();
+                  },
+                  child: const Text('Simpan'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.of(dialogContext).pop();
+                    if (selected == 1) {
+                      // Lanjutkan ke mode tambah koordinat seperti sebelumnya
+                      Navigator.pop(
+                        context,
+                      ); // Tutup bottom sheet hasil pencarian
+                      setState(() {
+                        _selectedIndex = 0;
+                        _pendingCoordinateDirectory = directory;
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Geser peta untuk menentukan posisi pusat, lalu tekan Simpan.',
+                          ),
+                          backgroundColor: Colors.blue,
+                          duration: Duration(seconds: 3),
+                        ),
+                      );
+                      _searchController.clear();
+                      _searchFocusNode.unfocus();
+                    } else {
+                      // Update status keberadaan saja
+                      final repo = MapRepositoryImpl();
+                      final ok = await repo.updateDirectoryStatus(
+                        directory.id,
+                        selected,
+                      );
+                      if (ok) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Status diperbarui: ${_getKeberadaanUsahaDescription(selected)}',
+                            ),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Gagal memperbarui status keberadaan.',
+                            ),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                      Navigator.pop(
+                        context,
+                      ); // Tutup bottom sheet hasil pencarian
+                      _searchController.clear();
+                      _searchFocusNode.unfocus();
+                    }
+                  },
+                  child: const Text('Lanjut'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

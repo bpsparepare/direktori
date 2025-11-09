@@ -18,6 +18,7 @@ abstract class ContributionRepository {
     Map<String, dynamic>? changes,
     double? latitude,
     double? longitude,
+    String? operationId,
   });
 
   /// Mendapatkan daftar kontribusi pengguna

@@ -4,6 +4,7 @@ import '../../domain/entities/user_contribution.dart';
 class UserContributionModel extends UserContribution {
   const UserContributionModel({
     required super.id,
+    required super.operationId,
     required super.userId,
     required super.actionType,
     required super.targetType,
@@ -32,6 +33,7 @@ class UserContributionModel extends UserContribution {
     return UserContributionModel(
       // id di DB bertipe BIGSERIAL (integer), konversi ke String
       id: json['id']?.toString() ?? '',
+      operationId: (json['operation_id']?.toString() ?? ''),
       userId: json['user_id'] as String,
       actionType: _denormalizeActionType(dbActionType),
       targetType: _denormalizeTargetType(dbTargetType),
@@ -58,6 +60,8 @@ class UserContributionModel extends UserContribution {
     final Map<String, dynamic> data = {
       // Jangan kirim 'id' jika kosong; biarkan DB generate (BIGSERIAL)
       'user_id': userId,
+      // kirim operation_id hanya bila sudah di-set; jika kosong, biarkan DB default
+      if (operationId.isNotEmpty) 'operation_id': operationId,
       'action_type': normalizedActionType,
       'target_type': normalizedTargetType,
       // Kirim kedua kolom: target_uuid (uuid) bila format UUID, target_id (bigint) bila angka
@@ -84,6 +88,7 @@ class UserContributionModel extends UserContribution {
   factory UserContributionModel.fromEntity(UserContribution entity) {
     return UserContributionModel(
       id: entity.id,
+      operationId: entity.operationId,
       userId: entity.userId,
       actionType: entity.actionType,
       targetType: entity.targetType,
@@ -102,6 +107,7 @@ class UserContributionModel extends UserContribution {
   UserContribution toEntity() {
     return UserContribution(
       id: id,
+      operationId: operationId,
       userId: userId,
       actionType: actionType,
       targetType: targetType,
@@ -119,6 +125,7 @@ class UserContributionModel extends UserContribution {
   /// Copy with method untuk model
   UserContributionModel copyWithModel({
     String? id,
+    String? operationId,
     String? userId,
     String? actionType,
     String? targetType,
@@ -133,6 +140,7 @@ class UserContributionModel extends UserContribution {
   }) {
     return UserContributionModel(
       id: id ?? this.id,
+      operationId: operationId ?? this.operationId,
       userId: userId ?? this.userId,
       actionType: actionType ?? this.actionType,
       targetType: targetType ?? this.targetType,
@@ -220,7 +228,8 @@ class UserContributionModel extends UserContribution {
   static String? _parseTargetUuid(String targetId) {
     if (targetId.isEmpty) return null;
     // Sederhana: jika mengandung 4 tanda '-' dan panjang tipikal 36, asumsikan UUID
-    final isLikelyUuid = targetId.length == 36 && targetId.split('-').length == 5;
+    final isLikelyUuid =
+        targetId.length == 36 && targetId.split('-').length == 5;
     return isLikelyUuid ? targetId : null;
   }
 

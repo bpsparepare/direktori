@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:uuid/uuid.dart';
 import '../../data/repositories/map_repository_impl.dart';
 import '../../data/repositories/scraping_repository_impl.dart';
 import '../../data/models/direktori_model.dart';
@@ -406,10 +407,11 @@ class MapPage extends StatelessWidget {
                                                               const EdgeInsets.all(
                                                                 12,
                                                               ),
-                                                          minimumSize: const Size(
-                                                            48,
-                                                            48,
-                                                          ),
+                                                          minimumSize:
+                                                              const Size(
+                                                                48,
+                                                                48,
+                                                              ),
                                                         ),
                                                         child: const Icon(
                                                           Icons.zoom_in,
@@ -506,7 +508,8 @@ class MapPage extends StatelessWidget {
                                                             }
                                                           } catch (e) {
                                                             // Show error message
-                                                            if (context.mounted) {
+                                                            if (context
+                                                                .mounted) {
                                                               ScaffoldMessenger.of(
                                                                 context,
                                                               ).showSnackBar(
@@ -515,7 +518,8 @@ class MapPage extends StatelessWidget {
                                                                     'Tidak dapat membuka aplikasi navigasi',
                                                                   ),
                                                                   backgroundColor:
-                                                                      Colors.red,
+                                                                      Colors
+                                                                          .red,
                                                                 ),
                                                               );
                                                             }
@@ -530,10 +534,11 @@ class MapPage extends StatelessWidget {
                                                               const EdgeInsets.all(
                                                                 12,
                                                               ),
-                                                          minimumSize: const Size(
-                                                            48,
-                                                            48,
-                                                          ),
+                                                          minimumSize:
+                                                              const Size(
+                                                                48,
+                                                                48,
+                                                              ),
                                                         ),
                                                         child: const Icon(
                                                           Icons.navigation,
@@ -579,7 +584,8 @@ class MapPage extends StatelessWidget {
                                                             }
                                                           } catch (e) {
                                                             // Show error message
-                                                            if (context.mounted) {
+                                                            if (context
+                                                                .mounted) {
                                                               ScaffoldMessenger.of(
                                                                 context,
                                                               ).showSnackBar(
@@ -588,7 +594,8 @@ class MapPage extends StatelessWidget {
                                                                     'Tidak dapat membuka aplikasi navigasi',
                                                                   ),
                                                                   backgroundColor:
-                                                                      Colors.red,
+                                                                      Colors
+                                                                          .red,
                                                                 ),
                                                               );
                                                             }
@@ -636,66 +643,67 @@ class MapPage extends StatelessWidget {
 
                                                     if (isMobile) {
                                                       return ElevatedButton(
-                                                      onPressed: () async {
-                                                        final place = state
-                                                            .selectedPlace!;
-                                                        _updateRegionalData(
-                                                          context,
-                                                          place,
-                                                        );
-                                                      },
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor:
-                                                            Colors.orange,
-                                                        foregroundColor:
-                                                            Colors.white,
-                                                        padding:
-                                                            const EdgeInsets.all(
-                                                              12,
-                                                            ),
-                                                        minimumSize: const Size(
-                                                          48,
-                                                          48,
+                                                        onPressed: () async {
+                                                          final place = state
+                                                              .selectedPlace!;
+                                                          _updateRegionalData(
+                                                            context,
+                                                            place,
+                                                          );
+                                                        },
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              Colors.orange,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.all(
+                                                                12,
+                                                              ),
+                                                          minimumSize:
+                                                              const Size(
+                                                                48,
+                                                                48,
+                                                              ),
                                                         ),
-                                                      ),
-                                                      child: const Icon(
-                                                        Icons.location_city,
-                                                        size: 20,
-                                                      ),
-                                                    );
-                                                  } else {
-                                                    return ElevatedButton.icon(
-                                                      onPressed: () async {
-                                                        final place = state
-                                                            .selectedPlace!;
-                                                        _updateRegionalData(
-                                                          context,
-                                                          place,
-                                                        );
-                                                      },
-                                                      icon: const Icon(
-                                                        Icons.location_city,
-                                                        size: 18,
-                                                      ),
-                                                      label: const Text(
-                                                        'Update Regional',
-                                                      ),
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor:
-                                                            Colors.orange,
-                                                        foregroundColor:
-                                                            Colors.white,
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              horizontal: 16,
-                                                              vertical: 12,
-                                                            ),
-                                                      ),
-                                                    );
-                                                  }
-                                                },
+                                                        child: const Icon(
+                                                          Icons.location_city,
+                                                          size: 20,
+                                                        ),
+                                                      );
+                                                    } else {
+                                                      return ElevatedButton.icon(
+                                                        onPressed: () async {
+                                                          final place = state
+                                                              .selectedPlace!;
+                                                          _updateRegionalData(
+                                                            context,
+                                                            place,
+                                                          );
+                                                        },
+                                                        icon: const Icon(
+                                                          Icons.location_city,
+                                                          size: 18,
+                                                        ),
+                                                        label: const Text(
+                                                          'Update Regional',
+                                                        ),
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              Colors.orange,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 16,
+                                                                vertical: 12,
+                                                              ),
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                                ),
                                               ),
-                                            ),
                                             const SizedBox(width: 12),
                                             // Add to Directory button for scraped places
                                             if (state.selectedPlace != null &&
@@ -709,8 +717,6 @@ class MapPage extends StatelessWidget {
                                                           context,
                                                         ).size.width <
                                                         600;
-
-                                                    
 
                                                     void
                                                     handleAddFromScrape() async {
@@ -786,7 +792,8 @@ class MapPage extends StatelessWidget {
                                                         initialKategori:
                                                             kategori,
                                                         startAtPhase2: true,
-                                                        scrapedPlaceId: place.id,
+                                                        scrapedPlaceId:
+                                                            place.id,
                                                       );
                                                     }
 
@@ -852,36 +859,72 @@ class MapPage extends StatelessWidget {
                                               Expanded(
                                                 child: LayoutBuilder(
                                                   builder: (context, constraints) {
-                                                    final isMobile = MediaQuery.of(context).size.width < 600;
+                                                    final isMobile =
+                                                        MediaQuery.of(
+                                                          context,
+                                                        ).size.width <
+                                                        600;
                                                     if (isMobile) {
                                                       return ElevatedButton(
-                                                        onPressed: () => _updateScrapeStatus(context, state.selectedPlace!, 'hapus'),
+                                                        onPressed: () =>
+                                                            _updateScrapeStatus(
+                                                              context,
+                                                              state
+                                                                  .selectedPlace!,
+                                                              'hapus',
+                                                            ),
                                                         style: ElevatedButton.styleFrom(
-                                                          backgroundColor: Colors.red.shade700,
-                                                          foregroundColor: Colors.white,
-                                                          padding: const EdgeInsets.all(12),
-                                                          minimumSize: const Size(48, 48),
+                                                          backgroundColor:
+                                                              Colors
+                                                                  .red
+                                                                  .shade700,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.all(
+                                                                12,
+                                                              ),
+                                                          minimumSize:
+                                                              const Size(
+                                                                48,
+                                                                48,
+                                                              ),
                                                         ),
                                                         child: const Icon(
-                                                          Icons.remove_circle_outline,
+                                                          Icons
+                                                              .remove_circle_outline,
                                                           size: 20,
                                                         ),
                                                       );
                                                     } else {
                                                       return ElevatedButton.icon(
-                                                        onPressed: () => _updateScrapeStatus(context, state.selectedPlace!, 'hapus'),
+                                                        onPressed: () =>
+                                                            _updateScrapeStatus(
+                                                              context,
+                                                              state
+                                                                  .selectedPlace!,
+                                                              'hapus',
+                                                            ),
                                                         icon: const Icon(
-                                                          Icons.remove_circle_outline,
+                                                          Icons
+                                                              .remove_circle_outline,
                                                           size: 18,
                                                         ),
-                                                        label: const Text('Hapus (Scraping)'),
+                                                        label: const Text(
+                                                          'Hapus (Scraping)',
+                                                        ),
                                                         style: ElevatedButton.styleFrom(
-                                                          backgroundColor: Colors.red.shade700,
-                                                          foregroundColor: Colors.white,
-                                                          padding: const EdgeInsets.symmetric(
-                                                            horizontal: 16,
-                                                            vertical: 12,
-                                                          ),
+                                                          backgroundColor:
+                                                              Colors
+                                                                  .red
+                                                                  .shade700,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 16,
+                                                                vertical: 12,
+                                                              ),
                                                         ),
                                                       );
                                                     }
@@ -898,15 +941,34 @@ class MapPage extends StatelessWidget {
                                               Expanded(
                                                 child: LayoutBuilder(
                                                   builder: (context, constraints) {
-                                                    final isMobile = MediaQuery.of(context).size.width < 600;
+                                                    final isMobile =
+                                                        MediaQuery.of(
+                                                          context,
+                                                        ).size.width <
+                                                        600;
                                                     if (isMobile) {
                                                       return ElevatedButton(
-                                                        onPressed: () => _updateScrapeStatus(context, state.selectedPlace!, 'tutup'),
+                                                        onPressed: () =>
+                                                            _updateScrapeStatus(
+                                                              context,
+                                                              state
+                                                                  .selectedPlace!,
+                                                              'tutup',
+                                                            ),
                                                         style: ElevatedButton.styleFrom(
-                                                          backgroundColor: Colors.orange,
-                                                          foregroundColor: Colors.white,
-                                                          padding: const EdgeInsets.all(12),
-                                                          minimumSize: const Size(48, 48),
+                                                          backgroundColor:
+                                                              Colors.orange,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.all(
+                                                                12,
+                                                              ),
+                                                          minimumSize:
+                                                              const Size(
+                                                                48,
+                                                                48,
+                                                              ),
                                                         ),
                                                         child: const Icon(
                                                           Icons.cancel_outlined,
@@ -915,19 +977,30 @@ class MapPage extends StatelessWidget {
                                                       );
                                                     } else {
                                                       return ElevatedButton.icon(
-                                                        onPressed: () => _updateScrapeStatus(context, state.selectedPlace!, 'tutup'),
+                                                        onPressed: () =>
+                                                            _updateScrapeStatus(
+                                                              context,
+                                                              state
+                                                                  .selectedPlace!,
+                                                              'tutup',
+                                                            ),
                                                         icon: const Icon(
                                                           Icons.cancel_outlined,
                                                           size: 18,
                                                         ),
-                                                        label: const Text('Tutup (Scraping)'),
+                                                        label: const Text(
+                                                          'Tutup (Scraping)',
+                                                        ),
                                                         style: ElevatedButton.styleFrom(
-                                                          backgroundColor: Colors.orange,
-                                                          foregroundColor: Colors.white,
-                                                          padding: const EdgeInsets.symmetric(
-                                                            horizontal: 16,
-                                                            vertical: 12,
-                                                          ),
+                                                          backgroundColor:
+                                                              Colors.orange,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 16,
+                                                                vertical: 12,
+                                                              ),
                                                         ),
                                                       );
                                                     }
@@ -945,18 +1018,33 @@ class MapPage extends StatelessWidget {
                                               Expanded(
                                                 child: LayoutBuilder(
                                                   builder: (context, constraints) {
-                                                    final isMobile = MediaQuery.of(context).size.width < 600;
+                                                    final isMobile =
+                                                        MediaQuery.of(
+                                                          context,
+                                                        ).size.width <
+                                                        600;
                                                     if (isMobile) {
                                                       return ElevatedButton(
-                                                        onPressed: () => _openScrapeGoogleMapsLink(
-                                                          context,
-                                                          state.selectedPlace!,
-                                                        ),
+                                                        onPressed: () =>
+                                                            _openScrapeGoogleMapsLink(
+                                                              context,
+                                                              state
+                                                                  .selectedPlace!,
+                                                            ),
                                                         style: ElevatedButton.styleFrom(
-                                                          backgroundColor: Colors.green,
-                                                          foregroundColor: Colors.white,
-                                                          padding: const EdgeInsets.all(12),
-                                                          minimumSize: const Size(48, 48),
+                                                          backgroundColor:
+                                                              Colors.green,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.all(
+                                                                12,
+                                                              ),
+                                                          minimumSize:
+                                                              const Size(
+                                                                48,
+                                                                48,
+                                                              ),
                                                         ),
                                                         child: const Icon(
                                                           Icons.map,
@@ -965,22 +1053,29 @@ class MapPage extends StatelessWidget {
                                                       );
                                                     } else {
                                                       return ElevatedButton.icon(
-                                                        onPressed: () => _openScrapeGoogleMapsLink(
-                                                          context,
-                                                          state.selectedPlace!,
-                                                        ),
+                                                        onPressed: () =>
+                                                            _openScrapeGoogleMapsLink(
+                                                              context,
+                                                              state
+                                                                  .selectedPlace!,
+                                                            ),
                                                         icon: const Icon(
                                                           Icons.map,
                                                           size: 18,
                                                         ),
-                                                        label: const Text('Buka Google Maps'),
+                                                        label: const Text(
+                                                          'Buka Google Maps',
+                                                        ),
                                                         style: ElevatedButton.styleFrom(
-                                                          backgroundColor: Colors.green,
-                                                          foregroundColor: Colors.white,
-                                                          padding: const EdgeInsets.symmetric(
-                                                            horizontal: 16,
-                                                            vertical: 12,
-                                                          ),
+                                                          backgroundColor:
+                                                              Colors.green,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 16,
+                                                                vertical: 12,
+                                                              ),
                                                         ),
                                                       );
                                                     }
@@ -1004,236 +1099,249 @@ class MapPage extends StatelessWidget {
                                                         ).size.width <
                                                         600;
 
-                                                  if (isMobile) {
-                                                    return ElevatedButton(
-                                                      onPressed: () async {
-                                                        final place = state
-                                                            .selectedPlace!;
+                                                    if (isMobile) {
+                                                      return ElevatedButton(
+                                                        onPressed: () async {
+                                                          final place = state
+                                                              .selectedPlace!;
 
-                                                        // Fetch full directory data from repository
-                                                        final repository =
-                                                            MapRepositoryImpl();
-                                                        final directory =
-                                                            await repository
-                                                                .getDirectoryById(
-                                                                  place.id,
-                                                                );
+                                                          // Fetch full directory data from repository
+                                                          final repository =
+                                                              MapRepositoryImpl();
+                                                          final directory =
+                                                              await repository
+                                                                  .getDirectoryById(
+                                                                    place.id,
+                                                                  );
 
-                                                        if (directory != null) {
-                                                          // Extract region data from place or directory
-                                                          String idSls = '';
-                                                          String kdProv = '';
-                                                          String kdKab = '';
-                                                          String kdKec = '';
-                                                          String kdDesa = '';
-                                                          String kdSls = '';
-                                                          String? namaSls;
-                                                          String? kodePos;
+                                                          if (directory !=
+                                                              null) {
+                                                            // Extract region data from place or directory
+                                                            String idSls = '';
+                                                            String kdProv = '';
+                                                            String kdKab = '';
+                                                            String kdKec = '';
+                                                            String kdDesa = '';
+                                                            String kdSls = '';
+                                                            String? namaSls;
+                                                            String? kodePos;
 
-                                                          // Try to get region data from directory first
-                                                          if (directory.idSls !=
-                                                                  null &&
-                                                              directory
-                                                                  .idSls!
-                                                                  .isNotEmpty) {
-                                                            idSls = directory
-                                                                .idSls!;
-                                                            if (idSls.length >=
-                                                                14) {
-                                                              kdProv = idSls
-                                                                  .substring(
-                                                                    0,
-                                                                    2,
-                                                                  );
-                                                              kdKab = idSls
-                                                                  .substring(
-                                                                    2,
-                                                                    4,
-                                                                  );
-                                                              kdKec = idSls
-                                                                  .substring(
-                                                                    4,
-                                                                    7,
-                                                                  );
-                                                              kdDesa = idSls
-                                                                  .substring(
-                                                                    7,
-                                                                    10,
-                                                                  );
-                                                              kdSls = idSls
-                                                                  .substring(
-                                                                    10,
-                                                                    14,
-                                                                  );
+                                                            // Try to get region data from directory first
+                                                            if (directory
+                                                                        .idSls !=
+                                                                    null &&
+                                                                directory
+                                                                    .idSls!
+                                                                    .isNotEmpty) {
+                                                              idSls = directory
+                                                                  .idSls!;
+                                                              if (idSls
+                                                                      .length >=
+                                                                  14) {
+                                                                kdProv = idSls
+                                                                    .substring(
+                                                                      0,
+                                                                      2,
+                                                                    );
+                                                                kdKab = idSls
+                                                                    .substring(
+                                                                      2,
+                                                                      4,
+                                                                    );
+                                                                kdKec = idSls
+                                                                    .substring(
+                                                                      4,
+                                                                      7,
+                                                                    );
+                                                                kdDesa = idSls
+                                                                    .substring(
+                                                                      7,
+                                                                      10,
+                                                                    );
+                                                                kdSls = idSls
+                                                                    .substring(
+                                                                      10,
+                                                                      14,
+                                                                    );
+                                                              }
+                                                              namaSls =
+                                                                  directory
+                                                                      .nmSls;
+                                                              kodePos =
+                                                                  directory
+                                                                      .kodePos;
                                                             }
-                                                            namaSls =
-                                                                directory.nmSls;
-                                                            kodePos = directory
-                                                                .kodePos;
-                                                          }
 
-                                                          _showAddDirektoriForm(
-                                                            context,
-                                                            place.position,
-                                                            idSls,
-                                                            kdProv,
-                                                            kdKab,
-                                                            kdKec,
-                                                            kdDesa,
-                                                            kdSls,
-                                                            namaSls,
-                                                            kodePos,
-                                                            null, // alamatFromGeocode
-                                                            existingDirectory:
-                                                                directory,
-                                                          );
-                                                        } else {
-                                                          ScaffoldMessenger.of(
-                                                            context,
-                                                          ).showSnackBar(
-                                                            const SnackBar(
-                                                              content: Text(
-                                                                'Gagal memuat data direktori untuk diedit',
+                                                            _showAddDirektoriForm(
+                                                              context,
+                                                              place.position,
+                                                              idSls,
+                                                              kdProv,
+                                                              kdKab,
+                                                              kdKec,
+                                                              kdDesa,
+                                                              kdSls,
+                                                              namaSls,
+                                                              kodePos,
+                                                              null, // alamatFromGeocode
+                                                              existingDirectory:
+                                                                  directory,
+                                                            );
+                                                          } else {
+                                                            ScaffoldMessenger.of(
+                                                              context,
+                                                            ).showSnackBar(
+                                                              const SnackBar(
+                                                                content: Text(
+                                                                  'Gagal memuat data direktori untuk diedit',
+                                                                ),
                                                               ),
-                                                            ),
-                                                          );
-                                                        }
-                                                      },
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor:
-                                                            Colors.blue,
-                                                        foregroundColor:
-                                                            Colors.white,
-                                                        padding:
-                                                            const EdgeInsets.all(
-                                                              12,
-                                                            ),
-                                                        minimumSize: const Size(
-                                                          48,
-                                                          48,
+                                                            );
+                                                          }
+                                                        },
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              Colors.blue,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.all(
+                                                                12,
+                                                              ),
+                                                          minimumSize:
+                                                              const Size(
+                                                                48,
+                                                                48,
+                                                              ),
                                                         ),
-                                                      ),
-                                                      child: const Icon(
-                                                        Icons.edit,
-                                                        size: 20,
-                                                      ),
-                                                    );
-                                                  } else {
-                                                    return ElevatedButton.icon(
-                                                      onPressed: () async {
-                                                        final place = state
-                                                            .selectedPlace!;
+                                                        child: const Icon(
+                                                          Icons.edit,
+                                                          size: 20,
+                                                        ),
+                                                      );
+                                                    } else {
+                                                      return ElevatedButton.icon(
+                                                        onPressed: () async {
+                                                          final place = state
+                                                              .selectedPlace!;
 
-                                                        // Fetch full directory data from repository
-                                                        final repository =
-                                                            MapRepositoryImpl();
-                                                        final directory =
-                                                            await repository
-                                                                .getDirectoryById(
-                                                                  place.id,
-                                                                );
+                                                          // Fetch full directory data from repository
+                                                          final repository =
+                                                              MapRepositoryImpl();
+                                                          final directory =
+                                                              await repository
+                                                                  .getDirectoryById(
+                                                                    place.id,
+                                                                  );
 
-                                                        if (directory != null) {
-                                                          // Extract region data from place or directory
-                                                          String idSls = '';
-                                                          String kdProv = '';
-                                                          String kdKab = '';
-                                                          String kdKec = '';
-                                                          String kdDesa = '';
-                                                          String kdSls = '';
-                                                          String? namaSls;
-                                                          String? kodePos;
+                                                          if (directory !=
+                                                              null) {
+                                                            // Extract region data from place or directory
+                                                            String idSls = '';
+                                                            String kdProv = '';
+                                                            String kdKab = '';
+                                                            String kdKec = '';
+                                                            String kdDesa = '';
+                                                            String kdSls = '';
+                                                            String? namaSls;
+                                                            String? kodePos;
 
-                                                          // Try to get region data from directory first
-                                                          if (directory.idSls !=
-                                                                  null &&
-                                                              directory
-                                                                  .idSls!
-                                                                  .isNotEmpty) {
-                                                            idSls = directory
-                                                                .idSls!;
-                                                            if (idSls.length >=
-                                                                14) {
-                                                              kdProv = idSls
-                                                                  .substring(
-                                                                    0,
-                                                                    2,
-                                                                  );
-                                                              kdKab = idSls
-                                                                  .substring(
-                                                                    2,
-                                                                    4,
-                                                                  );
-                                                              kdKec = idSls
-                                                                  .substring(
-                                                                    4,
-                                                                    7,
-                                                                  );
-                                                              kdDesa = idSls
-                                                                  .substring(
-                                                                    7,
-                                                                    10,
-                                                                  );
-                                                              kdSls = idSls
-                                                                  .substring(
-                                                                    10,
-                                                                    14,
-                                                                  );
+                                                            // Try to get region data from directory first
+                                                            if (directory
+                                                                        .idSls !=
+                                                                    null &&
+                                                                directory
+                                                                    .idSls!
+                                                                    .isNotEmpty) {
+                                                              idSls = directory
+                                                                  .idSls!;
+                                                              if (idSls
+                                                                      .length >=
+                                                                  14) {
+                                                                kdProv = idSls
+                                                                    .substring(
+                                                                      0,
+                                                                      2,
+                                                                    );
+                                                                kdKab = idSls
+                                                                    .substring(
+                                                                      2,
+                                                                      4,
+                                                                    );
+                                                                kdKec = idSls
+                                                                    .substring(
+                                                                      4,
+                                                                      7,
+                                                                    );
+                                                                kdDesa = idSls
+                                                                    .substring(
+                                                                      7,
+                                                                      10,
+                                                                    );
+                                                                kdSls = idSls
+                                                                    .substring(
+                                                                      10,
+                                                                      14,
+                                                                    );
+                                                              }
+                                                              namaSls =
+                                                                  directory
+                                                                      .nmSls;
+                                                              kodePos =
+                                                                  directory
+                                                                      .kodePos;
                                                             }
-                                                            namaSls =
-                                                                directory.nmSls;
-                                                            kodePos = directory
-                                                                .kodePos;
-                                                          }
 
-                                                          _showAddDirektoriForm(
-                                                            context,
-                                                            place.position,
-                                                            idSls,
-                                                            kdProv,
-                                                            kdKab,
-                                                            kdKec,
-                                                            kdDesa,
-                                                            kdSls,
-                                                            namaSls,
-                                                            kodePos,
-                                                            null, // alamatFromGeocode
-                                                            existingDirectory:
-                                                                directory,
-                                                          );
-                                                        } else {
-                                                          ScaffoldMessenger.of(
-                                                            context,
-                                                          ).showSnackBar(
-                                                            const SnackBar(
-                                                              content: Text(
-                                                                'Gagal memuat data direktori untuk diedit',
+                                                            _showAddDirektoriForm(
+                                                              context,
+                                                              place.position,
+                                                              idSls,
+                                                              kdProv,
+                                                              kdKab,
+                                                              kdKec,
+                                                              kdDesa,
+                                                              kdSls,
+                                                              namaSls,
+                                                              kodePos,
+                                                              null, // alamatFromGeocode
+                                                              existingDirectory:
+                                                                  directory,
+                                                            );
+                                                          } else {
+                                                            ScaffoldMessenger.of(
+                                                              context,
+                                                            ).showSnackBar(
+                                                              const SnackBar(
+                                                                content: Text(
+                                                                  'Gagal memuat data direktori untuk diedit',
+                                                                ),
                                                               ),
-                                                            ),
-                                                          );
-                                                        }
-                                                      },
-                                                      icon: const Icon(
-                                                        Icons.edit,
-                                                        size: 18,
-                                                      ),
-                                                      label: const Text('Edit'),
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor:
-                                                            Colors.blue,
-                                                        foregroundColor:
-                                                            Colors.white,
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              horizontal: 16,
-                                                              vertical: 12,
-                                                            ),
-                                                      ),
-                                                    );
-                                                  }
-                                                },
+                                                            );
+                                                          }
+                                                        },
+                                                        icon: const Icon(
+                                                          Icons.edit,
+                                                          size: 18,
+                                                        ),
+                                                        label: const Text(
+                                                          'Edit',
+                                                        ),
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              Colors.blue,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 16,
+                                                                vertical: 12,
+                                                              ),
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                                ),
                                               ),
-                                            ),
                                             if (state.selectedPlace != null &&
                                                 !state.selectedPlace!.id
                                                     .startsWith('scrape:'))
@@ -1248,250 +1356,264 @@ class MapPage extends StatelessWidget {
                                                     final isMobile =
                                                         MediaQuery.of(
                                                           context,
-                                                      ).size.width <
-                                                      600;
+                                                        ).size.width <
+                                                        600;
 
-                                                  if (isMobile) {
-                                                    return ElevatedButton(
-                                                      onPressed: () async {
-                                                        final place = state
-                                                            .selectedPlace!;
-                                                        final confirmed = await showDialog<bool>(
-                                                          context: context,
-                                                          builder: (ctx) => AlertDialog(
-                                                            title: const Text(
-                                                              'Konfirmasi Hapus/Tutup',
-                                                            ),
-                                                            content: const Text(
-                                                              'Jika id_sbr = 0 (belum approve) akan dihapus. Jika sudah memiliki id_sbr, status keberadaan akan diubah menjadi kode 4 (Tutup). Lanjutkan?',
-                                                            ),
-                                                            actions: [
-                                                              TextButton(
-                                                                onPressed: () =>
-                                                                    Navigator.of(
-                                                                      ctx,
-                                                                    ).pop(
-                                                                      false,
-                                                                    ),
-                                                                child:
-                                                                    const Text(
-                                                                      'Batal',
-                                                                    ),
+                                                    if (isMobile) {
+                                                      return ElevatedButton(
+                                                        onPressed: () async {
+                                                          final place = state
+                                                              .selectedPlace!;
+                                                          final confirmed = await showDialog<bool>(
+                                                            context: context,
+                                                            builder: (ctx) => AlertDialog(
+                                                              title: const Text(
+                                                                'Konfirmasi Hapus/Tutup',
                                                               ),
-                                                              ElevatedButton(
-                                                                onPressed: () =>
-                                                                    Navigator.of(
-                                                                      ctx,
-                                                                    ).pop(true),
-                                                                child:
-                                                                    const Text(
-                                                                      'Lanjut',
-                                                                    ),
+                                                              content: const Text(
+                                                                'Jika id_sbr = 0 (belum approve) akan dihapus. Jika sudah memiliki id_sbr, status keberadaan akan diubah menjadi kode 4 (Tutup). Lanjutkan?',
                                                               ),
-                                                            ],
-                                                          ),
-                                                        );
-                                                        if (confirmed != true)
-                                                          return;
-                                                        try {
-                                                          final repository =
-                                                              MapRepositoryImpl();
-                                                          final success =
-                                                              await repository
-                                                                  .deleteOrCloseDirectoryById(
-                                                                    place.id,
-                                                                  );
-                                                          if (success) {
-                                                            ScaffoldMessenger.of(
-                                                              context,
-                                                            ).showSnackBar(
-                                                              const SnackBar(
-                                                                content: Text(
-                                                                  'Berhasil menghapus/menutup sesuai status',
+                                                              actions: [
+                                                                TextButton(
+                                                                  onPressed: () =>
+                                                                      Navigator.of(
+                                                                        ctx,
+                                                                      ).pop(
+                                                                        false,
+                                                                      ),
+                                                                  child:
+                                                                      const Text(
+                                                                        'Batal',
+                                                                      ),
                                                                 ),
-                                                                backgroundColor:
-                                                                    Colors
-                                                                        .green,
-                                                              ),
-                                                            );
-                                                            // Refresh data dan tutup card
-                                                            context
-                                                                .read<MapBloc>()
-                                                                .add(
-                                                                  const PlacesRequested(),
-                                                                );
-                                                            context
-                                                                .read<MapBloc>()
-                                                                .add(
-                                                                  const PlaceCleared(),
-                                                                );
-                                                          } else {
+                                                                ElevatedButton(
+                                                                  onPressed: () =>
+                                                                      Navigator.of(
+                                                                        ctx,
+                                                                      ).pop(
+                                                                        true,
+                                                                      ),
+                                                                  child:
+                                                                      const Text(
+                                                                        'Lanjut',
+                                                                      ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          );
+                                                          if (confirmed != true)
+                                                            return;
+                                                          try {
+                                                            final repository =
+                                                                MapRepositoryImpl();
+                                                            final success =
+                                                                await repository
+                                                                    .deleteOrCloseDirectoryById(
+                                                                      place.id,
+                                                                    );
+                                                            if (success) {
+                                                              ScaffoldMessenger.of(
+                                                                context,
+                                                              ).showSnackBar(
+                                                                const SnackBar(
+                                                                  content: Text(
+                                                                    'Berhasil menghapus/menutup sesuai status',
+                                                                  ),
+                                                                  backgroundColor:
+                                                                      Colors
+                                                                          .green,
+                                                                ),
+                                                              );
+                                                              // Refresh data dan tutup card
+                                                              context
+                                                                  .read<
+                                                                    MapBloc
+                                                                  >()
+                                                                  .add(
+                                                                    const PlacesRequested(),
+                                                                  );
+                                                              context
+                                                                  .read<
+                                                                    MapBloc
+                                                                  >()
+                                                                  .add(
+                                                                    const PlaceCleared(),
+                                                                  );
+                                                            } else {
+                                                              ScaffoldMessenger.of(
+                                                                context,
+                                                              ).showSnackBar(
+                                                                const SnackBar(
+                                                                  content: Text(
+                                                                    'Operasi gagal',
+                                                                  ),
+                                                                  backgroundColor:
+                                                                      Colors
+                                                                          .red,
+                                                                ),
+                                                              );
+                                                            }
+                                                          } catch (e) {
                                                             ScaffoldMessenger.of(
                                                               context,
                                                             ).showSnackBar(
-                                                              const SnackBar(
+                                                              SnackBar(
                                                                 content: Text(
-                                                                  'Operasi gagal',
+                                                                  'Error: $e',
                                                                 ),
                                                                 backgroundColor:
                                                                     Colors.red,
                                                               ),
                                                             );
                                                           }
-                                                        } catch (e) {
-                                                          ScaffoldMessenger.of(
-                                                            context,
-                                                          ).showSnackBar(
-                                                            SnackBar(
-                                                              content: Text(
-                                                                'Error: $e',
+                                                        },
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              Colors.red,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 16,
+                                                                vertical: 12,
                                                               ),
-                                                              backgroundColor:
-                                                                  Colors.red,
+                                                        ),
+                                                        child: const Icon(
+                                                          Icons.delete_forever,
+                                                          size: 18,
+                                                        ),
+                                                      );
+                                                    } else {
+                                                      return ElevatedButton.icon(
+                                                        onPressed: () async {
+                                                          final place = state
+                                                              .selectedPlace!;
+                                                          final confirmed = await showDialog<bool>(
+                                                            context: context,
+                                                            builder: (ctx) => AlertDialog(
+                                                              title: const Text(
+                                                                'Konfirmasi Hapus/Tutup',
+                                                              ),
+                                                              content: const Text(
+                                                                'Jika id_sbr = 0 (belum approve) akan dihapus. Jika sudah memiliki id_sbr, status keberadaan akan diubah menjadi kode 4 (Tutup). Lanjutkan?',
+                                                              ),
+                                                              actions: [
+                                                                TextButton(
+                                                                  onPressed: () =>
+                                                                      Navigator.of(
+                                                                        ctx,
+                                                                      ).pop(
+                                                                        false,
+                                                                      ),
+                                                                  child:
+                                                                      const Text(
+                                                                        'Batal',
+                                                                      ),
+                                                                ),
+                                                                ElevatedButton(
+                                                                  onPressed: () =>
+                                                                      Navigator.of(
+                                                                        ctx,
+                                                                      ).pop(
+                                                                        true,
+                                                                      ),
+                                                                  child:
+                                                                      const Text(
+                                                                        'Lanjut',
+                                                                      ),
+                                                                ),
+                                                              ],
                                                             ),
                                                           );
-                                                        }
-                                                      },
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor:
-                                                            Colors.red,
-                                                        foregroundColor:
-                                                            Colors.white,
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              horizontal: 16,
-                                                              vertical: 12,
-                                                            ),
-                                                      ),
-                                                      child: const Icon(
-                                                        Icons.delete_forever,
-                                                        size: 18,
-                                                      ),
-                                                    );
-                                                  } else {
-                                                    return ElevatedButton.icon(
-                                                      onPressed: () async {
-                                                        final place = state
-                                                            .selectedPlace!;
-                                                        final confirmed = await showDialog<bool>(
-                                                          context: context,
-                                                          builder: (ctx) => AlertDialog(
-                                                            title: const Text(
-                                                              'Konfirmasi Hapus/Tutup',
-                                                            ),
-                                                            content: const Text(
-                                                              'Jika id_sbr = 0 (belum approve) akan dihapus. Jika sudah memiliki id_sbr, status keberadaan akan diubah menjadi kode 4 (Tutup). Lanjutkan?',
-                                                            ),
-                                                            actions: [
-                                                              TextButton(
-                                                                onPressed: () =>
-                                                                    Navigator.of(
-                                                                      ctx,
-                                                                    ).pop(
-                                                                      false,
-                                                                    ),
-                                                                child:
-                                                                    const Text(
-                                                                      'Batal',
-                                                                    ),
-                                                              ),
-                                                              ElevatedButton(
-                                                                onPressed: () =>
-                                                                    Navigator.of(
-                                                                      ctx,
-                                                                    ).pop(true),
-                                                                child:
-                                                                    const Text(
-                                                                      'Lanjut',
-                                                                    ),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        );
-                                                        if (confirmed != true)
-                                                          return;
-                                                        try {
-                                                          final repository =
-                                                              MapRepositoryImpl();
-                                                          final success =
-                                                              await repository
-                                                                  .deleteOrCloseDirectoryById(
-                                                                    place.id,
-                                                                  );
-                                                          if (success) {
-                                                            ScaffoldMessenger.of(
-                                                              context,
-                                                            ).showSnackBar(
-                                                              const SnackBar(
-                                                                content: Text(
-                                                                  'Berhasil menghapus/menutup sesuai status',
+                                                          if (confirmed != true)
+                                                            return;
+                                                          try {
+                                                            final repository =
+                                                                MapRepositoryImpl();
+                                                            final success =
+                                                                await repository
+                                                                    .deleteOrCloseDirectoryById(
+                                                                      place.id,
+                                                                    );
+                                                            if (success) {
+                                                              ScaffoldMessenger.of(
+                                                                context,
+                                                              ).showSnackBar(
+                                                                const SnackBar(
+                                                                  content: Text(
+                                                                    'Berhasil menghapus/menutup sesuai status',
+                                                                  ),
+                                                                  backgroundColor:
+                                                                      Colors
+                                                                          .green,
                                                                 ),
-                                                                backgroundColor:
-                                                                    Colors
-                                                                        .green,
-                                                              ),
-                                                            );
-                                                            // Refresh data dan tutup card
-                                                            context
-                                                                .read<MapBloc>()
-                                                                .add(
-                                                                  const PlacesRequested(),
-                                                                );
-                                                            context
-                                                                .read<MapBloc>()
-                                                                .add(
-                                                                  const PlaceCleared(),
-                                                                );
-                                                          } else {
+                                                              );
+                                                              // Refresh data dan tutup card
+                                                              context
+                                                                  .read<
+                                                                    MapBloc
+                                                                  >()
+                                                                  .add(
+                                                                    const PlacesRequested(),
+                                                                  );
+                                                              context
+                                                                  .read<
+                                                                    MapBloc
+                                                                  >()
+                                                                  .add(
+                                                                    const PlaceCleared(),
+                                                                  );
+                                                            } else {
+                                                              ScaffoldMessenger.of(
+                                                                context,
+                                                              ).showSnackBar(
+                                                                const SnackBar(
+                                                                  content: Text(
+                                                                    'Operasi gagal',
+                                                                  ),
+                                                                  backgroundColor:
+                                                                      Colors
+                                                                          .red,
+                                                                ),
+                                                              );
+                                                            }
+                                                          } catch (e) {
                                                             ScaffoldMessenger.of(
                                                               context,
                                                             ).showSnackBar(
-                                                              const SnackBar(
+                                                              SnackBar(
                                                                 content: Text(
-                                                                  'Operasi gagal',
+                                                                  'Error: $e',
                                                                 ),
                                                                 backgroundColor:
                                                                     Colors.red,
                                                               ),
                                                             );
                                                           }
-                                                        } catch (e) {
-                                                          ScaffoldMessenger.of(
-                                                            context,
-                                                          ).showSnackBar(
-                                                            SnackBar(
-                                                              content: Text(
-                                                                'Error: $e',
+                                                        },
+                                                        icon: const Icon(
+                                                          Icons.delete_forever,
+                                                          size: 18,
+                                                        ),
+                                                        label: const Text(
+                                                          'Hapus/Tutup',
+                                                        ),
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              Colors.red,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 16,
+                                                                vertical: 12,
                                                               ),
-                                                              backgroundColor:
-                                                                  Colors.red,
-                                                            ),
-                                                          );
-                                                        }
-                                                      },
-                                                      icon: const Icon(
-                                                        Icons.delete_forever,
-                                                        size: 18,
-                                                      ),
-                                                      label: const Text(
-                                                        'Hapus/Tutup',
-                                                      ),
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor:
-                                                            Colors.red,
-                                                        foregroundColor:
-                                                            Colors.white,
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              horizontal: 16,
-                                                              vertical: 12,
-                                                            ),
-                                                      ),
-                                                    );
-                                                  }
-                                                },
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                                ),
                                               ),
-                                            ),
                                           ],
                                         ),
                                       ),
@@ -3225,28 +3347,7 @@ class MapPage extends StatelessWidget {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      'Deskripsi Badan Usaha *',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.grey.shade700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    TextField(
-                                      controller: kegiatanUsahaController,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Kegiatan Usaha',
-                                        border: OutlineInputBorder(),
-                                        hintText:
-                                            'Contoh: Perdagangan, Jasa, Manufaktur',
-                                        helperText:
-                                            'Pisahkan dengan koma jika lebih dari satu',
-                                      ),
-                                      maxLines: 2,
-                                    ),
-                                    const SizedBox(height: 12),
+                                    
                                     TextField(
                                       controller: deskripsiBadanUsahaController,
                                       decoration: const InputDecoration(
@@ -3930,28 +4031,31 @@ class MapPage extends StatelessWidget {
 
                           // Navigation buttons for Phase 2 (New Directory)
                           if (existingDirectory == null && currentPhase == 2)
-                            Container(
-                              margin: const EdgeInsets.only(top: 16),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      onPressed: () {
-                                        setState(() {
-                                          currentPhase = 1;
-                                          businessNameSelected = false;
-                                          selectedBusinessType = '';
-                                          selectedExistingBusiness = null;
-                                        });
-                                      },
-                                      child: const Text('Kembali'),
+                            SafeArea(
+                              minimum: const EdgeInsets.only(bottom: 16),
+                              child: Container(
+                                margin: const EdgeInsets.only(top: 16),
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            currentPhase = 1;
+                                            businessNameSelected = false;
+                                            selectedBusinessType = '';
+                                            selectedExistingBusiness = null;
+                                          });
+                                        },
+                                        child: const Text('Kembali'),
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    flex: 2,
-                                    child: ElevatedButton(
-                                      onPressed: () async {
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      flex: 2,
+                                      child: ElevatedButton(
+                                        onPressed: () async {
                                         final namaUsaha = businessNameSelected
                                             ? namaUsahaController.text.trim()
                                             : namaUsahaController.text.trim();
@@ -4112,27 +4216,31 @@ class MapPage extends StatelessWidget {
                                           );
                                         }
                                       },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.blue,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 12,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.blue,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 12,
+                                          ),
                                         ),
+                                        child: const Text('Simpan Direktori'),
                                       ),
-                                      child: const Text('Simpan Direktori'),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
 
                           // Save button for Edit Mode
                           if (existingDirectory != null)
-                            Container(
-                              margin: const EdgeInsets.only(top: 16),
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: () async {
+                            SafeArea(
+                              minimum: const EdgeInsets.only(bottom: 16),
+                              child: Container(
+                                margin: const EdgeInsets.only(top: 16),
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: () async {
                                   final namaUsaha = namaUsahaController.text
                                       .trim();
                                   if (namaUsaha.isEmpty) {
@@ -4261,15 +4369,16 @@ class MapPage extends StatelessWidget {
                                       selectedExistingBusiness: null,
                                     );
                                   }
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
                                   ),
+                                  child: const Text('Simpan Perubahan'),
                                 ),
-                                child: const Text('Simpan Perubahan'),
                               ),
                             ),
                         ],
@@ -4409,8 +4518,9 @@ class MapPage extends StatelessWidget {
             final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
             distance = R * c;
             if (distance >= 0.01) {
-              actionSubtype =
-                  distance >= 20 ? 'update_coordinates_major' : 'update_coordinates_minor';
+              actionSubtype = distance >= 20
+                  ? 'update_coordinates_major'
+                  : 'update_coordinates_minor';
             }
 
             if (actionSubtype != null) {
@@ -4604,8 +4714,10 @@ class MapPage extends StatelessWidget {
             } else {
               // Haversine distance
               const double R = 6371000; // meters
-              final dLat = (point.latitude - oldLat) * (3.141592653589793 / 180);
-              final dLon = (point.longitude - oldLon) * (3.141592653589793 / 180);
+              final dLat =
+                  (point.latitude - oldLat) * (3.141592653589793 / 180);
+              final dLon =
+                  (point.longitude - oldLon) * (3.141592653589793 / 180);
               final a =
                   (math.sin(dLat / 2) * math.sin(dLat / 2)) +
                   math.cos(oldLat * (3.141592653589793 / 180)) *
@@ -4829,7 +4941,8 @@ class MapPage extends StatelessWidget {
     String? kbli, // New KBLI parameter
     List<String>? tag, // New tag parameter
     String? urlGambar, // New URL gambar parameter
-    String? scrapedPlaceId, // Optional scraped place id for Sheets status update
+    String?
+    scrapedPlaceId, // Optional scraped place id for Sheets status update
     DirektoriModel? existingDirectory,
     DirektoriModel? selectedExistingBusiness,
   }) async {
@@ -5031,7 +5144,8 @@ class MapPage extends StatelessWidget {
 
           if (contributionBloc != null) {
             // Determine action type and changes
-            final originalDirectory = existingDirectory ?? selectedExistingBusiness;
+            final originalDirectory =
+                existingDirectory ?? selectedExistingBusiness;
             final actionType = originalDirectory != null
                 ? 'edit_location'
                 : 'add_location';
@@ -5075,7 +5189,12 @@ class MapPage extends StatelessWidget {
               String? primaryAction;
 
               // Helper hitung jarak (meter) antara koordinat lama dan baru
-              double _distanceMeters(double lat1, double lon1, double lat2, double lon2) {
+              double _distanceMeters(
+                double lat1,
+                double lon1,
+                double lat2,
+                double lon2,
+              ) {
                 const double R = 6371000; // Earth radius in meters
                 final dLat = (lat2 - lat1) * (3.141592653589793 / 180);
                 final dLon = (lon2 - lon1) * (3.141592653589793 / 180);
@@ -5090,26 +5209,39 @@ class MapPage extends StatelessWidget {
 
               if (originalDirectory == null) {
                 // Direktori baru
-                if (scrapedPlaceId != null && scrapedPlaceId.startsWith('scrape:')) {
+                if (scrapedPlaceId != null &&
+                    scrapedPlaceId.startsWith('scrape:')) {
                   primaryAction = 'add_directory_scrape';
                 } else {
                   primaryAction = 'add_directory_manual';
                 }
               } else {
                 // Update direktori: cek perubahan koordinat
-                final oldLat = originalDirectory.latitude ?? originalDirectory.lat;
-                final oldLon = originalDirectory.longitude ?? originalDirectory.long;
+                final oldLat =
+                    originalDirectory.latitude ?? originalDirectory.lat;
+                final oldLon =
+                    originalDirectory.longitude ?? originalDirectory.long;
                 if (oldLat == null || oldLon == null) {
                   primaryAction = 'set_first_coordinates';
                 } else {
-                  final dist = _distanceMeters(oldLat, oldLon, point.latitude, point.longitude);
-                  if (dist >= 0.01) { // anggap 0 jika sama persis, toleransi kecil
-                    primaryAction = dist >= 20 ? 'update_coordinates_major' : 'update_coordinates_minor';
+                  final dist = _distanceMeters(
+                    oldLat,
+                    oldLon,
+                    point.latitude,
+                    point.longitude,
+                  );
+                  if (dist >= 0.01) {
+                    // anggap 0 jika sama persis, toleransi kecil
+                    primaryAction = dist >= 20
+                        ? 'update_coordinates_major'
+                        : 'update_coordinates_minor';
                     changes['distance_moved_m'] = dist;
                   }
                 }
               }
 
+              // Generate satu operation_id untuk semua event dalam satu penyimpanan
+              final opId = const Uuid().v4();
               if (primaryAction != null) {
                 contributionBloc.add(
                   CreateContributionEvent(
@@ -5119,11 +5251,14 @@ class MapPage extends StatelessWidget {
                     changes: changes,
                     latitude: point.latitude,
                     longitude: point.longitude,
+                    operationId: opId,
                   ),
                 );
                 print('✅ [CONTRIBUTION] Event utama dikirim: $primaryAction');
               } else {
-                print('ℹ️ [CONTRIBUTION] Tidak ada perubahan koordinat signifikan, skip event utama');
+                print(
+                  'ℹ️ [CONTRIBUTION] Tidak ada perubahan koordinat signifikan, skip event utama',
+                );
               }
 
               // Emit kontribusi tambahan untuk pengayaan data (KBLI, deskripsi, alamat, foto)
@@ -5138,6 +5273,7 @@ class MapPage extends StatelessWidget {
                     changes: ch,
                     latitude: point.latitude,
                     longitude: point.longitude,
+                    operationId: opId,
                   ),
                 );
               }
@@ -5157,10 +5293,13 @@ class MapPage extends StatelessWidget {
               }
 
               // Deskripsi usaha
-              final oldDesc = (existingDirectory?.deskripsiBadanUsahaLainnya ?? '').trim();
+              final oldDesc =
+                  (existingDirectory?.deskripsiBadanUsahaLainnya ?? '').trim();
               final newDesc = (deskripsiBadanUsaha ?? '').trim();
               if (newDesc.isNotEmpty && newDesc != oldDesc) {
-                final type = oldDesc.isEmpty ? 'add_description' : 'update_description';
+                final type = oldDesc.isEmpty
+                    ? 'add_description'
+                    : 'update_description';
                 emit(type, {
                   'description': newDesc,
                   if (oldDesc.isNotEmpty) 'old_description': oldDesc,
@@ -5174,7 +5313,9 @@ class MapPage extends StatelessWidget {
               final oldAddr = (existingDirectory?.alamat ?? '').trim();
               final newAddr = (alamatFromGeocode ?? alamat).trim();
               // Jika event utama adalah add_directory_scrape, jangan emit add/update_address
-              if (primaryAction != 'add_directory_scrape' && newAddr.isNotEmpty && newAddr != oldAddr) {
+              if (primaryAction != 'add_directory_scrape' &&
+                  newAddr.isNotEmpty &&
+                  newAddr != oldAddr) {
                 final type = oldAddr.isEmpty ? 'add_address' : 'update_address';
                 emit(type, {
                   'address': newAddr,
@@ -5189,7 +5330,9 @@ class MapPage extends StatelessWidget {
               final oldPhoto = (existingDirectory?.urlGambar ?? '').trim();
               final newPhoto = (urlGambar ?? '').trim();
               // Jika event utama adalah add_directory_scrape, jangan emit add/update_photo
-              if (primaryAction != 'add_directory_scrape' && newPhoto.isNotEmpty && newPhoto != oldPhoto) {
+              if (primaryAction != 'add_directory_scrape' &&
+                  newPhoto.isNotEmpty &&
+                  newPhoto != oldPhoto) {
                 final type = oldPhoto.isEmpty ? 'add_photo' : 'update_photo';
                 emit(type, {
                   'photo_url': newPhoto,
@@ -5207,7 +5350,9 @@ class MapPage extends StatelessWidget {
                     directoryId: newDirectoryId,
                   ),
                 );
-                print('🔗 [CONTRIBUTION] Meminta penautan kontribusi ke direktori $newDirectoryId');
+                print(
+                  '🔗 [CONTRIBUTION] Meminta penautan kontribusi ke direktori $newDirectoryId',
+                );
               }
             }
           } else {
@@ -5233,9 +5378,12 @@ class MapPage extends StatelessWidget {
         if (scrapedPlaceId != null && scrapedPlaceId.startsWith('scrape:')) {
           try {
             debugPrint(
-                'Sheets: updating status to "ditambah" for $scrapedPlaceId');
-            final ok = await ScrapingRepositoryImpl()
-                .updateStatusByPlaceId(scrapedPlaceId, 'ditambah');
+              'Sheets: updating status to "ditambah" for $scrapedPlaceId',
+            );
+            final ok = await ScrapingRepositoryImpl().updateStatusByPlaceId(
+              scrapedPlaceId,
+              'ditambah',
+            );
             if (!ok) {
               debugPrint('Sheets: failed to update status for $scrapedPlaceId');
             }
@@ -5435,7 +5583,10 @@ class MapPage extends StatelessWidget {
   }
 
   // Open Google Maps link for a scraped marker using its cached scraped data.
-  Future<void> _openScrapeGoogleMapsLink(BuildContext context, Place place) async {
+  Future<void> _openScrapeGoogleMapsLink(
+    BuildContext context,
+    Place place,
+  ) async {
     try {
       final repo = ScrapingRepositoryImpl();
       final sp = await repo.getByPlaceId(place.id);
@@ -5459,10 +5610,7 @@ class MapPage extends StatelessWidget {
 
       if (!launched) {
         // Jika tetap gagal, coba buka dengan mode default (browser/webview).
-        launched = await launchUrl(
-          uri,
-          mode: LaunchMode.platformDefault,
-        );
+        launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
       }
 
       if (!launched) {

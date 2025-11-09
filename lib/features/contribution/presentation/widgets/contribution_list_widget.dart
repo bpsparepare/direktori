@@ -6,6 +6,7 @@ import '../bloc/contribution_bloc.dart';
 import '../bloc/contribution_event.dart';
 import '../bloc/contribution_state.dart';
 import '../../../map/presentation/pages/main_page.dart';
+import '../../../map/data/repositories/map_repository_impl.dart';
 
 /// Widget untuk menampilkan daftar kontribusi pengguna
 class ContributionListWidget extends StatefulWidget {
@@ -27,6 +28,7 @@ class ContributionListWidget extends StatefulWidget {
 class _ContributionListWidgetState extends State<ContributionListWidget> {
   final ScrollController _scrollController = ScrollController();
   final DateFormat _dateFormat = DateFormat('dd MMM yyyy, HH:mm');
+  final Map<String, String> _resolvedNames = {};
 
   @override
   void initState() {
@@ -143,12 +145,19 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
         }
 
         final List<UserContribution> contributions = state.contributions;
-        final List<UserContribution> displayContributions =
-            (widget.limit != null && contributions.isNotEmpty)
-            ? contributions.take(widget.limit!).toList()
-            : contributions;
+        // Kelompokkan berdasarkan operationId agar satu kiriman hanya tampil sekali
+        final List<_ContributionGroup> grouped = _groupByOperationId(
+          contributions,
+        );
+        // Urutkan grup berdasarkan waktu terbaru dari item dalam grup
+        grouped.sort((a, b) => b.latestCreatedAt.compareTo(a.latestCreatedAt));
+        // Terapkan limit setelah pengelompokan
+        final List<_ContributionGroup> displayGroups =
+            (widget.limit != null && grouped.isNotEmpty)
+            ? grouped.take(widget.limit!).toList()
+            : grouped;
 
-        if (displayContributions.isEmpty) {
+        if (displayGroups.isEmpty) {
           return _buildEmptyState();
         }
 
@@ -158,10 +167,25 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
           physics: widget.isCompact
               ? const NeverScrollableScrollPhysics()
               : const AlwaysScrollableScrollPhysics(),
-          itemCount: displayContributions.length,
+          itemCount: displayGroups.length,
           itemBuilder: (context, index) {
-            final contribution = displayContributions[index];
-            return _buildContributionCard(context, contribution);
+            final group = displayGroups[index];
+            String resolvedTitle = group.displayName.isNotEmpty
+                ? group.displayName
+                : (group.targetUuid != null
+                      ? (_resolvedNames[group.targetUuid!] ?? '')
+                      : '');
+
+            if (resolvedTitle.isEmpty && group.targetUuid != null) {
+              _fetchAndCacheName(group.targetUuid!);
+            }
+            return _buildContributionCard(
+              context,
+              group.primary,
+              groupSize: group.items.length,
+              groupActionSubtypes: group.actionSubtypes,
+              groupTitle: resolvedTitle,
+            );
           },
         );
       },
@@ -194,8 +218,11 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
 
   Widget _buildContributionCard(
     BuildContext context,
-    UserContribution contribution,
-  ) {
+    UserContribution contribution, {
+    int? groupSize,
+    List<String>? groupActionSubtypes,
+    String? groupTitle,
+  }) {
     final changes = contribution.changes ?? {};
     final namaUsaha = (changes['nama_usaha']?.toString() ?? '').trim();
     final alamat = (changes['alamat']?.toString() ?? '').trim();
@@ -203,6 +230,17 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
       contribution.createdAt,
       changes['timestamp']?.toString(),
     );
+
+    final displayTitle =
+        ((groupTitle != null && groupTitle.trim().isNotEmpty)
+                ? groupTitle.trim()
+                : (namaUsaha.isNotEmpty
+                      ? namaUsaha
+                      : _getActionTitle(
+                          contribution.actionType,
+                          contribution.targetType,
+                        )))
+            .toString();
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -220,12 +258,7 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      namaUsaha.isNotEmpty
-                          ? namaUsaha
-                          : _getActionTitle(
-                              contribution.actionType,
-                              contribution.targetType,
-                            ),
+                      displayTitle,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -233,6 +266,7 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
+
                     if (alamat.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 4.0),
@@ -263,6 +297,28 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
                         ],
                       ),
                     ),
+                    if ((groupActionSubtypes ?? const []).isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: groupActionSubtypes!
+                              .map(
+                                (s) => Chip(
+                                  label: Text(
+                                    s,
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                  backgroundColor: Colors.grey[200],
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -549,4 +605,93 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
       ),
     );
   }
+
+  // Membentuk grup kontribusi berdasarkan operationId
+  List<_ContributionGroup> _groupByOperationId(List<UserContribution> items) {
+    final Map<String, List<UserContribution>> byOp = {};
+    for (final c in items) {
+      final key = (c.operationId.isNotEmpty) ? c.operationId : c.id;
+      byOp.putIfAbsent(key, () => []).add(c);
+    }
+    final List<_ContributionGroup> groups = [];
+    byOp.forEach((opId, list) {
+      // Pilih primary: yang poin terbesar, bila seri ambil terbaru
+      list.sort((a, b) {
+        final cmp = b.points.compareTo(a.points);
+        if (cmp != 0) return cmp;
+        return b.createdAt.compareTo(a.createdAt);
+      });
+      final primary = list.first;
+      final latest = list
+          .map((e) => e.createdAt)
+          .reduce((a, b) => a.isAfter(b) ? a : b);
+      // Cari nama usaha dari salah satu item dalam grup
+      String displayName = '';
+      String? targetUuid;
+      for (final e in list) {
+        final n = (e.changes?['nama_usaha']?.toString() ?? '').trim();
+        final tUuid = (e.changes?['target_uuid']?.toString() ?? '').trim();
+        if ((targetUuid == null || targetUuid.isEmpty) && tUuid.isNotEmpty) {
+          targetUuid = tUuid;
+        }
+        if (n.isNotEmpty) {
+          displayName = n;
+          break;
+        }
+      }
+      final subtypes = list
+          .map((e) => (e.changes?['action_subtype']?.toString() ?? ''))
+          .where((s) => s.isNotEmpty)
+          .toSet()
+          .toList();
+      groups.add(
+        _ContributionGroup(
+          operationId: opId,
+          items: list,
+          primary: primary,
+          latestCreatedAt: latest,
+          actionSubtypes: subtypes,
+          displayName: displayName,
+          targetUuid: targetUuid,
+        ),
+      );
+    });
+    return groups;
+  }
+
+  Future<void> _fetchAndCacheName(String id) async {
+    if (_resolvedNames.containsKey(id)) return;
+    try {
+      final repo = MapRepositoryImpl();
+      final dir = await repo.getDirectoryById(id);
+      final name = dir?.namaUsaha?.toString() ?? '';
+      if (name.isNotEmpty) {
+        setState(() {
+          _resolvedNames[id] = name;
+        });
+      }
+    } catch (_) {
+      // silently ignore
+    }
+  }
+}
+
+class _ContributionGroup {
+  final String operationId;
+  final List<UserContribution> items;
+  final UserContribution primary;
+  final DateTime latestCreatedAt;
+  final List<String> actionSubtypes;
+  final String displayName;
+  final String? targetUuid;
+
+  _ContributionGroup({
+    required this.operationId,
+    required this.items,
+    required this.primary,
+    required this.latestCreatedAt,
+    required this.actionSubtypes,
+    required this.displayName,
+    this.targetUuid,
+  });
 }

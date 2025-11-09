@@ -763,4 +763,21 @@ class MapRepositoryImpl implements MapRepository {
       return false;
     }
   }
+
+  // Update only keberadaan_usaha field for a directory
+  Future<bool> updateDirectoryStatus(String id, int status) async {
+    try {
+      await _supabaseClient
+          .from('direktori')
+          .update({
+            'keberadaan_usaha': status,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', id);
+      return true;
+    } catch (e) {
+      debugPrint('MapRepository: Error updateDirectoryStatus: $e');
+      return false;
+    }
+  }
 }

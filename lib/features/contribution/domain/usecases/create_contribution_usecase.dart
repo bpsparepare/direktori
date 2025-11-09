@@ -15,6 +15,7 @@ class CreateContributionUseCase {
     Map<String, dynamic>? changes,
     double? latitude,
     double? longitude,
+    String? operationId,
   }) async {
     return await repository.createContribution(
       userId: userId,
@@ -24,6 +25,7 @@ class CreateContributionUseCase {
       changes: changes,
       latitude: latitude,
       longitude: longitude,
+      operationId: operationId,
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 /// Entity yang merepresentasikan kontribusi pengguna
 class UserContribution extends Equatable {
   final String id;
+  final String operationId;
   final String userId;
   final String actionType;
   final String targetType;
@@ -17,6 +18,7 @@ class UserContribution extends Equatable {
 
   const UserContribution({
     required this.id,
+    required this.operationId,
     required this.userId,
     required this.actionType,
     required this.targetType,
@@ -33,6 +35,7 @@ class UserContribution extends Equatable {
   @override
   List<Object?> get props => [
     id,
+    operationId,
     userId,
     actionType,
     targetType,
@@ -48,6 +51,7 @@ class UserContribution extends Equatable {
 
   UserContribution copyWith({
     String? id,
+    String? operationId,
     String? userId,
     String? actionType,
     String? targetType,
@@ -62,6 +66,7 @@ class UserContribution extends Equatable {
   }) {
     return UserContribution(
       id: id ?? this.id,
+      operationId: operationId ?? this.operationId,
       userId: userId ?? this.userId,
       actionType: actionType ?? this.actionType,
       targetType: targetType ?? this.targetType,

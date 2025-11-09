@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:uuid/uuid.dart';
 import 'package:geolocator/geolocator.dart';
 import '../bloc/contribution_bloc.dart';
 import '../bloc/contribution_event.dart';
@@ -128,6 +129,9 @@ class _ContributionFormWidgetState extends State<ContributionFormWidget> {
         ? {'description': _changesController.text.trim()}
         : null;
 
+    // Generate operation_id untuk satu submit form
+    final opId = const Uuid().v4();
+
     context.read<ContributionBloc>().add(
       CreateContributionEvent(
         actionType: _selectedActionType,
@@ -136,6 +140,7 @@ class _ContributionFormWidgetState extends State<ContributionFormWidget> {
         changes: changes,
         latitude: _currentPosition!.latitude,
         longitude: _currentPosition!.longitude,
+        operationId: opId,
       ),
     );
   }

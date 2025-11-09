@@ -24,8 +24,9 @@ class _ContributionPageState extends State<ContributionPage> {
     // Load initial data for summary: stats and recent contributions
     context.read<ContributionBloc>().add(const GetUserStatsEvent());
     // Ambil hanya 5 kontribusi terbaru untuk ringkasan
+    // Ambil lebih banyak baris lalu batasi 5 setelah pengelompokan di UI
     context.read<ContributionBloc>().add(
-      const GetUserContributionsEvent(limit: 5),
+      const GetUserContributionsEvent(limit: 25),
     );
     context.read<ContributionBloc>().add(const GetUserRankEvent());
   }
@@ -84,8 +85,9 @@ class _ContributionPageState extends State<ContributionPage> {
                   MaterialPageRoute(builder: (_) => const LeaderboardPage()),
                 );
                 // Pastikan daftar ringkas kembali ke 5 teratas setelah kembali
+                // Ambil lebih banyak baris lalu batasi 5 setelah pengelompokan di UI
                 context.read<ContributionBloc>().add(
-                  const GetUserContributionsEvent(limit: 5),
+                  const GetUserContributionsEvent(limit: 50),
                 );
               },
             ),
@@ -114,8 +116,9 @@ class _ContributionPageState extends State<ContributionPage> {
                               ),
                             );
                             // Refresh kembali daftar ringkas 5 item
+                            // Ambil lebih banyak baris lalu batasi 5 setelah pengelompokan di UI
                             context.read<ContributionBloc>().add(
-                              const GetUserContributionsEvent(limit: 5),
+                              const GetUserContributionsEvent(limit: 50),
                             );
                           },
                           child: const Text('Lihat Semua'),

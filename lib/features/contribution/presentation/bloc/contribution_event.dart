@@ -18,6 +18,7 @@ class CreateContributionEvent extends ContributionEvent {
   final Map<String, dynamic>? changes;
   final double? latitude;
   final double? longitude;
+  final String? operationId;
 
   const CreateContributionEvent({
     required this.actionType,
@@ -26,6 +27,7 @@ class CreateContributionEvent extends ContributionEvent {
     this.changes,
     this.latitude,
     this.longitude,
+    this.operationId,
   });
 
   @override
@@ -36,6 +38,7 @@ class CreateContributionEvent extends ContributionEvent {
     changes,
     latitude,
     longitude,
+    operationId,
   ];
 }
 

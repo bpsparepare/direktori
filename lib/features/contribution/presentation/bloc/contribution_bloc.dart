@@ -88,6 +88,7 @@ class ContributionBloc extends Bloc<ContributionEvent, ContributionState> {
         changes: event.changes,
         latitude: event.latitude,
         longitude: event.longitude,
+        operationId: event.operationId,
       );
 
       print('✅ [BLOC] Kontribusi berhasil dibuat: ${contribution.id}');
@@ -390,9 +391,15 @@ class ContributionBloc extends Bloc<ContributionEvent, ContributionState> {
     Emitter<ContributionState> emit,
   ) async {
     try {
-      debugPrint('🔗 [BLOC] LinkContributionsToDirectoryEvent: ${event.directoryId}');
-      final count = await _repository.linkContributionsToDirectory(event.directoryId);
-      debugPrint('🔗 [BLOC] Linked $count contributions to directory ${event.directoryId}');
+      debugPrint(
+        '🔗 [BLOC] LinkContributionsToDirectoryEvent: ${event.directoryId}',
+      );
+      final count = await _repository.linkContributionsToDirectory(
+        event.directoryId,
+      );
+      debugPrint(
+        '🔗 [BLOC] Linked $count contributions to directory ${event.directoryId}',
+      );
       // No state change required; this is a background reconciliation step.
     } catch (e, st) {
       _logError('LinkContributionsToDirectory', e, st);
