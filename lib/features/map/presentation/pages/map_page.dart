@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import '../../../../core/config/supabase_config.dart';
 import 'package:uuid/uuid.dart';
 import '../../data/repositories/map_repository_impl.dart';
 import '../../data/repositories/scraping_repository_impl.dart';
@@ -167,11 +168,11 @@ class MapPage extends StatelessWidget {
                     ),
                   ],
                   if (state.selectedPlace != null)
-                    Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Focus(
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isWide =
+                            constraints.maxWidth >= 900; // desktop/layar besar
+                        final Widget panel = Focus(
                           autofocus: true,
                           onKeyEvent: (node, event) {
                             if (event is KeyDownEvent &&
@@ -433,14 +434,22 @@ class MapPage extends StatelessWidget {
                                                           Icons.zoom_in,
                                                           size: 18,
                                                         ),
-                                                        label: const Text(
-                                                          'Zoom To',
+                                                        label: const Flexible(
+                                                          child: Text(
+                                                            'Zoom To',
+                                                            maxLines: 1,
+                                                            overflow: TextOverflow.ellipsis,
+                                                            softWrap: false,
+                                                          ),
                                                         ),
                                                         style: ElevatedButton.styleFrom(
                                                           backgroundColor:
                                                               Colors.blue,
                                                           foregroundColor:
                                                               Colors.white,
+                                                          textStyle: const TextStyle(
+                                                            fontSize: 14,
+                                                          ),
                                                           padding:
                                                               const EdgeInsets.symmetric(
                                                                 horizontal: 16,
@@ -605,14 +614,22 @@ class MapPage extends StatelessWidget {
                                                           Icons.navigation,
                                                           size: 18,
                                                         ),
-                                                        label: const Text(
-                                                          'Navigate',
+                                                        label: const Flexible(
+                                                          child: Text(
+                                                            'Navigate',
+                                                            maxLines: 1,
+                                                            overflow: TextOverflow.ellipsis,
+                                                            softWrap: false,
+                                                          ),
                                                         ),
                                                         style: ElevatedButton.styleFrom(
                                                           backgroundColor:
                                                               Colors.green,
                                                           foregroundColor:
                                                               Colors.white,
+                                                          textStyle: const TextStyle(
+                                                            fontSize: 14,
+                                                          ),
                                                           padding:
                                                               const EdgeInsets.symmetric(
                                                                 horizontal: 16,
@@ -829,14 +846,22 @@ class MapPage extends StatelessWidget {
                                                           Icons.playlist_add,
                                                           size: 18,
                                                         ),
-                                                        label: const Text(
-                                                          'Tambah ke Direktori',
+                                                        label: const Flexible(
+                                                          child: Text(
+                                                            'Tambah ke Direktori',
+                                                            maxLines: 1,
+                                                            overflow: TextOverflow.ellipsis,
+                                                            softWrap: false,
+                                                          ),
                                                         ),
                                                         style: ElevatedButton.styleFrom(
                                                           backgroundColor:
                                                               Colors.purple,
                                                           foregroundColor:
                                                               Colors.white,
+                                                          textStyle: const TextStyle(
+                                                            fontSize: 14,
+                                                          ),
                                                           padding:
                                                               const EdgeInsets.symmetric(
                                                                 horizontal: 16,
@@ -910,8 +935,13 @@ class MapPage extends StatelessWidget {
                                                               .remove_circle_outline,
                                                           size: 18,
                                                         ),
-                                                        label: const Text(
-                                                          'Hapus (Scraping)',
+                                                        label: const Flexible(
+                                                          child: Text(
+                                                            'Hapus (Scraping)',
+                                                            maxLines: 1,
+                                                            overflow: TextOverflow.ellipsis,
+                                                            softWrap: false,
+                                                          ),
                                                         ),
                                                         style: ElevatedButton.styleFrom(
                                                           backgroundColor:
@@ -920,6 +950,9 @@ class MapPage extends StatelessWidget {
                                                                   .shade700,
                                                           foregroundColor:
                                                               Colors.white,
+                                                          textStyle: const TextStyle(
+                                                            fontSize: 14,
+                                                          ),
                                                           padding:
                                                               const EdgeInsets.symmetric(
                                                                 horizontal: 16,
@@ -988,14 +1021,22 @@ class MapPage extends StatelessWidget {
                                                           Icons.cancel_outlined,
                                                           size: 18,
                                                         ),
-                                                        label: const Text(
-                                                          'Tutup (Scraping)',
+                                                        label: const Flexible(
+                                                          child: Text(
+                                                            'Tutup (Scraping)',
+                                                            maxLines: 1,
+                                                            overflow: TextOverflow.ellipsis,
+                                                            softWrap: false,
+                                                          ),
                                                         ),
                                                         style: ElevatedButton.styleFrom(
                                                           backgroundColor:
                                                               Colors.orange,
                                                           foregroundColor:
                                                               Colors.white,
+                                                          textStyle: const TextStyle(
+                                                            fontSize: 14,
+                                                          ),
                                                           padding:
                                                               const EdgeInsets.symmetric(
                                                                 horizontal: 16,
@@ -1063,14 +1104,22 @@ class MapPage extends StatelessWidget {
                                                           Icons.map,
                                                           size: 18,
                                                         ),
-                                                        label: const Text(
-                                                          'Buka Google Maps',
+                                                        label: const Flexible(
+                                                          child: Text(
+                                                            'Buka Google Maps',
+                                                            maxLines: 1,
+                                                            overflow: TextOverflow.ellipsis,
+                                                            softWrap: false,
+                                                          ),
                                                         ),
                                                         style: ElevatedButton.styleFrom(
                                                           backgroundColor:
                                                               Colors.green,
                                                           foregroundColor:
                                                               Colors.white,
+                                                          textStyle: const TextStyle(
+                                                            fontSize: 14,
+                                                          ),
                                                           padding:
                                                               const EdgeInsets.symmetric(
                                                                 horizontal: 16,
@@ -1623,8 +1672,28 @@ class MapPage extends StatelessWidget {
                               ),
                             ),
                           ),
-                        ),
-                      ),
+                        );
+                        if (isWide) {
+                          // Tampilkan sebagai panel samping pada layar besar (seperti Google Maps)
+                          return Align(
+                            alignment: Alignment.centerRight,
+                            child: Container(
+                              margin: const EdgeInsets.all(12.0),
+                              width: math.min(constraints.maxWidth * 0.5, 600),
+                              child: panel,
+                            ),
+                          );
+                        } else {
+                          // Tampilkan sebagai bottom card pada mobile
+                          return Align(
+                            alignment: Alignment.bottomCenter,
+                            child: Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: panel,
+                            ),
+                          );
+                        }
+                      },
                     ),
                 ],
               ),
@@ -1816,6 +1885,122 @@ class MapPage extends StatelessWidget {
                 );
                 _showNavigasiDialog(context, point);
               },
+            ),
+            Visibility(
+              visible: DateTime.now().year == 2025 && DateTime.now().month == 11 && DateTime.now().day == 11,
+              child: ListTile(
+                leading: const Icon(Icons.flag, color: Colors.green),
+                title: const Text('Kirim Quiz'),
+                subtitle: const Text('Kirim titik ini sebagai jawaban'),
+                onTap: () async {
+                Navigator.pop(context);
+                final confirm = await showDialog<bool>(
+                  context: parentContext,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Kirim jawaban?'),
+                    content: const Text(
+                      'Apakah Anda yakin ingin mengirim titik ini sebagai jawaban?',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        child: const Text('Batal'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        child: const Text('Kirim'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm == true) {
+                  try {
+                    // Tampilkan indikator proses
+                    showDialog(
+                      context: parentContext,
+                      barrierDismissible: false,
+                      builder: (ctx) => const AlertDialog(
+                        content: Row(
+                          children: [
+                            SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(),
+                            ),
+                            SizedBox(width: 16),
+                            Expanded(child: Text('Mengirim jawaban...')),
+                          ],
+                        ),
+                      ),
+                    );
+
+                    final result = await SupabaseConfig.client.rpc(
+                      'fn_submit_guess_current',
+                      params: {
+                        'p_lat': point.latitude,
+                        'p_lon': point.longitude,
+                      },
+                    );
+
+                    // Tutup indikator proses
+                    if (Navigator.of(parentContext).canPop()) {
+                      Navigator.of(parentContext).pop();
+                    }
+
+                    // Ekstrak metrik dari hasil RPC, jika tidak ada, query dari tabel submissions
+                    String submissionId = '';
+                    num? score;
+                    bool? isCorrect;
+                    num? distanceM;
+                    int? durationMs;
+
+                    if (result is Map<String, dynamic>) {
+                      submissionId = (result['id']?.toString() ?? '');
+                      score = (result['score'] ?? result['total_score']) as num?;
+                      isCorrect = result['is_correct'] as bool?;
+                      distanceM = (result['distance_m'] ?? result['distance']) as num?;
+                      durationMs = (result['duration_ms'] ?? result['total_time_ms']) as int?;
+                    } else if (result is List && result.isNotEmpty && result.first is Map<String, dynamic>) {
+                      final m = result.first as Map<String, dynamic>;
+                      submissionId = (m['id']?.toString() ?? '');
+                      score = (m['score'] ?? m['total_score']) as num?;
+                      isCorrect = m['is_correct'] as bool?;
+                      distanceM = (m['distance_m'] ?? m['distance']) as num?;
+                      durationMs = (m['duration_ms'] ?? m['total_time_ms']) as int?;
+                    } else if (result is String) {
+                      submissionId = result;
+                    }
+
+                    // SnackBar konfirmasi minimalis (tampilkan skor/benar jika tersedia)
+                    final scoreText = (score != null)
+                        ? (score is int ? score.toString() : (score as num).toString())
+                        : null;
+                    final isCorrectText = (isCorrect == null)
+                        ? null
+                        : (isCorrect! ? 'Benar' : 'Salah');
+                    final msg = (scoreText != null && isCorrectText != null)
+                        ? 'Berhasil kirim. Skor: $scoreText • $isCorrectText'
+                        : 'Berhasil kirim jawaban.';
+                    ScaffoldMessenger.of(parentContext).showSnackBar(
+                      SnackBar(content: Text(msg)),
+                    );
+                  } catch (e) {
+                    // Tutup indikator proses jika masih terbuka
+                    if (Navigator.of(parentContext).canPop()) {
+                      Navigator.of(parentContext).pop();
+                    }
+
+                    final message = e.toString();
+
+                    // Feedback minimalis untuk error
+                    ScaffoldMessenger.of(parentContext).showSnackBar(
+                      SnackBar(content: Text('Gagal kirim: $message')),
+                    );
+                  }
+                }
+              },
+            ),
             ),
 
             const SizedBox(height: 20),
@@ -3347,7 +3532,6 @@ class MapPage extends StatelessWidget {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    
                                     TextField(
                                       controller: deskripsiBadanUsahaController,
                                       decoration: const InputDecoration(
@@ -4035,7 +4219,9 @@ class MapPage extends StatelessWidget {
                               minimum: const EdgeInsets.only(bottom: 16),
                               child: Container(
                                 margin: const EdgeInsets.only(top: 16),
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
                                 child: Row(
                                   children: [
                                     Expanded(
@@ -4056,166 +4242,169 @@ class MapPage extends StatelessWidget {
                                       flex: 2,
                                       child: ElevatedButton(
                                         onPressed: () async {
-                                        final namaUsaha = businessNameSelected
-                                            ? namaUsahaController.text.trim()
-                                            : namaUsahaController.text.trim();
-                                        if (namaUsaha.isEmpty) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            const SnackBar(
+                                          final namaUsaha = businessNameSelected
+                                              ? namaUsahaController.text.trim()
+                                              : namaUsahaController.text.trim();
+                                          if (namaUsaha.isEmpty) {
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Nama usaha harus diisi',
+                                                ),
+                                                backgroundColor: Colors.red,
+                                              ),
+                                            );
+                                            return;
+                                          }
+
+                                          // Show confirmation dialog
+                                          final confirmed = await showDialog<bool>(
+                                            context: context,
+                                            builder: (dialogContext) => AlertDialog(
+                                              title: const Text('Konfirmasi'),
                                               content: Text(
-                                                'Nama usaha harus diisi',
+                                                'Apakah Anda yakin ingin menyimpan direktori "$namaUsaha"?',
                                               ),
-                                              backgroundColor: Colors.red,
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.of(
+                                                    dialogContext,
+                                                  ).pop(false),
+                                                  child: const Text('Batal'),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () => Navigator.of(
+                                                    dialogContext,
+                                                  ).pop(true),
+                                                  child: const Text('Simpan'),
+                                                ),
+                                              ],
                                             ),
                                           );
-                                          return;
-                                        }
 
-                                        // Show confirmation dialog
-                                        final confirmed = await showDialog<bool>(
-                                          context: context,
-                                          builder: (dialogContext) => AlertDialog(
-                                            title: const Text('Konfirmasi'),
-                                            content: Text(
-                                              'Apakah Anda yakin ingin menyimpan direktori "$namaUsaha"?',
-                                            ),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () => Navigator.of(
-                                                  dialogContext,
-                                                ).pop(false),
-                                                child: const Text('Batal'),
-                                              ),
-                                              ElevatedButton(
-                                                onPressed: () => Navigator.of(
-                                                  dialogContext,
-                                                ).pop(true),
-                                                child: const Text('Simpan'),
-                                              ),
-                                            ],
-                                          ),
-                                        );
+                                          if (confirmed == true) {
+                                            Navigator.of(context).pop();
+                                            final scaffoldMessenger =
+                                                ScaffoldMessenger.of(context);
+                                            final mapBloc = context
+                                                .read<MapBloc>();
 
-                                        if (confirmed == true) {
-                                          Navigator.of(context).pop();
-                                          final scaffoldMessenger =
-                                              ScaffoldMessenger.of(context);
-                                          final mapBloc = context
-                                              .read<MapBloc>();
-
-                                          await _saveDirektori(
-                                            context,
-                                            point,
-                                            namaUsaha,
-                                            alamatController.text.trim(),
-                                            pemilikController.text.trim(),
-                                            nomorTeleponController.text.trim(),
-                                            scaffoldMessenger,
-                                            mapBloc,
-                                            scrapedPlaceId: scrapedPlaceId,
-                                            namaKomersial:
-                                                namaKomersialController.text
-                                                    .trim()
-                                                    .isEmpty
-                                                ? null
-                                                : namaKomersialController.text
-                                                      .trim(),
-                                            nib:
-                                                nibController.text
-                                                    .trim()
-                                                    .isEmpty
-                                                ? null
-                                                : nibController.text.trim(),
-                                            email:
-                                                emailController.text
-                                                    .trim()
-                                                    .isEmpty
-                                                ? null
-                                                : emailController.text.trim(),
-                                            website:
-                                                websiteController.text
-                                                    .trim()
-                                                    .isEmpty
-                                                ? null
-                                                : websiteController.text.trim(),
-                                            nomorWhatsapp:
-                                                nomorWhatsappController.text
-                                                    .trim()
-                                                    .isEmpty
-                                                ? null
-                                                : nomorWhatsappController.text
-                                                      .trim(),
-                                            nikPemilik:
-                                                nikPemilikController.text
-                                                    .trim()
-                                                    .isEmpty
-                                                ? null
-                                                : nikPemilikController.text
-                                                      .trim(),
-                                            keterangan:
-                                                keteranganController.text
-                                                    .trim()
-                                                    .isEmpty
-                                                ? null
-                                                : keteranganController.text
-                                                      .trim(),
-                                            kegiatanUsaha:
-                                                kegiatanUsahaController.text
-                                                    .trim()
-                                                    .isEmpty
-                                                ? null
-                                                : kegiatanUsahaController.text
-                                                      .trim(),
-                                            deskripsiBadanUsaha:
-                                                deskripsiBadanUsahaController
-                                                    .text
-                                                    .trim()
-                                                    .isEmpty
-                                                ? null
-                                                : deskripsiBadanUsahaController
+                                            await _saveDirektori(
+                                              context,
+                                              point,
+                                              namaUsaha,
+                                              alamatController.text.trim(),
+                                              pemilikController.text.trim(),
+                                              nomorTeleponController.text
+                                                  .trim(),
+                                              scaffoldMessenger,
+                                              mapBloc,
+                                              scrapedPlaceId: scrapedPlaceId,
+                                              namaKomersial:
+                                                  namaKomersialController.text
+                                                      .trim()
+                                                      .isEmpty
+                                                  ? null
+                                                  : namaKomersialController.text
+                                                        .trim(),
+                                              nib:
+                                                  nibController.text
+                                                      .trim()
+                                                      .isEmpty
+                                                  ? null
+                                                  : nibController.text.trim(),
+                                              email:
+                                                  emailController.text
+                                                      .trim()
+                                                      .isEmpty
+                                                  ? null
+                                                  : emailController.text.trim(),
+                                              website:
+                                                  websiteController.text
+                                                      .trim()
+                                                      .isEmpty
+                                                  ? null
+                                                  : websiteController.text
+                                                        .trim(),
+                                              nomorWhatsapp:
+                                                  nomorWhatsappController.text
+                                                      .trim()
+                                                      .isEmpty
+                                                  ? null
+                                                  : nomorWhatsappController.text
+                                                        .trim(),
+                                              nikPemilik:
+                                                  nikPemilikController.text
+                                                      .trim()
+                                                      .isEmpty
+                                                  ? null
+                                                  : nikPemilikController.text
+                                                        .trim(),
+                                              keterangan:
+                                                  keteranganController.text
+                                                      .trim()
+                                                      .isEmpty
+                                                  ? null
+                                                  : keteranganController.text
+                                                        .trim(),
+                                              kegiatanUsaha:
+                                                  kegiatanUsahaController.text
+                                                      .trim()
+                                                      .isEmpty
+                                                  ? null
+                                                  : kegiatanUsahaController.text
+                                                        .trim(),
+                                              deskripsiBadanUsaha:
+                                                  deskripsiBadanUsahaController
                                                       .text
-                                                      .trim(),
-                                            skalaUsaha: selectedSkalaUsaha,
-                                            jenisPerusahaan:
-                                                selectedJenisPerusahaan,
-                                            keberadaanUsaha:
-                                                selectedKeberadaanUsaha,
-                                            jenisKepemilikan:
-                                                selectedJenisKepemilikan,
-                                            bentukBadanHukum:
-                                                selectedBentukBadanHukum,
-                                            jaringanUsaha:
-                                                selectedJaringanUsaha,
-                                            sektorInstitusi:
-                                                selectedSektorInstitusi,
-                                            tahunBerdiri: selectedTahunBerdiri,
-                                            tenagaKerja: selectedTenagaKerja,
-                                            // New fields
-                                            kbli:
-                                                kbliController.text
-                                                    .trim()
-                                                    .isEmpty
-                                                ? null
-                                                : kbliController.text.trim(),
-                                            tag: selectedTags.isEmpty
-                                                ? null
-                                                : selectedTags,
-                                            urlGambar:
-                                                urlGambarController.text
-                                                    .trim()
-                                                    .isEmpty
-                                                ? null
-                                                : urlGambarController.text
-                                                      .trim(),
-                                            existingDirectory:
-                                                existingDirectory,
-                                            selectedExistingBusiness:
-                                                selectedExistingBusiness,
-                                          );
-                                        }
-                                      },
+                                                      .trim()
+                                                      .isEmpty
+                                                  ? null
+                                                  : deskripsiBadanUsahaController
+                                                        .text
+                                                        .trim(),
+                                              skalaUsaha: selectedSkalaUsaha,
+                                              jenisPerusahaan:
+                                                  selectedJenisPerusahaan,
+                                              keberadaanUsaha:
+                                                  selectedKeberadaanUsaha,
+                                              jenisKepemilikan:
+                                                  selectedJenisKepemilikan,
+                                              bentukBadanHukum:
+                                                  selectedBentukBadanHukum,
+                                              jaringanUsaha:
+                                                  selectedJaringanUsaha,
+                                              sektorInstitusi:
+                                                  selectedSektorInstitusi,
+                                              tahunBerdiri:
+                                                  selectedTahunBerdiri,
+                                              tenagaKerja: selectedTenagaKerja,
+                                              // New fields
+                                              kbli:
+                                                  kbliController.text
+                                                      .trim()
+                                                      .isEmpty
+                                                  ? null
+                                                  : kbliController.text.trim(),
+                                              tag: selectedTags.isEmpty
+                                                  ? null
+                                                  : selectedTags,
+                                              urlGambar:
+                                                  urlGambarController.text
+                                                      .trim()
+                                                      .isEmpty
+                                                  ? null
+                                                  : urlGambarController.text
+                                                        .trim(),
+                                              existingDirectory:
+                                                  existingDirectory,
+                                              selectedExistingBusiness:
+                                                  selectedExistingBusiness,
+                                            );
+                                          }
+                                        },
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: Colors.blue,
                                           foregroundColor: Colors.white,
@@ -4237,138 +4426,153 @@ class MapPage extends StatelessWidget {
                               minimum: const EdgeInsets.only(bottom: 16),
                               child: Container(
                                 margin: const EdgeInsets.only(top: 16),
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
                                 width: double.infinity,
                                 child: ElevatedButton(
                                   onPressed: () async {
-                                  final namaUsaha = namaUsahaController.text
-                                      .trim();
-                                  if (namaUsaha.isEmpty) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Nama usaha harus diisi'),
-                                        backgroundColor: Colors.red,
+                                    final namaUsaha = namaUsahaController.text
+                                        .trim();
+                                    if (namaUsaha.isEmpty) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Nama usaha harus diisi',
+                                          ),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    // Show confirmation dialog
+                                    final confirmed = await showDialog<bool>(
+                                      context: context,
+                                      builder: (dialogContext) => AlertDialog(
+                                        title: const Text('Konfirmasi'),
+                                        content: Text(
+                                          'Apakah Anda yakin ingin menyimpan perubahan direktori "$namaUsaha"?',
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.of(
+                                              dialogContext,
+                                            ).pop(false),
+                                            child: const Text('Batal'),
+                                          ),
+                                          ElevatedButton(
+                                            onPressed: () => Navigator.of(
+                                              dialogContext,
+                                            ).pop(true),
+                                            child: const Text('Simpan'),
+                                          ),
+                                        ],
                                       ),
                                     );
-                                    return;
-                                  }
 
-                                  // Show confirmation dialog
-                                  final confirmed = await showDialog<bool>(
-                                    context: context,
-                                    builder: (dialogContext) => AlertDialog(
-                                      title: const Text('Konfirmasi'),
-                                      content: Text(
-                                        'Apakah Anda yakin ingin menyimpan perubahan direktori "$namaUsaha"?',
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.of(
-                                            dialogContext,
-                                          ).pop(false),
-                                          child: const Text('Batal'),
-                                        ),
-                                        ElevatedButton(
-                                          onPressed: () => Navigator.of(
-                                            dialogContext,
-                                          ).pop(true),
-                                          child: const Text('Simpan'),
-                                        ),
-                                      ],
-                                    ),
-                                  );
+                                    if (confirmed == true) {
+                                      Navigator.of(context).pop();
+                                      final scaffoldMessenger =
+                                          ScaffoldMessenger.of(context);
+                                      final mapBloc = context.read<MapBloc>();
 
-                                  if (confirmed == true) {
-                                    Navigator.of(context).pop();
-                                    final scaffoldMessenger =
-                                        ScaffoldMessenger.of(context);
-                                    final mapBloc = context.read<MapBloc>();
-
-                                    await _saveDirektori(
-                                      context,
-                                      point,
-                                      namaUsaha,
-                                      alamatController.text.trim(),
-                                      pemilikController.text.trim(),
-                                      nomorTeleponController.text.trim(),
-                                      scaffoldMessenger,
-                                      mapBloc,
-                                      scrapedPlaceId: scrapedPlaceId,
-                                      namaKomersial:
-                                          namaKomersialController.text
-                                              .trim()
-                                              .isEmpty
-                                          ? null
-                                          : namaKomersialController.text.trim(),
-                                      nib: nibController.text.trim().isEmpty
-                                          ? null
-                                          : nibController.text.trim(),
-                                      email: emailController.text.trim().isEmpty
-                                          ? null
-                                          : emailController.text.trim(),
-                                      website:
-                                          websiteController.text.trim().isEmpty
-                                          ? null
-                                          : websiteController.text.trim(),
-                                      nomorWhatsapp:
-                                          nomorWhatsappController.text
-                                              .trim()
-                                              .isEmpty
-                                          ? null
-                                          : nomorWhatsappController.text.trim(),
-                                      nikPemilik:
-                                          nikPemilikController.text
-                                              .trim()
-                                              .isEmpty
-                                          ? null
-                                          : nikPemilikController.text.trim(),
-                                      keterangan:
-                                          keteranganController.text
-                                              .trim()
-                                              .isEmpty
-                                          ? null
-                                          : keteranganController.text.trim(),
-                                      kegiatanUsaha:
-                                          kegiatanUsahaController.text
-                                              .trim()
-                                              .isEmpty
-                                          ? null
-                                          : kegiatanUsahaController.text.trim(),
-                                      deskripsiBadanUsaha:
-                                          deskripsiBadanUsahaController.text
-                                              .trim()
-                                              .isEmpty
-                                          ? null
-                                          : deskripsiBadanUsahaController.text
-                                                .trim(),
-                                      skalaUsaha: selectedSkalaUsaha,
-                                      jenisPerusahaan: selectedJenisPerusahaan,
-                                      keberadaanUsaha: selectedKeberadaanUsaha,
-                                      jenisKepemilikan:
-                                          selectedJenisKepemilikan,
-                                      bentukBadanHukum:
-                                          selectedBentukBadanHukum,
-                                      jaringanUsaha: selectedJaringanUsaha,
-                                      sektorInstitusi: selectedSektorInstitusi,
-                                      tahunBerdiri: selectedTahunBerdiri,
-                                      tenagaKerja: selectedTenagaKerja,
-                                      // New fields
-                                      kbli: kbliController.text.trim().isEmpty
-                                          ? null
-                                          : kbliController.text.trim(),
-                                      tag: selectedTags.isEmpty
-                                          ? null
-                                          : selectedTags,
-                                      urlGambar:
-                                          urlGambarController.text
-                                              .trim()
-                                              .isEmpty
-                                          ? null
-                                          : urlGambarController.text.trim(),
-                                      existingDirectory: existingDirectory,
-                                      selectedExistingBusiness: null,
-                                    );
-                                  }
+                                      await _saveDirektori(
+                                        context,
+                                        point,
+                                        namaUsaha,
+                                        alamatController.text.trim(),
+                                        pemilikController.text.trim(),
+                                        nomorTeleponController.text.trim(),
+                                        scaffoldMessenger,
+                                        mapBloc,
+                                        scrapedPlaceId: scrapedPlaceId,
+                                        namaKomersial:
+                                            namaKomersialController.text
+                                                .trim()
+                                                .isEmpty
+                                            ? null
+                                            : namaKomersialController.text
+                                                  .trim(),
+                                        nib: nibController.text.trim().isEmpty
+                                            ? null
+                                            : nibController.text.trim(),
+                                        email:
+                                            emailController.text.trim().isEmpty
+                                            ? null
+                                            : emailController.text.trim(),
+                                        website:
+                                            websiteController.text
+                                                .trim()
+                                                .isEmpty
+                                            ? null
+                                            : websiteController.text.trim(),
+                                        nomorWhatsapp:
+                                            nomorWhatsappController.text
+                                                .trim()
+                                                .isEmpty
+                                            ? null
+                                            : nomorWhatsappController.text
+                                                  .trim(),
+                                        nikPemilik:
+                                            nikPemilikController.text
+                                                .trim()
+                                                .isEmpty
+                                            ? null
+                                            : nikPemilikController.text.trim(),
+                                        keterangan:
+                                            keteranganController.text
+                                                .trim()
+                                                .isEmpty
+                                            ? null
+                                            : keteranganController.text.trim(),
+                                        kegiatanUsaha:
+                                            kegiatanUsahaController.text
+                                                .trim()
+                                                .isEmpty
+                                            ? null
+                                            : kegiatanUsahaController.text
+                                                  .trim(),
+                                        deskripsiBadanUsaha:
+                                            deskripsiBadanUsahaController.text
+                                                .trim()
+                                                .isEmpty
+                                            ? null
+                                            : deskripsiBadanUsahaController.text
+                                                  .trim(),
+                                        skalaUsaha: selectedSkalaUsaha,
+                                        jenisPerusahaan:
+                                            selectedJenisPerusahaan,
+                                        keberadaanUsaha:
+                                            selectedKeberadaanUsaha,
+                                        jenisKepemilikan:
+                                            selectedJenisKepemilikan,
+                                        bentukBadanHukum:
+                                            selectedBentukBadanHukum,
+                                        jaringanUsaha: selectedJaringanUsaha,
+                                        sektorInstitusi:
+                                            selectedSektorInstitusi,
+                                        tahunBerdiri: selectedTahunBerdiri,
+                                        tenagaKerja: selectedTenagaKerja,
+                                        // New fields
+                                        kbli: kbliController.text.trim().isEmpty
+                                            ? null
+                                            : kbliController.text.trim(),
+                                        tag: selectedTags.isEmpty
+                                            ? null
+                                            : selectedTags,
+                                        urlGambar:
+                                            urlGambarController.text
+                                                .trim()
+                                                .isEmpty
+                                            ? null
+                                            : urlGambarController.text.trim(),
+                                        existingDirectory: existingDirectory,
+                                        selectedExistingBusiness: null,
+                                      );
+                                    }
                                   },
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.blue,
