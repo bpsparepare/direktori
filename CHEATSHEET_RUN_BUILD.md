@@ -13,6 +13,7 @@ Gunakan perintah berikut agar tidak lupa saat menjalankan dan membangun aplikasi
 - Web: `flutter build web --release --dart-define-from-file=env/env.local.json`
 - Android: `flutter build apk --release --dart-define-from-file=env/env.local.json`
 - iOS: `flutter build ios --release --dart-define-from-file=env/env.local.json`
+- Windows (MSIX): `flutter build windows --release --dart-define-from-file=env/env.local.json` lalu `echo N | flutter pub run msix:create`
 
 ## Catatan
 
@@ -21,3 +22,5 @@ Gunakan perintah berikut agar tidak lupa saat menjalankan dan membangun aplikasi
 - Android: pastikan device/emulator aktif dan terdeteksi (`flutter devices`).
 - iOS: pastikan CocoaPods terpasang dan konfigurasi signing sudah sesuai project.
 - Web: selain `chrome`, Anda bisa menggunakan device web lain yang tersedia pada mesin.
+- Windows (MSIX): `echo N` digunakan untuk menolak install test certificate agar package siap untuk Windows Store submission.
+- Windows: Jika ada error "Nuget.exe not found", Nuget.exe sudah tersedia di project directory (d:\flutter\direktori\nuget.exe).

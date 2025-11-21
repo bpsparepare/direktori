@@ -1,0 +1,18 @@
+# Konfigurasi MSIX untuk Windows Store - Final
+# Publisher ID dari akun Windows Store Anda
+msix:
+  display_name: Direktori - Aplikasi Pencarian Lokasi
+  publisher_display_name: Statistik Ceria
+  identity_name: StatistikCeria.direktori
+  publisher: CN=9EA411D5-DB62-4E3A-9282-478993AEB351
+  capabilities:
+    - internetClient
+  languages: id,en
+  architecture: x64
+  msix_version: 1.0.0.2
+  output_name: direktori-store
+  store: true
+  # Jika punya certificate, uncomment baris berikut:
+  # certificate_path: certificates/direktori-signing.pfx
+  # certificate_password: your-password
+  # install_certificate: false
