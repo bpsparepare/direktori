@@ -6,10 +6,12 @@ import '../../domain/usecases/get_initial_map_config.dart';
 import '../../domain/usecases/get_places.dart';
 import '../../domain/usecases/get_first_polygon_meta_from_geojson.dart';
 import '../../domain/usecases/get_all_polygons_meta_from_geojson.dart';
+import '../../domain/usecases/get_places_in_bounds.dart';
 
 class MapBloc extends Bloc<MapEvent, MapState> {
   final GetInitialMapConfig getInitialMapConfig;
   final GetPlaces getPlaces;
+  final GetPlacesInBounds getPlacesInBounds;
   final GetFirstPolygonMetaFromGeoJson getFirstPolygonMeta;
   final GetAllPolygonsMetaFromGeoJson getAllPolygonsMeta;
 
@@ -18,9 +20,11 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     required this.getPlaces,
     required this.getFirstPolygonMeta,
     required this.getAllPolygonsMeta,
+    required this.getPlacesInBounds,
   }) : super(const MapState()) {
     on<MapInitRequested>(_onInit);
     on<PlacesRequested>(_onPlacesRequested);
+    on<PlacesInBoundsRequested>(_onPlacesInBoundsRequested);
     on<PlaceSelected>(_onPlaceSelected);
     on<PlaceCleared>(_onPlaceCleared);
     on<PolygonRequested>(_onPolygonRequested);
@@ -47,6 +51,23 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   ) async {
     try {
       final list = await getPlaces();
+      emit(state.copyWith(places: list));
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> _onPlacesInBoundsRequested(
+    PlacesInBoundsRequested event,
+    Emitter<MapState> emit,
+  ) async {
+    try {
+      final list = await getPlacesInBounds(
+        event.south,
+        event.north,
+        event.west,
+        event.east,
+      );
       emit(state.copyWith(places: list));
     } catch (e) {
       emit(state.copyWith(error: e.toString()));

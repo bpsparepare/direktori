@@ -24,6 +24,8 @@ class MapControls extends StatefulWidget {
   final double currentOffsetY; // Current Y offset
   final bool showScrapedMarkers; // Toggle scraped markers visibility
   final Function(bool)? onToggleScrapedMarkers; // Toggle callback
+  final bool showMarkerLabels;
+  final Function(bool)? onToggleMarkerLabels;
 
   const MapControls({
     super.key,
@@ -42,6 +44,8 @@ class MapControls extends StatefulWidget {
     this.currentOffsetY = 0.0, // Add to constructor
     this.showScrapedMarkers = true,
     this.onToggleScrapedMarkers,
+    this.showMarkerLabels = true,
+    this.onToggleMarkerLabels,
   });
 
   @override
@@ -96,11 +100,25 @@ class _MapControlsState extends State<MapControls> {
         return;
       }
 
-      // Dapatkan posisi saat ini dengan timeout
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10),
-      );
+      Position position;
+      try {
+        position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.medium,
+          timeLimit: const Duration(seconds: 30),
+        );
+      } catch (_) {
+        final last = await Geolocator.getLastKnownPosition();
+        if (last != null) {
+          position = last;
+        } else {
+          position = await Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.low,
+              distanceFilter: 10,
+            ),
+          ).first.timeout(const Duration(seconds: 30));
+        }
+      }
 
       // Pindahkan peta ke lokasi saat ini
       final currentLocation = LatLng(position.latitude, position.longitude);
@@ -133,6 +151,9 @@ class _MapControlsState extends State<MapControls> {
         errorMessage = 'Izin lokasi diperlukan untuk fitur ini.';
       } else if (e.toString().contains('timeout')) {
         errorMessage = 'Timeout mendapatkan lokasi. Coba lagi.';
+      } else if (e.toString().contains('kCLErrorDomain') ||
+          e.toString().contains('LOCATION UPDATE FAILURE')) {
+        errorMessage = 'Lokasi belum tersedia. Coba lagi beberapa saat.';
       } else {
         errorMessage = 'Gagal mendapatkan lokasi: ${e.toString()}';
       }
@@ -252,6 +273,33 @@ class _MapControlsState extends State<MapControls> {
                   : 'Tampilkan Marker Scraping',
               onPressed: () => widget.onToggleScrapedMarkers?.call(
                 !widget.showScrapedMarkers,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Toggle marker labels visibility
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: Icon(
+                widget.showMarkerLabels ? Icons.text_fields : Icons.text_fields_outlined,
+                color: Colors.black87,
+              ),
+              tooltip: widget.showMarkerLabels
+                  ? 'Sembunyikan Nama Marker'
+                  : 'Tampilkan Nama Marker',
+              onPressed: () => widget.onToggleMarkerLabels?.call(
+                !widget.showMarkerLabels,
               ),
             ),
           ),

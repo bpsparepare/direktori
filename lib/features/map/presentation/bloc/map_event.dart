@@ -17,6 +17,21 @@ class PlacesRequested extends MapEvent {
   const PlacesRequested();
 }
 
+class PlacesInBoundsRequested extends MapEvent {
+  final double south;
+  final double north;
+  final double west;
+  final double east;
+  const PlacesInBoundsRequested(
+    this.south,
+    this.north,
+    this.west,
+    this.east,
+  );
+  @override
+  List<Object?> get props => [south, north, west, east];
+}
+
 class PlaceSelected extends MapEvent {
   final Place place;
   const PlaceSelected(this.place);

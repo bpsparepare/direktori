@@ -3,6 +3,8 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:gsheets/gsheets.dart';
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../../core/config/supabase_config.dart';
 import '../../domain/entities/place.dart';
 import '../models/scraped_place.dart';
 
@@ -11,6 +13,8 @@ class ScrapingRepositoryImpl {
       '1W82OicbyAmyzSnkp_gUsZFhOnUm4qbcc4y2ANLRP5JI';
   static const String _worksheetTitle = 'data';
   static const String _saAssetPath = 'assets/sa/sa-account.json';
+  static const String _edgeFetchFn = 'gsheet_fetch_places';
+  static const String _edgeUpdateFn = 'gsheet_update_status';
 
   static List<ScrapedPlace>? _cached;
   static Map<String, ScrapedPlace>? _byId;
@@ -21,27 +25,62 @@ class ScrapingRepositoryImpl {
     return gsheets;
   }
 
+  Future<List<Map<String, dynamic>>?> _fetchRowsViaEdge() async {
+    try {
+      final SupabaseClient client = SupabaseConfig.client;
+      final result = await client.functions.invoke(
+        _edgeFetchFn,
+        body: {
+          'spreadsheetId': _spreadsheetId,
+          'worksheetTitle': _worksheetTitle,
+        },
+      );
+      if (result.data == null) return null;
+      final data = result.data;
+      if (data is List) {
+        return data
+            .map((e) => (e as Map).map((k, v) => MapEntry(k.toString(), v)))
+            .cast<Map<String, dynamic>>()
+            .toList();
+      }
+      return null;
+    } catch (e) {
+      debugPrint('ScrapingRepository: edge fetch failed: $e');
+      return null;
+    }
+  }
+
   Future<List<ScrapedPlace>> getScrapedPlaces() async {
     try {
       if (_cached != null) return _cached!;
-      final gsheets = await _initClient();
-      final ss = await gsheets.spreadsheet(_spreadsheetId);
-      final ws = ss.worksheetByTitle(_worksheetTitle);
-      if (ws == null) {
-        debugPrint(
-          'ScrapingRepository: worksheet "$_worksheetTitle" not found',
-        );
-        return [];
+      final edgeRows = await _fetchRowsViaEdge();
+      List<Map<String, dynamic>> rowsMap;
+      if (edgeRows != null) {
+        rowsMap = edgeRows;
+      } else {
+        final gsheets = await _initClient();
+        final ss = await gsheets.spreadsheet(_spreadsheetId);
+        final ws = ss.worksheetByTitle(_worksheetTitle);
+        if (ws == null) {
+          debugPrint(
+            'ScrapingRepository: worksheet "$_worksheetTitle" not found',
+          );
+          return [];
+        }
+        final rows =
+            await ws.values.map.allRows(fromRow: 1) ??
+            const <Map<String, String>>[];
+        rowsMap = rows
+            .map((e) => e.map((k, v) => MapEntry(k, v)))
+            .cast<Map<String, dynamic>>()
+            .toList();
       }
-      final rows =
-          await ws.values.map.allRows(fromRow: 1) ??
-          const <Map<String, String>>[];
-      if (rows.isEmpty) {
+      if (rowsMap.isEmpty) {
         debugPrint('ScrapingRepository: no rows');
         return [];
       }
       final List<ScrapedPlace> places = [];
-      for (final row in rows) {
+      for (final row in rowsMap) {
         try {
           final sp = ScrapedPlace.fromRow(row);
           // Skip without coordinates or title
@@ -81,6 +120,30 @@ class ScrapingRepositoryImpl {
   /// Tries to match by `cid` first; falls back to `link` if needed.
   Future<bool> updateStatusFor(ScrapedPlace place, String status) async {
     try {
+      // Try Edge Function first
+      try {
+        final SupabaseClient client = SupabaseConfig.client;
+        final res = await client.functions.invoke(
+          _edgeUpdateFn,
+          body: {
+            'spreadsheetId': _spreadsheetId,
+            'worksheetTitle': _worksheetTitle,
+            'cid': place.cid,
+            'link': place.link,
+            'status': status,
+          },
+        );
+        final data = res.data;
+        if (data is Map && (data['ok'] == true)) {
+          _cached = null;
+          _byId = null;
+          return true;
+        }
+      } catch (e) {
+        debugPrint('ScrapingRepository: edge update failed: $e');
+      }
+
+      // Fallback to direct Sheets if asset-enabled
       final gsheets = await _initClient();
       final ss = await gsheets.spreadsheet(_spreadsheetId);
       final ws = ss.worksheetByTitle(_worksheetTitle);

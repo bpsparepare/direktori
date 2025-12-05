@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_dragmarker/flutter_map_dragmarker.dart';
 import 'package:latlong2/latlong.dart';
@@ -21,6 +22,7 @@ class MapView extends StatefulWidget {
   final void Function(LatLng)? onLongPress;
   final void Function(int)? onPolygonSelected;
   final MapController? mapController; // Add optional MapController parameter
+  final void Function(LatLngBounds)? onBoundsChanged;
 
   const MapView({
     super.key,
@@ -36,6 +38,7 @@ class MapView extends StatefulWidget {
     this.onLongPress,
     this.onPolygonSelected,
     this.mapController, // Add to constructor
+    this.onBoundsChanged,
   });
 
   @override
@@ -57,6 +60,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
 
   // Toggle scraped markers visibility
   bool _showScrapedMarkers = true;
+  bool _showMarkerLabels = true;
+  Timer? _boundsDebounce;
+  bool _logPrinted = false;
 
   @override
   void initState() {
@@ -81,6 +87,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _boundsDebounce?.cancel();
     _rotationAnimationController.dispose();
     super.dispose();
   }
@@ -234,12 +241,27 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    _logPrinted = false;
     final centroid = _centroid(widget.polygon);
     final double fontSize = _scaledFontSize();
     final double labelWidth = widget.polygonLabel != null
         ? _scaledWidth(widget.polygonLabel!, fontSize)
         : 120;
     final double labelHeight = _scaledHeight(fontSize);
+    final List<Place> renderList = _placesForRender(widget.places);
+    final List<Place> scrapedList = renderList
+        .where((p) => p.id.startsWith('scrape:'))
+        .toList();
+    final List<Place> mainList = renderList
+        .where((p) => !p.id.startsWith('scrape:'))
+        .toList();
+    if (!_logPrinted) {
+      final capLog = _capForZoom(widget.places.length, _zoom);
+      debugPrint(
+        'MapView: zoom=${_zoom.toStringAsFixed(2)} total=${widget.places.length} rendered=${renderList.length} cap=${capLog ?? 'all'} scraped=${scrapedList.length} main=${mainList.length}',
+      );
+      _logPrinted = true;
+    }
 
     return Stack(
       children: [
@@ -262,6 +284,13 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                 _zoom = evt.camera.zoom;
                 _rotation = evt.camera.rotation;
               });
+              if (widget.onBoundsChanged != null) {
+                _boundsDebounce?.cancel();
+                _boundsDebounce = Timer(const Duration(milliseconds: 300), () {
+                  final b = _mapController.camera.visibleBounds;
+                  widget.onBoundsChanged!(b);
+                });
+              }
             },
           ),
           children: [
@@ -343,24 +372,29 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                 ],
               ),
             // Draggable markers: split into scraped (below) and main (above)
-            if (widget.places.isNotEmpty) ...[
+            if (renderList.isNotEmpty) ...[
               // Scraped markers layer (rendered first = below)
               if (_showScrapedMarkers)
                 MarkerLayer(
-                  markers: widget.places
-                      .where((p) => p.id.startsWith('scrape:'))
-                      .map((p) {
-                        final isSelected = widget.selectedPlace?.id == p.id;
-                        final Color baseColor = isSelected
-                            ? Colors.blue
-                            : Colors.purple;
-                        return Marker(
-                          point: p.position,
-                          width: isSelected ? 50 : 40,
-                          height: isSelected ? 50 : 40,
-                          child: GestureDetector(
-                            onTap: () => widget.onPlaceTap(p),
-                            child: Container(
+                  markers: scrapedList.map((p) {
+                    final isSelected = widget.selectedPlace?.id == p.id;
+                    final Color baseColor = isSelected
+                        ? Colors.blue
+                        : Colors.purple;
+                    final double fontSize = (_scaledFontSize() - 8).clamp(
+                      10,
+                      14,
+                    );
+                    return Marker(
+                      point: p.position,
+                      width: 160,
+                      height: isSelected ? 84 : 76,
+                      child: GestureDetector(
+                        onTap: () => widget.onPlaceTap(p),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
                               decoration: isSelected
                                   ? BoxDecoration(
                                       shape: BoxShape.circle,
@@ -379,30 +413,65 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                                 size: isSelected ? 40 : 32,
                               ),
                             ),
-                          ),
-                        );
-                      })
-                      .toList(),
+                            const SizedBox(height: 2),
+                            if (_showMarkerLabels)
+                              Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Text(
+                                    p.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: fontSize.toDouble(),
+                                      fontWeight: FontWeight.w600,
+                                      foreground: Paint()
+                                        ..style = PaintingStyle.stroke
+                                        ..strokeWidth = 3
+                                        ..color = Colors.black,
+                                    ),
+                                  ),
+                                  Text(
+                                    p.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: fontSize.toDouble(),
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
                 ),
               // Main markers layer (rendered after = above)
               DragMarkers(
-                markers: widget.places
-                    .where((p) => !p.id.startsWith('scrape:'))
-                    .map((p) {
-                      final isSelected = widget.selectedPlace?.id == p.id;
-                      return DragMarker(
-                        point: p.position,
-                        size: Size.square(isSelected ? 50 : 40),
-                        offset: Offset(0, isSelected ? -15 : -12),
-                        useLongPress: true,
-                        builder: (_, __, isDragging) {
-                          final Color baseColor = isSelected
-                              ? Colors.blue
-                              : Colors.red;
-                          final IconData icon = isDragging
-                              ? Icons.edit_location
-                              : Icons.location_on;
-                          return Container(
+                markers: mainList.map((p) {
+                  final isSelected = widget.selectedPlace?.id == p.id;
+                  final double fontSize = (_scaledFontSize() - 8).clamp(10, 14);
+                  return DragMarker(
+                    point: p.position,
+                    size: Size(170, isSelected ? 86 : 78),
+                    offset: Offset(0, isSelected ? -20 : -16),
+                    useLongPress: true,
+                    builder: (_, __, isDragging) {
+                      final Color baseColor = isSelected
+                          ? Colors.blue
+                          : Colors.red;
+                      final IconData icon = isDragging
+                          ? Icons.edit_location
+                          : Icons.location_on;
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
                             decoration: isSelected
                                 ? BoxDecoration(
                                     shape: BoxShape.circle,
@@ -420,19 +489,52 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                               color: baseColor,
                               size: isSelected ? 40 : 32,
                             ),
-                          );
-                        },
-                        onTap: (_) => widget.onPlaceTap(p),
-                        onDragEnd: (_, newPoint) =>
-                            widget.onPlaceDragEnd?.call(p, newPoint),
-                        onLongDragEnd: (_, newPoint) =>
-                            widget.onPlaceDragEnd?.call(p, newPoint),
-                        scrollMapNearEdge: true,
-                        scrollNearEdgeRatio: 2.0,
-                        scrollNearEdgeSpeed: 2.0,
+                          ),
+                          const SizedBox(height: 2),
+                          if (_showMarkerLabels)
+                            Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Text(
+                                  p.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: fontSize.toDouble(),
+                                    fontWeight: FontWeight.w600,
+                                    foreground: Paint()
+                                      ..style = PaintingStyle.stroke
+                                      ..strokeWidth = 3
+                                      ..color = Colors.black,
+                                  ),
+                                ),
+                                Text(
+                                  p.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: fontSize.toDouble(),
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
                       );
-                    })
-                    .toList(),
+                    },
+                    onTap: (_) => widget.onPlaceTap(p),
+                    onDragEnd: (_, newPoint) =>
+                        widget.onPlaceDragEnd?.call(p, newPoint),
+                    onLongDragEnd: (_, newPoint) =>
+                        widget.onPlaceDragEnd?.call(p, newPoint),
+                    scrollMapNearEdge: true,
+                    scrollNearEdgeRatio: 2.0,
+                    scrollNearEdgeSpeed: 2.0,
+                  );
+                }).toList(),
               ),
             ],
             // Keep non-draggable markers (current location and temporary)
@@ -481,6 +583,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           polygonsMeta: widget.polygonsMeta,
           currentMapType: _currentMapType,
           showScrapedMarkers: _showScrapedMarkers,
+          showMarkerLabels: _showMarkerLabels,
           onResetPosition: () {
             // Animate rotation to north smoothly
             _animateToNorth();
@@ -500,6 +603,11 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           onToggleScrapedMarkers: (bool value) {
             setState(() {
               _showScrapedMarkers = value;
+            });
+          },
+          onToggleMarkerLabels: (bool value) {
+            setState(() {
+              _showMarkerLabels = value;
             });
           },
           onOffsetChanged: (double offsetX, double offsetY) {
@@ -587,8 +695,116 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               ),
             ),
           ),
+        // Sampling Info Panel
+        Positioned(
+          right: 16,
+          bottom: 100,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.8),
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Sampling Info:',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Zoom: ${_zoom.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    color: Colors.lightBlue,
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+                Text(
+                  'Total: ${widget.places.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+                Text(
+                  'Rendered: ${renderList.length}',
+                  style: const TextStyle(
+                    color: Colors.yellow,
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+                Text(
+                  'Cap: ${_capForZoom(widget.places.length, _zoom) ?? 'all'}',
+                  style: const TextStyle(
+                    color: Colors.orange,
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+                Text(
+                  'Fraction: ${_capForZoom(widget.places.length, _zoom) == null ? '100%' : ((100 * (_capForZoom(widget.places.length, _zoom)! / widget.places.length)).toStringAsFixed(0)) + '%'}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
     );
+  }
+
+  List<Place> _placesForRender(List<Place> input) {
+    final selectedId = widget.selectedPlace?.id;
+    final int? cap = _capForZoom(input.length, _zoom);
+    if (cap == null || input.length <= cap) return input;
+    final List<Place> result = input.take(cap).toList();
+    if (selectedId != null && result.every((p) => p.id != selectedId)) {
+      final sel = input.firstWhere(
+        (p) => p.id == selectedId,
+        orElse: () => result.first,
+      );
+      result.add(sel);
+    }
+    if (!_logPrinted) {
+      debugPrint(
+        'MapView: zoom=${_zoom.toStringAsFixed(2)} total=${input.length} rendered=${result.length} cap=$cap',
+      );
+      _logPrinted = true;
+    }
+    return result;
+  }
+
+  int? _capForZoom(int total, double z) {
+    // if (z < 11) return 5;
+    // if (z < 12) return 10;
+    // if (z < 13) return 20;
+    if (z < 14) return 5;
+    if (z < 15) return 20;
+    if (z < 16) return 40;
+    if (z < 17) return 60;
+    if (z < 18) return 80;
+    if (z < 19) return 100;
+    return null; // >=19 show all
   }
 
   // Helper methods for responsive marker sizing

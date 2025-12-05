@@ -13,6 +13,8 @@ import 'scraping_repository_impl.dart';
 
 class MapRepositoryImpl implements MapRepository {
   final SupabaseClient _supabaseClient = SupabaseConfig.client;
+  static List<Place>? _allPlacesCache;
+  static final Map<String, List<Place>> _boundsCache = {};
 
   @override
   Future<MapConfig> getInitialConfig() async {
@@ -279,63 +281,57 @@ class MapRepositoryImpl implements MapRepository {
   @override
   Future<List<Place>> getPlaces() async {
     try {
-      // Query data direktori dari Supabase dengan join ke tabel wilayah
-      final response = await _supabaseClient
-          .from('direktori')
-          .select('''
-            *,
-            wilayah(*)
-          ''')
-          .eq('keberadaan_usaha', 1) // hanya ambil yang aktif (asumsi: 1)
-          .not('latitude', 'is', null) // hanya yang punya koordinat baru
-          .not('longitude', 'is', null)
-          .order('updated_at', ascending: false)
-          .order('created_at', ascending: false)
-          .limit(500); // Batasi untuk performa
-
-      if (response.isEmpty) {
-        debugPrint('MapRepository: No data found in direktori table');
-        return [];
-      }
-
-      // Konversi response ke DirektoriModel lalu ke Place
       final List<Place> places = [];
+      const int batchSize = 1000;
+      int start = 0;
 
-      for (final item in response) {
-        try {
-          // Flatten data wilayah ke level utama untuk kemudahan parsing
-          final Map<String, dynamic> flattenedData = Map<String, dynamic>.from(
-            item,
-          );
+      while (true) {
+        final batch = await _supabaseClient
+            .from('direktori')
+            .select('''
+              *,
+              wilayah(*)
+            ''')
+            .eq('keberadaan_usaha', 1)
+            .not('latitude', 'is', null)
+            .not('longitude', 'is', null)
+            .order('updated_at', ascending: false)
+            .order('created_at', ascending: false)
+            .range(start, start + batchSize - 1);
 
-          if (item['wilayah'] != null && item['wilayah'] is Map) {
-            final wilayahData = item['wilayah'] as Map<String, dynamic>;
-            flattenedData.addAll(wilayahData);
+        if (batch.isEmpty) break;
+
+        for (final item in batch) {
+          try {
+            final Map<String, dynamic> flattenedData =
+                Map<String, dynamic>.from(item);
+            if (item['wilayah'] != null && item['wilayah'] is Map) {
+              final wilayahData = item['wilayah'] as Map<String, dynamic>;
+              flattenedData.addAll(wilayahData);
+            }
+            final direktori = DirektoriModel.fromJson(flattenedData);
+            if (direktori.hasValidCoordinates) {
+              places.add(direktori.toPlace());
+            }
+          } catch (e) {
+            debugPrint('MapRepository: Error parsing direktori item: $e');
+            continue;
           }
-
-          final direktori = DirektoriModel.fromJson(flattenedData);
-
-          // Hanya tambahkan jika memiliki koordinat yang valid
-          if (direktori.hasValidCoordinates) {
-            places.add(direktori.toPlace());
-          }
-        } catch (e) {
-          debugPrint('MapRepository: Error parsing direktori item: $e');
-          // Skip item yang error, lanjutkan ke item berikutnya
-          continue;
         }
+
+        if (batch.length < batchSize) break;
+        start += batchSize;
       }
 
+      _allPlacesCache = places;
       debugPrint(
         'MapRepository: Successfully loaded ${places.length} places from Supabase',
       );
 
-      // Jika tidak ada data yang valid, return list kosong
       if (places.isEmpty) {
         debugPrint(
           'MapRepository: No valid places found, returning empty list',
         );
-        // Tetap coba load scraped places meski direktori kosong
         try {
           final scraped = await ScrapingRepositoryImpl()
               .getScrapedPlacesAsPlace();
@@ -346,7 +342,7 @@ class MapRepositoryImpl implements MapRepository {
           return [];
         }
       }
-      // Gabungkan dengan tempat hasil scraping
+
       try {
         final scraped = await ScrapingRepositoryImpl()
             .getScrapedPlacesAsPlace();
@@ -362,6 +358,99 @@ class MapRepositoryImpl implements MapRepository {
       // Jika ada error, return list kosong
       return [];
     }
+  }
+
+  @override
+  Future<List<Place>> getPlacesInBounds(
+    double south,
+    double north,
+    double west,
+    double east,
+  ) async {
+    try {
+      if (_allPlacesCache != null) {
+        final filtered = _allPlacesCache!.where((p) {
+          final lat = p.position.latitude;
+          final lon = p.position.longitude;
+          return lat >= south && lat <= north && lon >= west && lon <= east;
+        }).toList();
+        debugPrint(
+          'MapRepository: Loaded ${filtered.length} places in bounds from cache',
+        );
+        return filtered;
+      }
+
+      final key = _boundsKey(south, north, west, east);
+      final cached = _boundsCache[key];
+      if (cached != null) {
+        debugPrint(
+          'MapRepository: Loaded ${cached.length} places in bounds (cached)',
+        );
+        return cached;
+      }
+      final List<Place> places = [];
+      const int batchSize = 1000;
+      int start = 0;
+
+      while (true) {
+        final batch = await _supabaseClient
+            .from('direktori')
+            .select('''
+              id,
+              nama_usaha,
+              latitude,
+              longitude,
+              url_gambar,
+              updated_at,
+              created_at,
+              wilayah(nm_sls,kd_prov,kd_kab,kd_kec,kd_desa)
+            ''')
+            .eq('keberadaan_usaha', 1)
+            .gte('latitude', south)
+            .lte('latitude', north)
+            .gte('longitude', west)
+            .lte('longitude', east)
+            .order('updated_at', ascending: false)
+            .range(start, start + batchSize - 1);
+
+        if (batch.isEmpty) break;
+
+        for (final item in batch) {
+          try {
+            final Map<String, dynamic> flattenedData =
+                Map<String, dynamic>.from(item);
+            if (item['wilayah'] != null && item['wilayah'] is Map) {
+              final wilayahData = item['wilayah'] as Map<String, dynamic>;
+              flattenedData.addAll(wilayahData);
+            }
+            final direktori = DirektoriModel.fromJson(flattenedData);
+            if (direktori.hasValidCoordinates) {
+              places.add(direktori.toPlace());
+            }
+          } catch (e) {
+            debugPrint('MapRepository(bounds): parse item error: $e');
+            continue;
+          }
+        }
+
+        if (batch.length < batchSize) break;
+        start += batchSize;
+      }
+
+      _boundsCache[key] = places;
+      debugPrint(
+        'MapRepository: Loaded ${places.length} places in bounds (${south}, ${north}, ${west}, ${east})',
+      );
+      return places;
+    } catch (e) {
+      debugPrint('MapRepository: Error getPlacesInBounds: $e');
+      return [];
+    }
+  }
+
+  String _boundsKey(double south, double north, double west, double east) {
+    double r(double v) => double.parse(v.toStringAsFixed(3));
+    return '${r(south)}:${r(north)}:${r(west)}:${r(east)}';
   }
 
   @override

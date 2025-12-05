@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'core/config/supabase_config.dart';
@@ -15,6 +16,7 @@ import 'features/map/presentation/bloc/map_event.dart';
 import 'features/map/data/repositories/map_repository_impl.dart';
 import 'features/map/domain/usecases/get_initial_map_config.dart';
 import 'features/map/domain/usecases/get_places.dart';
+import 'features/map/domain/usecases/get_places_in_bounds.dart';
 import 'features/map/domain/usecases/get_first_polygon_meta_from_geojson.dart';
 import 'features/map/domain/usecases/get_all_polygons_meta_from_geojson.dart';
 import 'features/contribution/presentation/bloc/contribution_bloc.dart';
@@ -27,6 +29,10 @@ import 'features/contribution/domain/usecases/get_leaderboard_usecase.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (_) {}
 
   // Initialize Supabase
   await SupabaseConfig.initialize();
@@ -70,6 +76,7 @@ class MyApp extends StatelessWidget {
               MapBloc(
                   getInitialMapConfig: GetInitialMapConfig(mapRepository),
                   getPlaces: GetPlaces(mapRepository),
+                  getPlacesInBounds: GetPlacesInBounds(mapRepository),
                   getFirstPolygonMeta: GetFirstPolygonMetaFromGeoJson(
                     mapRepository,
                   ),

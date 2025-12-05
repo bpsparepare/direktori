@@ -180,7 +180,7 @@ class DirektoriModel {
       nmKab: json['nm_kab'],
       nmKec: json['nm_kec'],
       nmDesa: json['nm_desa'],
-      nmSls: json['nama_sls'],
+      nmSls: json['nama_sls'] ?? json['nm_sls'],
       alamatLengkap: json['alamat_lengkap'],
       // Kode wilayah
       kdProv: json['kd_prov'],

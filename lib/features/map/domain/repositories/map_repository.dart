@@ -7,6 +7,12 @@ import '../../data/models/direktori_model.dart';
 abstract class MapRepository {
   Future<MapConfig> getInitialConfig();
   Future<List<Place>> getPlaces();
+  Future<List<Place>> getPlacesInBounds(
+    double south,
+    double north,
+    double west,
+    double east,
+  );
   Future<List<LatLng>> getFirstPolygonFromGeoJson(String assetPath);
   Future<PolygonData> getFirstPolygonMetaFromGeoJson(String assetPath);
   Future<List<PolygonData>> getAllPolygonsMetaFromGeoJson(String assetPath);

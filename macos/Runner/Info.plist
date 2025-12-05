@@ -32,5 +32,7 @@
 	<string>Aplikasi ini memerlukan akses lokasi untuk menampilkan posisi Anda di peta.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Aplikasi ini memerlukan akses lokasi untuk menampilkan posisi Anda di peta.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Aplikasi ini memerlukan akses lokasi untuk menampilkan posisi Anda di peta.</string>
 </dict>
 </plist>

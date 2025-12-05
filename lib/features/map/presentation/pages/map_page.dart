@@ -83,6 +83,15 @@ class MapPage extends StatelessWidget {
                         PolygonSelectedByIndex(index),
                       );
                     },
+                    onBoundsChanged: (bounds) {
+                      final south = bounds.south;
+                      final north = bounds.north;
+                      final west = bounds.west;
+                      final east = bounds.east;
+                      context.read<MapBloc>().add(
+                        PlacesInBoundsRequested(south, north, west, east),
+                      );
+                    },
                   ),
                   // Coordinate mode overlay: center crosshair + actions
                   if (coordinateTarget != null) ...[
@@ -438,7 +447,9 @@ class MapPage extends StatelessWidget {
                                                           child: Text(
                                                             'Zoom To',
                                                             maxLines: 1,
-                                                            overflow: TextOverflow.ellipsis,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
                                                             softWrap: false,
                                                           ),
                                                         ),
@@ -447,9 +458,10 @@ class MapPage extends StatelessWidget {
                                                               Colors.blue,
                                                           foregroundColor:
                                                               Colors.white,
-                                                          textStyle: const TextStyle(
-                                                            fontSize: 14,
-                                                          ),
+                                                          textStyle:
+                                                              const TextStyle(
+                                                                fontSize: 14,
+                                                              ),
                                                           padding:
                                                               const EdgeInsets.symmetric(
                                                                 horizontal: 16,
@@ -618,7 +630,9 @@ class MapPage extends StatelessWidget {
                                                           child: Text(
                                                             'Navigate',
                                                             maxLines: 1,
-                                                            overflow: TextOverflow.ellipsis,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
                                                             softWrap: false,
                                                           ),
                                                         ),
@@ -627,9 +641,10 @@ class MapPage extends StatelessWidget {
                                                               Colors.green,
                                                           foregroundColor:
                                                               Colors.white,
-                                                          textStyle: const TextStyle(
-                                                            fontSize: 14,
-                                                          ),
+                                                          textStyle:
+                                                              const TextStyle(
+                                                                fontSize: 14,
+                                                              ),
                                                           padding:
                                                               const EdgeInsets.symmetric(
                                                                 horizontal: 16,
@@ -850,7 +865,9 @@ class MapPage extends StatelessWidget {
                                                           child: Text(
                                                             'Tambah ke Direktori',
                                                             maxLines: 1,
-                                                            overflow: TextOverflow.ellipsis,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
                                                             softWrap: false,
                                                           ),
                                                         ),
@@ -859,9 +876,10 @@ class MapPage extends StatelessWidget {
                                                               Colors.purple,
                                                           foregroundColor:
                                                               Colors.white,
-                                                          textStyle: const TextStyle(
-                                                            fontSize: 14,
-                                                          ),
+                                                          textStyle:
+                                                              const TextStyle(
+                                                                fontSize: 14,
+                                                              ),
                                                           padding:
                                                               const EdgeInsets.symmetric(
                                                                 horizontal: 16,
@@ -939,7 +957,9 @@ class MapPage extends StatelessWidget {
                                                           child: Text(
                                                             'Hapus (Scraping)',
                                                             maxLines: 1,
-                                                            overflow: TextOverflow.ellipsis,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
                                                             softWrap: false,
                                                           ),
                                                         ),
@@ -950,9 +970,10 @@ class MapPage extends StatelessWidget {
                                                                   .shade700,
                                                           foregroundColor:
                                                               Colors.white,
-                                                          textStyle: const TextStyle(
-                                                            fontSize: 14,
-                                                          ),
+                                                          textStyle:
+                                                              const TextStyle(
+                                                                fontSize: 14,
+                                                              ),
                                                           padding:
                                                               const EdgeInsets.symmetric(
                                                                 horizontal: 16,
@@ -1025,7 +1046,9 @@ class MapPage extends StatelessWidget {
                                                           child: Text(
                                                             'Tutup (Scraping)',
                                                             maxLines: 1,
-                                                            overflow: TextOverflow.ellipsis,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
                                                             softWrap: false,
                                                           ),
                                                         ),
@@ -1034,9 +1057,10 @@ class MapPage extends StatelessWidget {
                                                               Colors.orange,
                                                           foregroundColor:
                                                               Colors.white,
-                                                          textStyle: const TextStyle(
-                                                            fontSize: 14,
-                                                          ),
+                                                          textStyle:
+                                                              const TextStyle(
+                                                                fontSize: 14,
+                                                              ),
                                                           padding:
                                                               const EdgeInsets.symmetric(
                                                                 horizontal: 16,
@@ -1108,7 +1132,9 @@ class MapPage extends StatelessWidget {
                                                           child: Text(
                                                             'Buka Google Maps',
                                                             maxLines: 1,
-                                                            overflow: TextOverflow.ellipsis,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
                                                             softWrap: false,
                                                           ),
                                                         ),
@@ -1117,9 +1143,10 @@ class MapPage extends StatelessWidget {
                                                               Colors.green,
                                                           foregroundColor:
                                                               Colors.white,
-                                                          textStyle: const TextStyle(
-                                                            fontSize: 14,
-                                                          ),
+                                                          textStyle:
+                                                              const TextStyle(
+                                                                fontSize: 14,
+                                                              ),
                                                           padding:
                                                               const EdgeInsets.symmetric(
                                                                 horizontal: 16,
@@ -1887,120 +1914,133 @@ class MapPage extends StatelessWidget {
               },
             ),
             Visibility(
-              visible: DateTime.now().year == 2025 && DateTime.now().month == 11 && DateTime.now().day == 11,
+              visible:
+                  DateTime.now().year == 2025 &&
+                  DateTime.now().month == 11 &&
+                  DateTime.now().day == 11,
               child: ListTile(
                 leading: const Icon(Icons.flag, color: Colors.green),
                 title: const Text('Kirim Quiz'),
                 subtitle: const Text('Kirim titik ini sebagai jawaban'),
                 onTap: () async {
-                Navigator.pop(context);
-                final confirm = await showDialog<bool>(
-                  context: parentContext,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Kirim jawaban?'),
-                    content: const Text(
-                      'Apakah Anda yakin ingin mengirim titik ini sebagai jawaban?',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(ctx).pop(false),
-                        child: const Text('Batal'),
+                  Navigator.pop(context);
+                  final confirm = await showDialog<bool>(
+                    context: parentContext,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Kirim jawaban?'),
+                      content: const Text(
+                        'Apakah Anda yakin ingin mengirim titik ini sebagai jawaban?',
                       ),
-                      ElevatedButton(
-                        onPressed: () => Navigator.of(ctx).pop(true),
-                        child: const Text('Kirim'),
-                      ),
-                    ],
-                  ),
-                );
-
-                if (confirm == true) {
-                  try {
-                    // Tampilkan indikator proses
-                    showDialog(
-                      context: parentContext,
-                      barrierDismissible: false,
-                      builder: (ctx) => const AlertDialog(
-                        content: Row(
-                          children: [
-                            SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(),
-                            ),
-                            SizedBox(width: 16),
-                            Expanded(child: Text('Mengirim jawaban...')),
-                          ],
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                          child: const Text('Batal'),
                         ),
-                      ),
-                    );
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                          child: const Text('Kirim'),
+                        ),
+                      ],
+                    ),
+                  );
 
-                    final result = await SupabaseConfig.client.rpc(
-                      'fn_submit_guess_current',
-                      params: {
-                        'p_lat': point.latitude,
-                        'p_lon': point.longitude,
-                      },
-                    );
+                  if (confirm == true) {
+                    try {
+                      // Tampilkan indikator proses
+                      showDialog(
+                        context: parentContext,
+                        barrierDismissible: false,
+                        builder: (ctx) => const AlertDialog(
+                          content: Row(
+                            children: [
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(),
+                              ),
+                              SizedBox(width: 16),
+                              Expanded(child: Text('Mengirim jawaban...')),
+                            ],
+                          ),
+                        ),
+                      );
 
-                    // Tutup indikator proses
-                    if (Navigator.of(parentContext).canPop()) {
-                      Navigator.of(parentContext).pop();
+                      final result = await SupabaseConfig.client.rpc(
+                        'fn_submit_guess_current',
+                        params: {
+                          'p_lat': point.latitude,
+                          'p_lon': point.longitude,
+                        },
+                      );
+
+                      // Tutup indikator proses
+                      if (Navigator.of(parentContext).canPop()) {
+                        Navigator.of(parentContext).pop();
+                      }
+
+                      // Ekstrak metrik dari hasil RPC, jika tidak ada, query dari tabel submissions
+                      String submissionId = '';
+                      num? score;
+                      bool? isCorrect;
+                      num? distanceM;
+                      int? durationMs;
+
+                      if (result is Map<String, dynamic>) {
+                        submissionId = (result['id']?.toString() ?? '');
+                        score =
+                            (result['score'] ?? result['total_score']) as num?;
+                        isCorrect = result['is_correct'] as bool?;
+                        distanceM =
+                            (result['distance_m'] ?? result['distance'])
+                                as num?;
+                        durationMs =
+                            (result['duration_ms'] ?? result['total_time_ms'])
+                                as int?;
+                      } else if (result is List &&
+                          result.isNotEmpty &&
+                          result.first is Map<String, dynamic>) {
+                        final m = result.first as Map<String, dynamic>;
+                        submissionId = (m['id']?.toString() ?? '');
+                        score = (m['score'] ?? m['total_score']) as num?;
+                        isCorrect = m['is_correct'] as bool?;
+                        distanceM = (m['distance_m'] ?? m['distance']) as num?;
+                        durationMs =
+                            (m['duration_ms'] ?? m['total_time_ms']) as int?;
+                      } else if (result is String) {
+                        submissionId = result;
+                      }
+
+                      // SnackBar konfirmasi minimalis (tampilkan skor/benar jika tersedia)
+                      final scoreText = (score != null)
+                          ? (score is int
+                                ? score.toString()
+                                : (score as num).toString())
+                          : null;
+                      final isCorrectText = (isCorrect == null)
+                          ? null
+                          : (isCorrect! ? 'Benar' : 'Salah');
+                      final msg = (scoreText != null && isCorrectText != null)
+                          ? 'Berhasil kirim. Skor: $scoreText • $isCorrectText'
+                          : 'Berhasil kirim jawaban.';
+                      ScaffoldMessenger.of(
+                        parentContext,
+                      ).showSnackBar(SnackBar(content: Text(msg)));
+                    } catch (e) {
+                      // Tutup indikator proses jika masih terbuka
+                      if (Navigator.of(parentContext).canPop()) {
+                        Navigator.of(parentContext).pop();
+                      }
+
+                      final message = e.toString();
+
+                      // Feedback minimalis untuk error
+                      ScaffoldMessenger.of(parentContext).showSnackBar(
+                        SnackBar(content: Text('Gagal kirim: $message')),
+                      );
                     }
-
-                    // Ekstrak metrik dari hasil RPC, jika tidak ada, query dari tabel submissions
-                    String submissionId = '';
-                    num? score;
-                    bool? isCorrect;
-                    num? distanceM;
-                    int? durationMs;
-
-                    if (result is Map<String, dynamic>) {
-                      submissionId = (result['id']?.toString() ?? '');
-                      score = (result['score'] ?? result['total_score']) as num?;
-                      isCorrect = result['is_correct'] as bool?;
-                      distanceM = (result['distance_m'] ?? result['distance']) as num?;
-                      durationMs = (result['duration_ms'] ?? result['total_time_ms']) as int?;
-                    } else if (result is List && result.isNotEmpty && result.first is Map<String, dynamic>) {
-                      final m = result.first as Map<String, dynamic>;
-                      submissionId = (m['id']?.toString() ?? '');
-                      score = (m['score'] ?? m['total_score']) as num?;
-                      isCorrect = m['is_correct'] as bool?;
-                      distanceM = (m['distance_m'] ?? m['distance']) as num?;
-                      durationMs = (m['duration_ms'] ?? m['total_time_ms']) as int?;
-                    } else if (result is String) {
-                      submissionId = result;
-                    }
-
-                    // SnackBar konfirmasi minimalis (tampilkan skor/benar jika tersedia)
-                    final scoreText = (score != null)
-                        ? (score is int ? score.toString() : (score as num).toString())
-                        : null;
-                    final isCorrectText = (isCorrect == null)
-                        ? null
-                        : (isCorrect! ? 'Benar' : 'Salah');
-                    final msg = (scoreText != null && isCorrectText != null)
-                        ? 'Berhasil kirim. Skor: $scoreText • $isCorrectText'
-                        : 'Berhasil kirim jawaban.';
-                    ScaffoldMessenger.of(parentContext).showSnackBar(
-                      SnackBar(content: Text(msg)),
-                    );
-                  } catch (e) {
-                    // Tutup indikator proses jika masih terbuka
-                    if (Navigator.of(parentContext).canPop()) {
-                      Navigator.of(parentContext).pop();
-                    }
-
-                    final message = e.toString();
-
-                    // Feedback minimalis untuk error
-                    ScaffoldMessenger.of(parentContext).showSnackBar(
-                      SnackBar(content: Text('Gagal kirim: $message')),
-                    );
                   }
-                }
-              },
-            ),
+                },
+              ),
             ),
 
             const SizedBox(height: 20),
