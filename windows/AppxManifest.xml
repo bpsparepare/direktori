@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+         xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
+         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+         xmlns:uap2="http://schemas.microsoft.com/appx/manifest/uap/windows10/2"
+         xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+         xmlns:uap4="http://schemas.microsoft.com/appx/manifest/uap/windows10/4"
+         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+         IgnorableNamespaces="uap mp uap2 uap3 uap4 rescap">
+
+  <Identity Name="StatistikCeria.direktori" 
+            Publisher="CN=9EA411D5-DB62-4E3A-9282-478993AEB351" 
+            Version="1.0.0.0" 
+            ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>direktori</DisplayName>
+    <PublisherDisplayName>Statistik Ceria</PublisherDisplayName>
+    <Logo>Images\StoreLogo.png</Logo>
+    <Description>Aplikasi Pencarian Lokasi dan Kontribusi Data untuk wilayah Parepare</Description>
+    <uap:SupportedUsers>multiple</uap:SupportedUsers>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.2506" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="id"/>
+    <Resource Language="en"/>
+  </Resources>
+
+  <Applications>
+    <Application Id="direktori" Executable="direktori.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="direktori" 
+                          Description="Aplikasi Pencarian Lokasi dan Kontribusi Data untuk wilayah Parepare"
+                          BackgroundColor="transparent"
+                          Square150x150Logo="Images\Square150x150Logo.png"
+                          Square44x44Logo="Images\Square44x44Logo.png"
+                          AppListEntry="none">
+        <uap:DefaultTile ShortName="direktori" 
+                         Square310x310Logo="Images\LargeTile.png"
+                         Square71x71Logo="Images\SmallTile.png" 
+                         Wide310x150Logo="Images\Wide310x150Logo.png">
+          <uap:ShowNameOnTiles>
+            <uap:ShowOn Tile="square150x150Logo"/>
+            <uap:ShowOn Tile="square310x310Logo"/>
+            <uap:ShowOn Tile="wide310x150Logo"/>
+          </uap:ShowNameOnTiles>
+        </uap:DefaultTile>
+        <uap:SplashScreen Image="Images\SplashScreen.png" />
+      </uap:VisualElements>
+      <Extensions>
+        <uap3:Extension Category="windows.protocol">
+          <uap3:Protocol Name="direktori" />
+        </uap3:Extension>
+        <uap4:Extension Category="windows.fileTypeAssociation">
+          <uap4:FileTypeAssociation Name="geojson">
+            <uap:SupportedFileTypes>
+              <uap:FileType ContentType="application/geo+json">.geojson</uap:FileType>
+            </uap:SupportedFileTypes>
+          </uap4:FileTypeAssociation>
+        </uap4:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

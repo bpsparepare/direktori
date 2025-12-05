@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart' as dotenv;
 
 import 'core/config/supabase_config.dart';
 import 'core/services/image_service_locator.dart';
@@ -27,6 +28,10 @@ import 'features/contribution/domain/usecases/get_leaderboard_usecase.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // For Windows builds with dart-define-from-file, environment variables
+  // are injected at build time, so we use dart-define values directly
+  print('✅ Using dart-define environment variables for Windows build');
 
   // Initialize Supabase
   await SupabaseConfig.initialize();

@@ -67,6 +67,9 @@ dependencies:
   path_provider: ^2.1.4
   mime: ^1.0.6
   image: ^4.2.0
+  
+  # MSIX package creation for Windows Store
+  msix: ^3.16.8
 
 dev_dependencies: 
   flutter_test:
@@ -161,3 +164,19 @@ flutter_native_splash:
   android: true
   ios: true
   web: true
+
+# MSIX configuration for Windows Store
+msix_config:
+  display_name: direktori
+  publisher_display_name: Statistik Ceria
+  identity_name: StatistikCeria.direktori
+  publisher: CN=9EA411D5-DB62-4E3A-9282-478993AEB351
+  capabilities: internetClient
+  manifest_path: windows/AppxManifest.xml
+  # certificate_path: certificates/direktori-signing.pfx
+  # certificate_password: direktori-msix
+  msix_version: 1.0.0.0
+  languages: id
+  architecture: x64
+  output_name: direktori
+  store: true

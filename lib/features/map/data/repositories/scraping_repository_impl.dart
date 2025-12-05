@@ -11,12 +11,31 @@ class ScrapingRepositoryImpl {
       '1W82OicbyAmyzSnkp_gUsZFhOnUm4qbcc4y2ANLRP5JI';
   static const String _worksheetTitle = 'data';
   static const String _saAssetPath = 'assets/sa/sa-account.json';
+  static const String _saJsonInline = String.fromEnvironment('GSHEETS_SA_JSON');
+  static const String _saJsonB64 = String.fromEnvironment('GSHEETS_SA_JSON_B64');
 
   static List<ScrapedPlace>? _cached;
   static Map<String, ScrapedPlace>? _byId;
 
   Future<GSheets> _initClient() async {
-    final jsonStr = await rootBundle.loadString(_saAssetPath);
+    String jsonStr;
+    // Prefer inline JSON from dart-define
+    if (_saJsonInline.trim().isNotEmpty) {
+      jsonStr = _saJsonInline.trim();
+    } else if (_saJsonB64.trim().isNotEmpty) {
+      // Support base64-encoded JSON via dart-define for safer transport
+      try {
+        final decoded = base64.decode(_saJsonB64.trim());
+        jsonStr = utf8.decode(decoded);
+      } catch (e) {
+        debugPrint('ScrapingRepository: invalid GSHEETS_SA_JSON_B64: $e');
+        // Fallback to asset
+        jsonStr = await rootBundle.loadString(_saAssetPath);
+      }
+    } else {
+      // Fallback to bundled asset (local dev only)
+      jsonStr = await rootBundle.loadString(_saAssetPath);
+    }
     final gsheets = GSheets(jsonStr);
     return gsheets;
   }

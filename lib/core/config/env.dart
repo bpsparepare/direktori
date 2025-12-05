@@ -23,26 +23,45 @@ class Env {
   /// Read Supabase URL, prefer dart-define, fallback to dotenv.
   static String get supabaseUrl {
     if (_supabaseUrl.isNotEmpty) return _supabaseUrl;
-    return dotenv.dotenv.env['SUPABASE_URL'] ?? '';
+    try {
+      return dotenv.dotenv.env['SUPABASE_URL'] ?? '';
+    } catch (e) {
+      // dotenv not initialized, return empty string
+      return '';
+    }
   }
 
   /// Read Supabase anon key, prefer dart-define, fallback to dotenv.
   static String get supabaseAnonKey {
     if (_supabaseAnonKey.isNotEmpty) return _supabaseAnonKey;
-    return dotenv.dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+    try {
+      return dotenv.dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+    } catch (e) {
+      // dotenv not initialized, return empty string
+      return '';
+    }
   }
 
   /// Read Google OAuth client ID, prefer dart-define, fallback to dotenv.
   static String get googleClientId {
     if (_googleClientId.isNotEmpty) return _googleClientId;
-    return dotenv.dotenv.env['GOOGLE_CLIENT_ID'] ?? '';
+    try {
+      return dotenv.dotenv.env['GOOGLE_CLIENT_ID'] ?? '';
+    } catch (e) {
+      // dotenv not initialized, return empty string
+      return '';
+    }
   }
 
   /// Upload API base URL, prefer dart-define, fallback to dotenv, then default.
   static String get uploadApiBaseUrl {
     if (_uploadApiBaseUrl.trim().isNotEmpty) return _uploadApiBaseUrl.trim();
-    final v = dotenv.dotenv.env['UPLOAD_API_BASE_URL']?.trim();
-    if (v != null && v.isNotEmpty) return v;
+    try {
+      final v = dotenv.dotenv.env['UPLOAD_API_BASE_URL']?.trim();
+      if (v != null && v.isNotEmpty) return v;
+    } catch (e) {
+      // dotenv not initialized, continue to default
+    }
     return 'https://api.parepare.stat7300.net';
   }
 
@@ -52,9 +71,13 @@ class Env {
       final p = _uploadApiUploadPath.trim();
       return p.startsWith('/') ? p : '/$p';
     }
-    final v = dotenv.dotenv.env['UPLOAD_API_UPLOAD_PATH']?.trim();
-    if (v != null && v.isNotEmpty) {
-      return v.startsWith('/') ? v : '/$v';
+    try {
+      final v = dotenv.dotenv.env['UPLOAD_API_UPLOAD_PATH']?.trim();
+      if (v != null && v.isNotEmpty) {
+        return v.startsWith('/') ? v : '/$v';
+      }
+    } catch (e) {
+      // dotenv not initialized, continue to default
     }
     return '/upload';
   }
@@ -67,10 +90,14 @@ class Env {
       if (parsed != null) return parsed;
     }
     // Try dotenv
-    final v = dotenv.dotenv.env['UPLOAD_API_MAX_BYTES'];
-    if (v != null) {
-      final parsed = int.tryParse(v.trim());
-      if (parsed != null) return parsed;
+    try {
+      final v = dotenv.dotenv.env['UPLOAD_API_MAX_BYTES'];
+      if (v != null) {
+        final parsed = int.tryParse(v.trim());
+        if (parsed != null) return parsed;
+      }
+    } catch (e) {
+      // dotenv not initialized, continue to default
     }
     // Default 10MB
     return 10 * 1024 * 1024;
