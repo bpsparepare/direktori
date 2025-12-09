@@ -231,16 +231,24 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
       changes['timestamp']?.toString(),
     );
 
-    final displayTitle =
-        ((groupTitle != null && groupTitle.trim().isNotEmpty)
-                ? groupTitle.trim()
-                : (namaUsaha.isNotEmpty
-                      ? namaUsaha
-                      : _getActionTitle(
-                          contribution.actionType,
-                          contribution.targetType,
-                        )))
-            .toString();
+    String displayTitle;
+    if (groupTitle != null && groupTitle.trim().isNotEmpty) {
+      displayTitle = groupTitle.trim();
+    } else if (namaUsaha.isNotEmpty) {
+      displayTitle = namaUsaha;
+    } else {
+      final subtypes = groupActionSubtypes ?? [];
+      if (subtypes.contains('set_first_coordinates')) {
+        displayTitle = 'Tambah Koordinat';
+      } else if (subtypes.contains('update_coordinates')) {
+        displayTitle = 'Perbarui Koordinat';
+      } else {
+        displayTitle = _getActionTitle(
+          contribution.actionType,
+          contribution.targetType,
+        );
+      }
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -552,9 +560,19 @@ class _ContributionListWidgetState extends State<ContributionListWidget> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(
-          _getActionTitle(contribution.actionType, contribution.targetType),
-        ),
+        title: Text(() {
+          final subtype = contribution.changes?['action_subtype']?.toString();
+          if (subtype == 'set_first_coordinates') {
+            return 'Tambah Koordinat';
+          }
+          if (subtype == 'update_coordinates') {
+            return 'Perbarui Koordinat';
+          }
+          return _getActionTitle(
+            contribution.actionType,
+            contribution.targetType,
+          );
+        }()),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

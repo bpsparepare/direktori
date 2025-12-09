@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:syncfusion_flutter_datagrid/datagrid.dart';
 import '../../../map/data/models/direktori_model.dart';
 import '../../../map/data/repositories/map_repository_impl.dart';
+import '../../../contribution/presentation/bloc/contribution_bloc.dart';
+import '../../../contribution/presentation/bloc/contribution_event.dart';
 
 class BatchInsertDialog extends StatefulWidget {
   const BatchInsertDialog({super.key});
@@ -225,6 +228,28 @@ class _BatchInsertDialogState extends State<BatchInsertDialog> {
                         setState(() {});
                         continue;
                       }
+                      try {
+                        final Map<String, dynamic> changes = {
+                          'nama_usaha': r.nama,
+                        };
+                        if (r.alamat.isNotEmpty) {
+                          changes['alamat'] = r.alamat;
+                        }
+                        if (r.lat != null && r.lng != null) {
+                          changes['latitude'] = r.lat;
+                          changes['longitude'] = r.lng;
+                        }
+                        context.read<ContributionBloc>().add(
+                          CreateContributionEvent(
+                            actionType: 'create',
+                            targetType: 'direktori',
+                            targetId: newId,
+                            changes: changes,
+                            latitude: r.lat,
+                            longitude: r.lng,
+                          ),
+                        );
+                      } catch (_) {}
                       _success++;
                       setState(() {});
                     } catch (_) {

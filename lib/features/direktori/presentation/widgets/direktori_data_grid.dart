@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../contribution/presentation/bloc/contribution_bloc.dart';
+import '../../../contribution/presentation/bloc/contribution_event.dart';
 import 'package:syncfusion_flutter_datagrid/datagrid.dart';
 import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
@@ -738,6 +740,15 @@ class _DirektoriDataGridSource extends DataGridSource {
                         if (success) {
                           _removeRowById(id);
                           onRowUpdated?.call();
+                          try {
+                            ctx.read<ContributionBloc>().add(
+                              CreateContributionEvent(
+                                actionType: 'delete',
+                                targetType: 'direktori',
+                                targetId: id,
+                              ),
+                            );
+                          } catch (_) {}
                         }
                       }
                     },
@@ -791,6 +802,8 @@ class _DirektoriDataGridSource extends DataGridSource {
                         if (_editedAlamatById[id] != null) {
                           _setAlamatForId(id, _editedAlamatById[id]!);
                         }
+                        bool statusUpdated = false;
+                        int? newStatus;
                         if (_editedStatusById[id] != null &&
                             _editedStatusById[id] != status) {
                           final okStatus = await MapRepositoryImpl()
@@ -800,7 +813,31 @@ class _DirektoriDataGridSource extends DataGridSource {
                               );
                           if (okStatus) {
                             _setStatusForId(id, _editedStatusById[id]!);
+                            statusUpdated = true;
+                            newStatus = _editedStatusById[id]!;
                           }
+                        }
+                        final Map<String, dynamic> changes = {};
+                        if (_editedNamaById[id] != null) {
+                          changes['nama_usaha'] = _editedNamaById[id];
+                        }
+                        if (_editedAlamatById[id] != null) {
+                          changes['alamat'] = _editedAlamatById[id];
+                        }
+                        if (statusUpdated && newStatus != null) {
+                          changes['keberadaan_usaha'] = newStatus;
+                        }
+                        if (changes.isNotEmpty) {
+                          try {
+                            ctx.read<ContributionBloc>().add(
+                              CreateContributionEvent(
+                                actionType: 'update',
+                                targetType: 'direktori',
+                                targetId: id,
+                                changes: changes,
+                              ),
+                            );
+                          } catch (_) {}
                         }
                         _markRowUpdated(id);
                       }
@@ -961,6 +998,17 @@ class _DirektoriDataGridSource extends DataGridSource {
     );
     _rows[idx] = updated;
     notifyListeners();
+  }
+
+  bool _hasKoordinatForId(String id) {
+    final idx = _rows.indexWhere((r) {
+      final d = r.getCells().last.value as Direktori;
+      return d.id == id;
+    });
+    if (idx < 0) return false;
+    final cells = _rows[idx].getCells();
+    final bool hasCoord = cells[4].value as bool? ?? false;
+    return hasCoord;
   }
 
   void _removeRowById(String id) {
@@ -1145,6 +1193,7 @@ class _DirektoriDataGridSource extends DataGridSource {
       } catch (_) {}
 
       bool ok;
+      final bool preHadCoord = _hasKoordinatForId(id);
       if (idSls.isNotEmpty) {
         ok = await repo.updateDirectoryCoordinatesWithRegionalData(
           id,
@@ -1166,6 +1215,28 @@ class _DirektoriDataGridSource extends DataGridSource {
       if (ok) {
         _setKoordinatForId(id, true);
         _markRowUpdated(id);
+        try {
+          final Map<String, dynamic> changes = {
+            'latitude': result[0],
+            'longitude': result[1],
+            'action_subtype': preHadCoord
+                ? 'update_coordinates'
+                : 'set_first_coordinates',
+          };
+          if (idSls.isNotEmpty) {
+            changes['id_sls'] = idSls;
+          }
+          context.read<ContributionBloc>().add(
+            CreateContributionEvent(
+              actionType: 'update',
+              targetType: 'direktori',
+              targetId: id,
+              changes: changes,
+              latitude: result[0],
+              longitude: result[1],
+            ),
+          );
+        } catch (_) {}
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

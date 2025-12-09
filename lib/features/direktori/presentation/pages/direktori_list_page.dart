@@ -14,6 +14,8 @@ import '../../data/repositories/direktori_repository_impl.dart';
 import '../../data/datasources/direktori_remote_datasource.dart';
 import '../../../map/data/repositories/map_repository_impl.dart';
 import '../../../map/data/models/direktori_model.dart';
+import '../../../contribution/presentation/bloc/contribution_bloc.dart';
+import '../../../contribution/presentation/bloc/contribution_event.dart';
 
 class DirektoriListPage extends StatelessWidget {
   final void Function(String id)? onNavigateToMap;
@@ -371,6 +373,11 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                           );
                           if (res == true) {
                             _onRefresh();
+                            try {
+                              context.read<ContributionBloc>().add(
+                                const RefreshAllContributionDataEvent(),
+                              );
+                            } catch (_) {}
                           }
                         },
                         icon: const Icon(Icons.add_box_outlined),
@@ -851,6 +858,11 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                               context.read<DirektoriBloc>().add(
                                 const RefreshDirektoriHeader(),
                               );
+                              try {
+                                context.read<ContributionBloc>().add(
+                                  const RefreshAllContributionDataEvent(),
+                                );
+                              } catch (_) {}
                             },
                           ),
                         ),
