@@ -20,17 +20,22 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
-    _loadRememberedEmail();
+    _loadRememberedCredentials();
   }
 
-  Future<void> _loadRememberedEmail() async {
+  Future<void> _loadRememberedCredentials() async {
     final prefs = await SharedPreferences.getInstance();
-    final rememberedEmail = prefs.getString('remembered_email');
     final rememberMe = prefs.getBool('remember_me') ?? false;
-
-    if (rememberMe && rememberedEmail != null) {
+    if (rememberMe) {
+      final rememberedEmail = prefs.getString('remembered_email');
+      final rememberedPassword = prefs.getString('remembered_password');
       setState(() {
-        _emailController.text = rememberedEmail;
+        if (rememberedEmail != null) {
+          _emailController.text = rememberedEmail;
+        }
+        if (rememberedPassword != null) {
+          _passwordController.text = rememberedPassword;
+        }
         _rememberMe = true;
       });
     }
@@ -40,9 +45,11 @@ class _LoginPageState extends State<LoginPage> {
     final prefs = await SharedPreferences.getInstance();
     if (_rememberMe) {
       await prefs.setString('remembered_email', _emailController.text.trim());
+      await prefs.setString('remembered_password', _passwordController.text);
       await prefs.setBool('remember_me', true);
     } else {
       await prefs.remove('remembered_email');
+      await prefs.remove('remembered_password');
       await prefs.setBool('remember_me', false);
     }
   }
@@ -178,7 +185,7 @@ class _LoginPageState extends State<LoginPage> {
                             activeColor: Colors.blue,
                           ),
                           const Text(
-                            'Ingat email saya',
+                            'Ingat email & password',
                             style: TextStyle(fontSize: 14, color: Colors.grey),
                           ),
                         ],
@@ -240,99 +247,71 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
 
+                // const SizedBox(height: 24),
+
+                // // Divider
+                // Row(
+                //   children: [
+                //     Expanded(child: Divider(color: Colors.grey[300])),
+                //     Padding(
+                //       padding: const EdgeInsets.symmetric(horizontal: 16),
+                //       child: Text(
+                //         'atau',
+                //         style: TextStyle(color: Colors.grey[600]),
+                //       ),
+                //     ),
+                //     Expanded(child: Divider(color: Colors.grey[300])),
+                //   ],
+                // ),
+
+                // const SizedBox(height: 24),
+
+                // // Google Sign In Button
+                // BlocBuilder<AuthBloc, AuthState>(
+                //   builder: (context, state) {
+                //     return SizedBox(
+                //       width: double.infinity,
+                //       height: 50,
+                //       child: OutlinedButton.icon(
+                //         onPressed: state is AuthLoading
+                //             ? null
+                //             : () {
+                //                 context.read<AuthBloc>().add(
+                //                   AuthSignInWithGoogleRequested(),
+                //                 );
+                //               },
+                //         icon: Image.asset(
+                //           'assets/images/google_logo.png',
+                //           height: 20,
+                //           width: 20,
+                //           errorBuilder: (context, error, stackTrace) {
+                //             return const Icon(
+                //               Icons.g_mobiledata,
+                //               size: 24,
+                //               color: Colors.red,
+                //             );
+                //           },
+                //         ),
+                //         label: const Text(
+                //           'Masuk dengan Google',
+                //           style: TextStyle(
+                //             fontSize: 16,
+                //             fontWeight: FontWeight.w600,
+                //             color: Colors.black87,
+                //           ),
+                //         ),
+                //         style: OutlinedButton.styleFrom(
+                //           side: BorderSide(color: Colors.grey[300]!),
+                //           shape: RoundedRectangleBorder(
+                //             borderRadius: BorderRadius.circular(12),
+                //           ),
+                //           backgroundColor: Colors.white,
+                //         ),
+                //       ),
+                //     );
+                //   },
+                // ),
                 const SizedBox(height: 24),
-
-                // Divider
-                Row(
-                  children: [
-                    Expanded(child: Divider(color: Colors.grey[300])),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'atau',
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                    ),
-                    Expanded(child: Divider(color: Colors.grey[300])),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // Google Sign In Button
-                BlocBuilder<AuthBloc, AuthState>(
-                  builder: (context, state) {
-                    return SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: OutlinedButton.icon(
-                        onPressed: state is AuthLoading
-                            ? null
-                            : () {
-                                context.read<AuthBloc>().add(
-                                  AuthSignInWithGoogleRequested(),
-                                );
-                              },
-                        icon: Image.asset(
-                          'assets/images/google_logo.png',
-                          height: 20,
-                          width: 20,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Icon(
-                              Icons.g_mobiledata,
-                              size: 24,
-                              color: Colors.red,
-                            );
-                          },
-                        ),
-                        label: const Text(
-                          'Masuk dengan Google',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: Colors.grey[300]!),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          backgroundColor: Colors.white,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 24),
-
-                // Register Link (Optional)
-                TextButton(
-                  onPressed: () {
-                    // TODO: Navigate to register page if needed
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Fitur registrasi akan segera tersedia'),
-                      ),
-                    );
-                  },
-                  child: RichText(
-                    text: TextSpan(
-                      text: 'Belum punya akun? ',
-                      style: TextStyle(color: Colors.grey[600]),
-                      children: const [
-                        TextSpan(
-                          text: 'Daftar di sini',
-                          style: TextStyle(
-                            color: Colors.blue,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               ],
             ),
           ),

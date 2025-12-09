@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:syncfusion_flutter_datagrid/datagrid.dart';
 import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../map/data/repositories/map_repository_impl.dart';
 import '../../../map/presentation/pages/main_page.dart';
 import '../../domain/entities/direktori.dart';
+import '../bloc/direktori_bloc.dart';
 
 class DirektoriDataGrid extends StatefulWidget {
   final List<Direktori> direktoriList;
@@ -594,7 +596,7 @@ class _DirektoriDataGridSource extends DataGridSource {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              if (hasCoord) ...[
+              if (hasCoord && !isEditing) ...[
                 const SizedBox(width: 8),
                 Tooltip(
                   message: 'Copy koordinat',
@@ -622,6 +624,57 @@ class _DirektoriDataGridSource extends DataGridSource {
                   ),
                 ),
               ],
+              if (isEditing) ...[
+                const SizedBox(width: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Tooltip(
+                      message: 'Pakai posisi peta',
+                      child: Builder(
+                        builder: (ctx) => InkWell(
+                          onTap: () => _navigateToMap(ctx, id),
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            decoration: const BoxDecoration(
+                              color: Colors.teal,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.map,
+                              color: Colors.white,
+                              size: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Tooltip(
+                      message: 'Input koordinat langsung',
+                      child: Builder(
+                        builder: (ctx) => InkWell(
+                          onTap: () => _promptInputCoordinates(ctx, id),
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            decoration: const BoxDecoration(
+                              color: Colors.deepOrange,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.edit_location_alt,
+                              color: Colors.white,
+                              size: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -641,24 +694,19 @@ class _DirektoriDataGridSource extends DataGridSource {
                   tooltip: 'Lihat',
                   onTap: (ctx) => onDetail(direktori),
                 ),
-                _iconAction(
-                  icon: hasCoord ? Icons.map : Icons.add_location_alt,
-                  color: hasCoord ? Colors.teal : Colors.deepOrange,
-                  tooltip: hasCoord
-                      ? 'Buka peta (Go to)'
-                      : 'Tambahkan koordinat',
-                  onTap: (ctx) {
-                    if (hasCoord) {
+                if (hasCoord)
+                  _iconAction(
+                    icon: Icons.map,
+                    color: Colors.teal,
+                    tooltip: 'Buka peta (Go to)',
+                    onTap: (ctx) {
                       if (onGoToMap != null) {
                         onGoToMap!(id);
                       } else {
                         _navigateToMap(ctx, id);
                       }
-                    } else {
-                      _showCoordinateOptions(ctx, id);
-                    }
-                  },
-                ),
+                    },
+                  ),
                 if ((cells[0].value ?? '') == '0')
                   _iconAction(
                     icon: Icons.delete_outline,
@@ -954,63 +1002,66 @@ class _DirektoriDataGridSource extends DataGridSource {
   }
 
   void _navigateToMap(BuildContext context, String focusId) {
+    List<dynamic>? cached;
+    try {
+      final bloc = context.read<DirektoriBloc>();
+      if (bloc.isAllLoaded) {
+        cached = bloc.cachedAllList;
+      }
+    } catch (_) {}
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (ctx) => const MainPage(initialTabIndex: 0),
-        settings: RouteSettings(arguments: {'focusDirectoryId': focusId}),
+        settings: RouteSettings(
+          arguments: {
+            'focusDirectoryId': focusId,
+            if (cached != null) 'direktoriList': cached,
+          },
+        ),
       ),
     );
-  }
-
-  Future<void> _showCoordinateOptions(BuildContext context, String id) async {
-    final String? choice = await showDialog<String>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Tambahkan Koordinat'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(ctx).pop('map'),
-            child: Row(
-              children: const [
-                Icon(Icons.map, color: Colors.teal),
-                SizedBox(width: 8),
-                Text('Pakai posisi peta'),
-              ],
-            ),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(ctx).pop('input'),
-            child: Row(
-              children: const [
-                Icon(Icons.edit_location_alt, color: Colors.deepOrange),
-                SizedBox(width: 8),
-                Text('Input koordinat langsung'),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-    if (choice == 'map') {
-      _navigateToMap(context, id);
-      return;
-    }
-    if (choice == 'input') {
-      await _promptInputCoordinates(context, id);
-    }
   }
 
   Future<void> _promptInputCoordinates(BuildContext context, String id) async {
     final controller = TextEditingController();
+    final regex = RegExp(r'^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$');
+
+    // Prefill from clipboard if available and valid
+    double? initLat;
+    double? initLng;
+    bool initValid = false;
+    try {
+      final clip = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = clip?.text?.trim();
+      if (text != null) {
+        final m = regex.firstMatch(text);
+        if (m != null) {
+          final lt = double.tryParse(m.group(1)!);
+          final lg = double.tryParse(m.group(2)!);
+          final inRange =
+              lt != null &&
+              lg != null &&
+              lt >= -90 &&
+              lt <= 90 &&
+              lg >= -180 &&
+              lg <= 180;
+          if (inRange) {
+            controller.text =
+                '${lt!.toStringAsFixed(15)}, ${lg!.toStringAsFixed(15)}';
+            initLat = lt;
+            initLng = lg;
+            initValid = true;
+          }
+        }
+      }
+    } catch (_) {}
+
     final result = await showDialog<List<double>>(
       context: context,
       builder: (ctx) {
-        bool valid = false;
-        double? lat;
-        double? lng;
-        final regex = RegExp(
-          r'^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$',
-        );
+        bool valid = initValid;
+        double? lat = initLat;
+        double? lng = initLng;
         return StatefulBuilder(
           builder: (ctx, setState) => AlertDialog(
             title: const Text('Masukkan Koordinat'),

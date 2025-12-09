@@ -14,6 +14,12 @@ class DirektoriBloc extends Bloc<DirektoriEvent, DirektoriState> {
   String? _sortColumn = 'nama';
   bool _sortAscending = true;
   bool _includeCoordinates = true;
+  List<Direktori> _allCache = const [];
+  String? _allCacheSearch;
+
+  List<Direktori> get cachedAllList => _allCache;
+  bool get isAllLoaded =>
+      state is DirektoriLoaded && (state as DirektoriLoaded).allLoaded;
 
   DirektoriBloc({
     required this.getDirektoriList,
@@ -70,6 +76,7 @@ class DirektoriBloc extends Bloc<DirektoriEvent, DirektoriState> {
           sortAscending: _sortAscending,
           includeCoordinates: _includeCoordinates,
           stats: stats,
+          allLoaded: false,
         ),
       );
     } catch (e) {
@@ -81,16 +88,39 @@ class DirektoriBloc extends Bloc<DirektoriEvent, DirektoriState> {
     SearchDirektori event,
     Emitter<DirektoriState> emit,
   ) async {
-    add(
-      LoadDirektoriList(
-        page: 1,
-        search: event.query,
-        isRefresh: true,
-        sortColumn: _sortColumn,
-        sortAscending: _sortAscending,
-        includeCoordinates: _includeCoordinates,
-      ),
-    );
+    final currentState = state;
+    if (currentState is DirektoriLoaded && currentState.allLoaded) {
+      final q = event.query.trim();
+      final src = _allCache;
+      final filtered = q.isEmpty
+          ? src
+          : src
+                .where(
+                  (d) => (d.namaUsaha).toLowerCase().contains(q.toLowerCase()),
+                )
+                .toList();
+      emit(
+        currentState.copyWith(
+          direktoriList: filtered,
+          currentPage: 1,
+          totalCount: filtered.length,
+          hasReachedMax: true,
+          currentSearch: q.isEmpty ? null : q,
+          isLoadingMore: false,
+        ),
+      );
+    } else {
+      add(
+        LoadDirektoriList(
+          page: 1,
+          search: event.query,
+          isRefresh: true,
+          sortColumn: _sortColumn,
+          sortAscending: _sortAscending,
+          includeCoordinates: _includeCoordinates,
+        ),
+      );
+    }
   }
 
   Future<void> _onLoadMoreDirektori(
@@ -99,6 +129,10 @@ class DirektoriBloc extends Bloc<DirektoriEvent, DirektoriState> {
   ) async {
     final currentState = state;
     if (currentState is DirektoriLoaded && !currentState.hasReachedMax) {
+      if (currentState.allLoaded) {
+        // Sudah memuat semua: tidak ada pagination tambahan
+        return;
+      }
       try {
         emit(currentState.copyWith(isLoadingMore: true));
 
@@ -137,16 +171,29 @@ class DirektoriBloc extends Bloc<DirektoriEvent, DirektoriState> {
   ) async {
     final currentState = state;
     if (currentState is DirektoriLoaded) {
-      add(
-        LoadDirektoriList(
-          page: 1,
-          search: currentState.currentSearch,
-          isRefresh: true,
-          sortColumn: currentState.sortColumn,
-          sortAscending: currentState.sortAscending,
-          includeCoordinates: currentState.includeCoordinates,
-        ),
-      );
+      if (currentState.allLoaded) {
+        // Pertahankan list yang sudah dimuat; hanya segarkan header (count/stats)
+        try {
+          final totalCount = await getDirektoriCount(
+            search: currentState.currentSearch,
+          );
+          final stats = await getDirektoriStats(
+            updatedThreshold: DateTime.parse('2025-11-01 13:35:36.438909+00'),
+          );
+          emit(currentState.copyWith(totalCount: totalCount, stats: stats));
+        } catch (_) {}
+      } else {
+        add(
+          LoadDirektoriList(
+            page: 1,
+            search: currentState.currentSearch,
+            isRefresh: true,
+            sortColumn: currentState.sortColumn,
+            sortAscending: currentState.sortAscending,
+            includeCoordinates: currentState.includeCoordinates,
+          ),
+        );
+      }
     } else {
       add(const LoadDirektoriList(page: 1, isRefresh: true));
     }
@@ -279,8 +326,11 @@ class DirektoriBloc extends Bloc<DirektoriEvent, DirektoriState> {
           sortAscending: sortAsc,
           includeCoordinates: include,
           stats: stats,
+          allLoaded: true,
         ),
       );
+      _allCache = all;
+      _allCacheSearch = search;
     } catch (e) {
       emit(DirektoriError(e.toString()));
     }

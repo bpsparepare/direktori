@@ -23,6 +23,7 @@ class DirektoriLoaded extends DirektoriState {
   final bool sortAscending;
   final bool includeCoordinates;
   final Map<String, int>? stats;
+  final bool allLoaded;
 
   const DirektoriLoaded({
     required this.direktoriList,
@@ -35,6 +36,7 @@ class DirektoriLoaded extends DirektoriState {
     this.sortAscending = false,
     this.includeCoordinates = false,
     this.stats,
+    this.allLoaded = false,
   });
 
   DirektoriLoaded copyWith({
@@ -48,6 +50,7 @@ class DirektoriLoaded extends DirektoriState {
     bool? sortAscending,
     bool? includeCoordinates,
     Map<String, int>? stats,
+    bool? allLoaded,
   }) {
     return DirektoriLoaded(
       direktoriList: direktoriList ?? this.direktoriList,
@@ -60,6 +63,7 @@ class DirektoriLoaded extends DirektoriState {
       sortAscending: sortAscending ?? this.sortAscending,
       includeCoordinates: includeCoordinates ?? this.includeCoordinates,
       stats: stats ?? this.stats,
+      allLoaded: allLoaded ?? this.allLoaded,
     );
   }
 
@@ -75,6 +79,7 @@ class DirektoriLoaded extends DirektoriState {
     sortAscending,
     includeCoordinates,
     stats,
+    allLoaded,
   ];
 }
 

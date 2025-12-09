@@ -70,8 +70,32 @@ class _MainPageState extends State<MainPage> {
     if (focusDirectoryId == null || focusDirectoryId.isEmpty) return;
 
     try {
-      final repo = MapRepositoryImpl();
-      final dir = await repo.getDirectoryById(focusDirectoryId);
+      DirektoriModel? dir;
+      // Prefer list passed via arguments to avoid refetch
+      if (args is Map && args['direktoriList'] is List) {
+        final list = (args['direktoriList'] as List);
+        final found = list.cast<dynamic>().firstWhere(
+          (d) => (d as dynamic).id == focusDirectoryId,
+          orElse: () => null,
+        );
+        if (found != null) {
+          // Map basic fields to DirektoriModel
+          dir = DirektoriModel(
+            id: found.id,
+            idSbr: found.idSbr,
+            namaUsaha: found.namaUsaha,
+            alamat: found.alamat,
+            idSls: found.idSls,
+            kegiatanUsaha: found.kegiatanUsaha,
+            latitude: found.latitude ?? found.lat,
+            longitude: found.longitude ?? found.long,
+            urlGambar: found.urlGambar,
+            kodePos: found.kodePos,
+          );
+        }
+      }
+      // Fallback to repository fetch
+      dir ??= await MapRepositoryImpl().getDirectoryById(focusDirectoryId);
       if (dir == null) {
         return;
       }
@@ -113,8 +137,7 @@ class _MainPageState extends State<MainPage> {
   Future<void> _focusDirectoryById(String focusDirectoryId) async {
     if (focusDirectoryId.isEmpty) return;
     try {
-      final repo = MapRepositoryImpl();
-      final dir = await repo.getDirectoryById(focusDirectoryId);
+      final dir = await MapRepositoryImpl().getDirectoryById(focusDirectoryId);
       if (dir == null) {
         return;
       }

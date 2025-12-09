@@ -25,7 +25,14 @@ class LoadDirektoriList extends DirektoriEvent {
   });
 
   @override
-  List<Object?> get props => [page, search, isRefresh, sortColumn, sortAscending, includeCoordinates];
+  List<Object?> get props => [
+    page,
+    search,
+    isRefresh,
+    sortColumn,
+    sortAscending,
+    includeCoordinates,
+  ];
 }
 
 class SearchDirektori extends DirektoriEvent {

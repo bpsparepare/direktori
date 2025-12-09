@@ -60,21 +60,13 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
   final TextEditingController _searchController = TextEditingController();
   String? _selectedLetter;
   bool _showStats = true;
+  bool _loadingAll = false;
 
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
-    // Load initial data
-    context.read<DirektoriBloc>().add(
-      const LoadDirektoriList(
-        page: 1,
-        includeCoordinates: true,
-        sortColumn: 'nama',
-        sortAscending: true,
-        isRefresh: true,
-      ),
-    );
+    // Non-paginated: muat semua data sekali
+    context.read<DirektoriBloc>().add(const LoadAllDirektori());
   }
 
   @override
@@ -85,9 +77,7 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
   }
 
   void _onScroll() {
-    if (_isBottom) {
-      context.read<DirektoriBloc>().add(const LoadMoreDirektori());
-    }
+    // Pagination dihapus: tidak memuat lagi saat scroll
   }
 
   bool get _isBottom {
@@ -405,16 +395,68 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Tooltip(
-                        message: 'Muat semua',
-                        child: IconButton(
-                          onPressed: () {
-                            context.read<DirektoriBloc>().add(
-                              const LoadAllDirektori(),
-                            );
-                          },
-                          icon: const Icon(Icons.download),
-                        ),
+                      BlocConsumer<DirektoriBloc, DirektoriState>(
+                        listener: (context, state) {
+                          if (_loadingAll) {
+                            if (state is DirektoriLoaded) {
+                              final fullyLoaded =
+                                  !state.isLoadingMore &&
+                                  state.hasReachedMax &&
+                                  (state.totalCount > 0 &&
+                                      state.direktoriList.length >=
+                                          state.totalCount);
+                              if (fullyLoaded) {
+                                final count = state.direktoriList.length;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Berhasil memuat semua ($count data)',
+                                    ),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                                setState(() => _loadingAll = false);
+                              }
+                            } else if (state is DirektoriError) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Gagal memuat semua: ${state.message}',
+                                  ),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              setState(() => _loadingAll = false);
+                            }
+                          }
+                        },
+                        builder: (context, state) {
+                          final isBusy =
+                              state is DirektoriLoading ||
+                              (state is DirektoriLoaded && state.isLoadingMore);
+                          return Tooltip(
+                            message: 'Muat semua',
+                            child: IconButton(
+                              onPressed: isBusy
+                                  ? null
+                                  : () {
+                                      setState(() => _loadingAll = true);
+                                      context.read<DirektoriBloc>().add(
+                                        const LoadAllDirektori(),
+                                      );
+                                    },
+                              icon: isBusy
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.download),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
