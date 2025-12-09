@@ -19,6 +19,35 @@ abstract class MapRepository {
   Future<List<DirektoriModel>> searchDirectoriesWithoutCoordinates(
     String query,
   );
+  Future<List<DirektoriModel>> listDirectoriesWithoutCoordinates({
+    required int page,
+    required int limit,
+    String? orderBy,
+    bool ascending,
+  });
+  Future<List<DirektoriModel>> searchDirectoriesWithoutCoordinatesPaged({
+    required String query,
+    required int page,
+    required int limit,
+    String? orderBy,
+    bool ascending,
+  });
+  Future<List<DirektoriModel>> listAllDirectories({
+    required int page,
+    required int limit,
+    String? orderBy,
+    bool ascending,
+  });
+  Future<List<DirektoriModel>> searchAllDirectoriesPaged({
+    required String query,
+    required int page,
+    required int limit,
+    String? orderBy,
+    bool ascending,
+  });
+  Future<int> countDirectoriesWithoutCoordinates();
+  Future<Map<String, int>> getDirektoriStats({DateTime? updatedThreshold});
+  Future<int> countAllDirectories({String? search});
   Future<bool> updateDirectoryCoordinates(String id, double lat, double lng);
   Future<bool> insertDirectory(DirektoriModel directory);
   Future<String?> insertDirectoryAndGetId(DirektoriModel directory);

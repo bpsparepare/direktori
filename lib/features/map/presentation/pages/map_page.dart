@@ -176,6 +176,30 @@ class MapPage extends StatelessWidget {
                       ),
                     ),
                   ],
+                  // Refresh places button (top-right)
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Material(
+                      color: Colors.white,
+                      shape: const CircleBorder(),
+                      elevation: 2,
+                      child: IconButton(
+                        tooltip: 'Refresh marker',
+                        icon: const Icon(Icons.refresh),
+                        onPressed: () {
+                          MapRepositoryImpl().invalidatePlacesCache();
+                          context.read<MapBloc>().add(const PlacesRequested());
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Marker diperbarui'),
+                              duration: Duration(milliseconds: 800),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
                   if (state.selectedPlace != null)
                     LayoutBuilder(
                       builder: (context, constraints) {

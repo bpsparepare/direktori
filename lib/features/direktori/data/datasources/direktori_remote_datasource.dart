@@ -6,9 +6,13 @@ abstract class DirektoriRemoteDataSource {
     required int page,
     required int limit,
     String? search,
+    String? orderBy,
+    bool ascending = false,
+    bool includeCoordinates = false,
   });
 
-  Future<int> getDirektoriCount({String? search});
+  Future<int> getDirektoriCount({String? search, bool includeCoordinates = false});
+  Future<Map<String, int>> getDirektoriStats({DateTime? updatedThreshold});
 }
 
 class DirektoriRemoteDataSourceImpl implements DirektoriRemoteDataSource {
@@ -21,40 +25,61 @@ class DirektoriRemoteDataSourceImpl implements DirektoriRemoteDataSource {
     required int page,
     required int limit,
     String? search,
+    String? orderBy,
+    bool ascending = false,
+    bool includeCoordinates = false,
   }) async {
-    // For now, we'll use the existing search method
-    // In a real implementation, this would be a proper paginated API call
     if (search != null && search.isNotEmpty) {
-      final allResults = await mapRepository
-          .searchDirectoriesWithoutCoordinates(search);
-      final startIndex = (page - 1) * limit;
-      final endIndex = startIndex + limit;
-
-      if (startIndex >= allResults.length) return [];
-
-      return allResults.sublist(
-        startIndex,
-        endIndex > allResults.length ? allResults.length : endIndex,
+      if (includeCoordinates) {
+        return await mapRepository.searchAllDirectoriesPaged(
+          query: search,
+          page: page,
+          limit: limit,
+          orderBy: orderBy,
+          ascending: ascending,
+        );
+      }
+      return await mapRepository.searchDirectoriesWithoutCoordinatesPaged(
+        query: search,
+        page: page,
+        limit: limit,
+        orderBy: orderBy,
+        ascending: ascending,
       );
     }
 
-    // If no search, return empty for now
-    // In real implementation, this would fetch all directories with pagination
-    return [];
+    if (includeCoordinates) {
+      return await mapRepository.listAllDirectories(
+        page: page,
+        limit: limit,
+        orderBy: orderBy,
+        ascending: ascending,
+      );
+    }
+    return await mapRepository.listDirectoriesWithoutCoordinates(
+      page: page,
+      limit: limit,
+      orderBy: orderBy,
+      ascending: ascending,
+    );
   }
 
   @override
-  Future<int> getDirektoriCount({String? search}) async {
-    // For now, we'll use the existing search method to get count
+  Future<int> getDirektoriCount({String? search, bool includeCoordinates = false}) async {
+    if (includeCoordinates) {
+      return await mapRepository.countAllDirectories(search: search);
+    }
     if (search != null && search.isNotEmpty) {
       final results = await mapRepository.searchDirectoriesWithoutCoordinates(
         search,
       );
       return results.length;
     }
+    return await mapRepository.countDirectoriesWithoutCoordinates();
+  }
 
-    // If no search, return 0 for now
-    // In real implementation, this would return total count from database
-    return 0;
+  @override
+  Future<Map<String, int>> getDirektoriStats({DateTime? updatedThreshold}) async {
+    return await mapRepository.getDirektoriStats(updatedThreshold: updatedThreshold);
   }
 }

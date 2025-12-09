@@ -16,6 +16,12 @@ class MapRepositoryImpl implements MapRepository {
   static List<Place>? _allPlacesCache;
   static final Map<String, List<Place>> _boundsCache = {};
 
+  void invalidatePlacesCache() {
+    _allPlacesCache = null;
+    _boundsCache.clear();
+    debugPrint('MapRepository: Places cache invalidated');
+  }
+
   @override
   Future<MapConfig> getInitialConfig() async {
     // Pusat peta di Parepare
@@ -100,6 +106,228 @@ class MapRepositoryImpl implements MapRepository {
     } catch (e) {
       print('Error searching directories without coordinates: $e');
       return [];
+    }
+  }
+
+  @override
+  Future<List<DirektoriModel>> listDirectoriesWithoutCoordinates({
+    required int page,
+    required int limit,
+    String? orderBy,
+    bool ascending = false,
+  }) async {
+    try {
+      final start = (page - 1) * limit;
+      final end = start + limit - 1;
+      final response = await _supabaseClient
+          .from('direktori')
+          .select('*, wilayah(*)')
+          .or('latitude.is.null,longitude.is.null')
+          .order(orderBy ?? 'updated_at', ascending: ascending)
+          .range(start, end);
+
+      return (response as List)
+          .map((json) => DirektoriModel.fromJson(json))
+          .toList();
+    } catch (e) {
+      debugPrint(
+        'MapRepository: Error listing directories without coordinates: $e',
+      );
+      return [];
+    }
+  }
+
+  @override
+  Future<List<DirektoriModel>> searchDirectoriesWithoutCoordinatesPaged({
+    required String query,
+    required int page,
+    required int limit,
+    String? orderBy,
+    bool ascending = false,
+  }) async {
+    try {
+      final start = (page - 1) * limit;
+      final end = start + limit - 1;
+      final response = await _supabaseClient
+          .from('direktori')
+          .select('*, wilayah(*)')
+          .or('latitude.is.null,longitude.is.null')
+          .ilike('nama_usaha', '%$query%')
+          .order(orderBy ?? 'updated_at', ascending: ascending)
+          .range(start, end);
+
+      return (response as List)
+          .map((json) => DirektoriModel.fromJson(json))
+          .toList();
+    } catch (e) {
+      debugPrint(
+        'MapRepository: Error searching directories without coordinates (paged): $e',
+      );
+      return [];
+    }
+  }
+
+  @override
+  Future<List<DirektoriModel>> listAllDirectories({
+    required int page,
+    required int limit,
+    String? orderBy,
+    bool ascending = false,
+  }) async {
+    try {
+      final start = (page - 1) * limit;
+      final end = start + limit - 1;
+      final response = await _supabaseClient
+          .from('direktori')
+          .select('*, wilayah(*)')
+          .order(orderBy ?? 'updated_at', ascending: ascending)
+          .range(start, end);
+
+      return (response as List)
+          .map((json) => DirektoriModel.fromJson(json))
+          .toList();
+    } catch (e) {
+      debugPrint('MapRepository: Error listing all directories: $e');
+      return [];
+    }
+  }
+
+  @override
+  Future<List<DirektoriModel>> searchAllDirectoriesPaged({
+    required String query,
+    required int page,
+    required int limit,
+    String? orderBy,
+    bool ascending = false,
+  }) async {
+    try {
+      final start = (page - 1) * limit;
+      final end = start + limit - 1;
+      final response = await _supabaseClient
+          .from('direktori')
+          .select('*, wilayah(*)')
+          .ilike('nama_usaha', '%$query%')
+          .order(orderBy ?? 'updated_at', ascending: ascending)
+          .range(start, end);
+
+      return (response as List)
+          .map((json) => DirektoriModel.fromJson(json))
+          .toList();
+    } catch (e) {
+      debugPrint('MapRepository: Error searching all directories (paged): $e');
+      return [];
+    }
+  }
+
+  @override
+  Future<int> countDirectoriesWithoutCoordinates() async {
+    try {
+      final response = await _supabaseClient
+          .from('direktori')
+          .select('id')
+          .or('latitude.is.null,longitude.is.null');
+      if (response is List) {
+        return response.length;
+      }
+      return 0;
+    } catch (e) {
+      debugPrint(
+        'MapRepository: Error counting directories without coordinates: $e',
+      );
+      return 0;
+    }
+  }
+
+  @override
+  Future<int> countAllDirectories({String? search}) async {
+    try {
+      var queryBuilder = _supabaseClient.from('direktori').select('id');
+      if (search != null && search.isNotEmpty) {
+        queryBuilder = queryBuilder.ilike('nama_usaha', '%$search%');
+      }
+      final response = await queryBuilder;
+      if (response is List) {
+        return response.length;
+      }
+      return 0;
+    } catch (e) {
+      debugPrint('MapRepository: Error counting all directories: $e');
+      return 0;
+    }
+  }
+
+  @override
+  Future<Map<String, int>> getDirektoriStats({
+    DateTime? updatedThreshold,
+  }) async {
+    try {
+      final threshold =
+          (updatedThreshold ?? DateTime.parse('2025-11-01 13:35:36.438909+00'))
+              .toUtc()
+              .toIso8601String();
+
+      // Prefer RPC for accurate counts
+      try {
+        final rpcResp = await _supabaseClient.rpc(
+          'get_direktori_stats',
+          params: {'updated_threshold': threshold},
+        );
+        if (rpcResp is List && rpcResp.isNotEmpty && rpcResp.first is Map) {
+          final row = rpcResp.first as Map;
+          return {
+            'total': (row['total'] as int?) ?? 0,
+            'aktif': (row['aktif'] as int?) ?? 0,
+            'updated': (row['updated'] as int?) ?? 0,
+            'aktif_with_coord': (row['aktif_with_coord'] as int?) ?? 0,
+            'aktif_without_coord': (row['aktif_without_coord'] as int?) ?? 0,
+          };
+        }
+        if (rpcResp is Map) {
+          return {
+            'total': (rpcResp['total'] as int?) ?? 0,
+            'aktif': (rpcResp['aktif'] as int?) ?? 0,
+            'updated': (rpcResp['updated'] as int?) ?? 0,
+            'aktif_with_coord': (rpcResp['aktif_with_coord'] as int?) ?? 0,
+            'aktif_without_coord':
+                (rpcResp['aktif_without_coord'] as int?) ?? 0,
+          };
+        }
+      } catch (_) {}
+
+      // Fallback to view
+      try {
+        final viewResp = await _supabaseClient
+            .from('direktori_stats_view')
+            .select()
+            .limit(1);
+        if (viewResp is List && viewResp.isNotEmpty && viewResp.first is Map) {
+          final row = viewResp.first as Map;
+          return {
+            'total': (row['total_usaha'] as int?) ?? 0,
+            'aktif': (row['jumlah_aktif'] as int?) ?? 0,
+            'updated': 0,
+            'aktif_with_coord': (row['aktif_with_coord'] as int?) ?? 0,
+            'aktif_without_coord': (row['aktif_without_coord'] as int?) ?? 0,
+          };
+        }
+      } catch (_) {}
+      // If both RPC and view are unavailable, return zeros to avoid API errors
+      return {
+        'total': 0,
+        'aktif': 0,
+        'updated': 0,
+        'aktif_with_coord': 0,
+        'aktif_without_coord': 0,
+      };
+    } catch (e) {
+      debugPrint('MapRepository: Error getDirektoriStats: $e');
+      return {
+        'total': 0,
+        'aktif': 0,
+        'updated': 0,
+        'aktif_with_coord': 0,
+        'aktif_without_coord': 0,
+      };
     }
   }
 
@@ -866,6 +1094,30 @@ class MapRepositoryImpl implements MapRepository {
       return true;
     } catch (e) {
       debugPrint('MapRepository: Error updateDirectoryStatus: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateDirectoryBasicFields(
+    String id, {
+    String? namaUsaha,
+    String? alamat,
+  }) async {
+    try {
+      final Map<String, dynamic> payload = {
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      if (namaUsaha != null) {
+        payload['nama_usaha'] = namaUsaha;
+      }
+      if (alamat != null) {
+        payload['alamat'] = alamat;
+      }
+      if (payload.length <= 1) return true; // nothing to update
+      await _supabaseClient.from('direktori').update(payload).eq('id', id);
+      return true;
+    } catch (e) {
+      debugPrint('MapRepository: Error updateDirectoryBasicFields: $e');
       return false;
     }
   }

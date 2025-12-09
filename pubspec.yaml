@@ -61,6 +61,7 @@ dependencies:
   http: ^1.2.2
   http_parser: ^4.0.2
   flutter_map_dragmarker: ^8.0.3
+  syncfusion_flutter_datagrid: ^31.2.16
   
   # Image upload dependencies
   image_picker: ^1.1.2

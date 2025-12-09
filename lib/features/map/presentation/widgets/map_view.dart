@@ -798,12 +798,13 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     // if (z < 11) return 5;
     // if (z < 12) return 10;
     // if (z < 13) return 20;
+    // if (z < 14) return 5;
     if (z < 14) return 5;
-    if (z < 15) return 20;
-    if (z < 16) return 40;
-    if (z < 17) return 60;
-    if (z < 18) return 80;
-    if (z < 19) return 100;
+    if (z < 16) return 10;
+    if (z < 17) return 20;
+    if (z < 18) return 30;
+    if (z < 19) return 40;
+    if (z < 20) return 50;
     return null; // >=19 show all
   }
 

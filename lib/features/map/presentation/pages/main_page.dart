@@ -110,6 +110,44 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
+  Future<void> _focusDirectoryById(String focusDirectoryId) async {
+    if (focusDirectoryId.isEmpty) return;
+    try {
+      final repo = MapRepositoryImpl();
+      final dir = await repo.getDirectoryById(focusDirectoryId);
+      if (dir == null) {
+        return;
+      }
+      if (_selectedIndex != 0) {
+        setState(() {
+          _selectedIndex = 0;
+        });
+      }
+      if (dir.hasValidCoordinates) {
+        final place = dir.toPlace();
+        _sharedMapController.move(place.position, 18.0);
+        if (mounted) {
+          context.read<MapBloc>().add(PlaceSelected(place));
+        }
+      } else {
+        setState(() {
+          _pendingCoordinateDirectory = dir;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Direktori belum memiliki koordinat. Geser peta ke lokasi lalu tekan Simpan.',
+              ),
+              backgroundColor: Colors.blue,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (_) {}
+  }
+
   void _loadPlaces() async {
     // Load dummy places from repository
     final repository = MapRepositoryImpl();
@@ -584,8 +622,20 @@ class _MainPageState extends State<MainPage> {
               });
             },
           ),
-          // Overlay content based on selected tab
-          if (_selectedIndex != 0) _buildOverlayContent(),
+          // Overlay content: keep pages mounted to preserve state across tab changes
+          Offstage(
+            offstage: _selectedIndex == 0,
+            child: IndexedStack(
+              index: _selectedIndex == 0 ? 0 : _selectedIndex - 1,
+              children: [
+                SavedPage(mapController: _sharedMapController),
+                const ContributionPage(),
+                DirektoriListPage(
+                  onNavigateToMap: (id) => _focusDirectoryById(id),
+                ),
+              ],
+            ),
+          ),
           // Floating search bar with avatar (Google Maps style) - only on Jelajah tab
           if (_selectedIndex == 0)
             Positioned(

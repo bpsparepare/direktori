@@ -19,6 +19,10 @@ class DirektoriLoaded extends DirektoriState {
   final bool hasReachedMax;
   final String? currentSearch;
   final bool isLoadingMore;
+  final String? sortColumn; // 'nama' | 'status'
+  final bool sortAscending;
+  final bool includeCoordinates;
+  final Map<String, int>? stats;
 
   const DirektoriLoaded({
     required this.direktoriList,
@@ -27,6 +31,10 @@ class DirektoriLoaded extends DirektoriState {
     required this.hasReachedMax,
     this.currentSearch,
     this.isLoadingMore = false,
+    this.sortColumn,
+    this.sortAscending = false,
+    this.includeCoordinates = false,
+    this.stats,
   });
 
   DirektoriLoaded copyWith({
@@ -36,6 +44,10 @@ class DirektoriLoaded extends DirektoriState {
     bool? hasReachedMax,
     String? currentSearch,
     bool? isLoadingMore,
+    String? sortColumn,
+    bool? sortAscending,
+    bool? includeCoordinates,
+    Map<String, int>? stats,
   }) {
     return DirektoriLoaded(
       direktoriList: direktoriList ?? this.direktoriList,
@@ -44,6 +56,10 @@ class DirektoriLoaded extends DirektoriState {
       hasReachedMax: hasReachedMax ?? this.hasReachedMax,
       currentSearch: currentSearch ?? this.currentSearch,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      sortColumn: sortColumn ?? this.sortColumn,
+      sortAscending: sortAscending ?? this.sortAscending,
+      includeCoordinates: includeCoordinates ?? this.includeCoordinates,
+      stats: stats ?? this.stats,
     );
   }
 
@@ -55,6 +71,10 @@ class DirektoriLoaded extends DirektoriState {
     hasReachedMax,
     currentSearch,
     isLoadingMore,
+    sortColumn,
+    sortAscending,
+    includeCoordinates,
+    stats,
   ];
 }
 

@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../bloc/map_bloc.dart';
+import '../bloc/map_event.dart';
+import '../../data/repositories/map_repository_impl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'compass_widget.dart';
 import '../../domain/entities/polygon_data.dart';
@@ -182,22 +186,6 @@ class _MapControlsState extends State<MapControls> {
     widget.onResetPosition?.call();
   }
 
-  void _zoomIn() {
-    final currentZoom = widget.mapController.camera.zoom;
-    widget.mapController.move(
-      widget.mapController.camera.center,
-      currentZoom + 1,
-    );
-  }
-
-  void _zoomOut() {
-    final currentZoom = widget.mapController.camera.zoom;
-    widget.mapController.move(
-      widget.mapController.camera.center,
-      currentZoom - 1,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Positioned(
@@ -292,15 +280,16 @@ class _MapControlsState extends State<MapControls> {
             ),
             child: IconButton(
               icon: Icon(
-                widget.showMarkerLabels ? Icons.text_fields : Icons.text_fields_outlined,
+                widget.showMarkerLabels
+                    ? Icons.text_fields
+                    : Icons.text_fields_outlined,
                 color: Colors.black87,
               ),
               tooltip: widget.showMarkerLabels
                   ? 'Sembunyikan Nama Marker'
                   : 'Tampilkan Nama Marker',
-              onPressed: () => widget.onToggleMarkerLabels?.call(
-                !widget.showMarkerLabels,
-              ),
+              onPressed: () =>
+                  widget.onToggleMarkerLabels?.call(!widget.showMarkerLabels),
             ),
           ),
           const SizedBox(height: 8),
@@ -422,8 +411,7 @@ class _MapControlsState extends State<MapControls> {
             ),
           ),
           const SizedBox(height: 8),
-
-          // Zoom In Button
+          // Refresh Markers Button
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -437,34 +425,21 @@ class _MapControlsState extends State<MapControls> {
               ],
             ),
             child: IconButton(
-              onPressed: _zoomIn,
-              icon: const Icon(Icons.zoom_in, color: Colors.grey),
-              tooltip: 'Perbesar',
-            ),
-          ),
-          const SizedBox(height: 4),
-
-          // Zoom Out Button
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: IconButton(
-              onPressed: _zoomOut,
-              icon: const Icon(Icons.zoom_out, color: Colors.grey),
-              tooltip: 'Perkecil',
+              onPressed: () {
+                MapRepositoryImpl().invalidatePlacesCache();
+                context.read<MapBloc>().add(const PlacesRequested());
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Marker diperbarui'),
+                    duration: Duration(milliseconds: 800),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.refresh, color: Colors.black87),
+              tooltip: 'Refresh Marker',
             ),
           ),
           const SizedBox(height: 8),
-
           // Pilih Polygon FAB
           Container(
             decoration: BoxDecoration(

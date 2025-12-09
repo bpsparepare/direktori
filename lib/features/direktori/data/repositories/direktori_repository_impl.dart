@@ -13,11 +13,17 @@ class DirektoriRepositoryImpl implements DirektoriRepository {
     required int page,
     required int limit,
     String? search,
+    String? orderBy,
+    bool ascending = false,
+    bool includeCoordinates = false,
   }) async {
     final mapModels = await remoteDataSource.getDirektoriList(
       page: page,
       limit: limit,
       search: search,
+      orderBy: orderBy,
+      ascending: ascending,
+      includeCoordinates: includeCoordinates,
     );
 
     return mapModels
@@ -28,5 +34,10 @@ class DirektoriRepositoryImpl implements DirektoriRepository {
   @override
   Future<int> getDirektoriCount({String? search}) async {
     return await remoteDataSource.getDirektoriCount(search: search);
+  }
+
+  @override
+  Future<Map<String, int>> getDirektoriStats({DateTime? updatedThreshold}) async {
+    return await remoteDataSource.getDirektoriStats(updatedThreshold: updatedThreshold);
   }
 }

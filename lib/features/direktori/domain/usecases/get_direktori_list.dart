@@ -10,11 +10,17 @@ class GetDirektoriList {
     required int page,
     required int limit,
     String? search,
+    String? orderBy,
+    bool ascending = false,
+    bool includeCoordinates = false,
   }) async {
     return await repository.getDirektoriList(
       page: page,
       limit: limit,
       search: search,
+      orderBy: orderBy,
+      ascending: ascending,
+      includeCoordinates: includeCoordinates,
     );
   }
 }
