@@ -1,3 +1,4 @@
+import 'package:direktori/features/direktori/domain/entities/direktori.dart';
 import 'package:direktori/features/direktori/domain/usecases/get_direktori_stats.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -62,6 +63,57 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
   final TextEditingController _searchController = TextEditingController();
   String? _selectedLetter;
   bool _showStats = true;
+  final Map<String, DateTime> _locallyUpdatedAtById = {};
+
+  Map<String, int> _computeAlphabetCounts(List<Direktori> list) {
+    final letters = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    final Map<String, int> counts = {for (final ch in letters) ch: 0};
+    final DateTime threshold = DateTime.parse('2025-11-01 13:35:36.438909+00');
+    for (final d in list) {
+      final n = (d.namaUsaha).trim();
+      if (n.isEmpty) continue;
+      final first = n[0].toUpperCase();
+      final isAlpha = RegExp(r'^[A-Z]').hasMatch(first);
+      final key = isAlpha ? first : '#';
+      final DateTime? localTs = _locallyUpdatedAtById[d.id];
+      final DateTime? updatedAt = localTs ?? d.updatedAt;
+      final bool isUpdated = updatedAt != null && updatedAt.isAfter(threshold);
+      if (!isUpdated) {
+        counts[key] = (counts[key] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }
+
+  Future<void> _copyAlphabetRecap() async {
+    final s = context.read<DirektoriBloc>().state;
+    if (s is DirektoriLoaded) {
+      final counts = _computeAlphabetCounts(s.direktoriList);
+      final letters = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+      final buffer = StringBuffer();
+      buffer.writeln('Huruf\tBelum Updated');
+      for (final ch in letters) {
+        buffer.writeln('$ch\t${counts[ch] ?? 0}');
+      }
+      final total = counts.values.fold(0, (a, b) => a + b);
+      buffer.writeln('Total\t$total');
+      await Clipboard.setData(ClipboardData(text: buffer.toString()));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Rekap alfabet disalin'),
+          duration: Duration(milliseconds: 800),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Data belum dimuat'),
+          duration: Duration(milliseconds: 800),
+        ),
+      );
+    }
+  }
+
   bool _loadingAll = false;
 
   @override
@@ -465,6 +517,13 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                           );
                         },
                       ),
+                      Tooltip(
+                        message: 'Copy rekap alfabet',
+                        child: IconButton(
+                          onPressed: _copyAlphabetRecap,
+                          icon: const Icon(Icons.copy),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -545,6 +604,9 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                                       final Map<String, int> counts = {
                                         for (final ch in letters) ch: 0,
                                       };
+                                      final DateTime threshold = DateTime.parse(
+                                        '2025-11-01 13:35:36.438909+00',
+                                      );
                                       for (final d in state.direktoriList) {
                                         final n = (d.namaUsaha).trim();
                                         if (n.isEmpty) continue;
@@ -553,7 +615,15 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                                           r'^[A-Z]',
                                         ).hasMatch(first);
                                         final key = isAlpha ? first : '#';
-                                        if (counts.containsKey(key)) {
+                                        final DateTime? localTs =
+                                            _locallyUpdatedAtById[d.id];
+                                        final DateTime? updatedAt =
+                                            localTs ?? d.updatedAt;
+                                        final bool isUpdated =
+                                            updatedAt != null &&
+                                            updatedAt.isAfter(threshold);
+                                        if (!isUpdated &&
+                                            counts.containsKey(key)) {
                                           counts[key] = (counts[key] ?? 0) + 1;
                                         }
                                       }
@@ -631,26 +701,36 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                                                             ),
                                                         decoration: BoxDecoration(
                                                           color:
-                                                              (_selectedLetter ==
-                                                                  ch)
+                                                              ((counts[ch] ??
+                                                                      0) ==
+                                                                  0)
                                                               ? Colors
-                                                                    .orange[300]
-                                                              : Colors
-                                                                    .orange[50],
+                                                                    .green[100]
+                                                              : ((_selectedLetter ==
+                                                                        ch)
+                                                                    ? Colors
+                                                                          .orange[300]
+                                                                    : Colors
+                                                                          .orange[50]),
                                                           borderRadius:
                                                               BorderRadius.circular(
                                                                 8,
                                                               ),
                                                           border: Border.all(
                                                             color:
-                                                                (_selectedLetter ==
-                                                                    ch)
-                                                                ? Colors.orange
-                                                                : Colors
-                                                                      .orangeAccent
-                                                                      .withOpacity(
-                                                                        0.3,
-                                                                      ),
+                                                                ((counts[ch] ??
+                                                                        0) ==
+                                                                    0)
+                                                                ? Colors.green
+                                                                : ((_selectedLetter ==
+                                                                          ch)
+                                                                      ? Colors
+                                                                            .orange
+                                                                      : Colors
+                                                                            .orangeAccent
+                                                                            .withOpacity(
+                                                                              0.3,
+                                                                            )),
                                                           ),
                                                         ),
                                                         child: Column(
@@ -863,6 +943,14 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                                   const RefreshAllContributionDataEvent(),
                                 );
                               } catch (_) {}
+                            },
+                            onRowUpdatedWithId: (id, ts) {
+                              setState(() {
+                                _locallyUpdatedAtById[id] = ts;
+                              });
+                              context.read<DirektoriBloc>().add(
+                                const RefreshDirektoriHeader(),
+                              );
                             },
                           ),
                         ),

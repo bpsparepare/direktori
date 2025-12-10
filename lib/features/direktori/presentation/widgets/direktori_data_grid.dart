@@ -20,6 +20,7 @@ class DirektoriDataGrid extends StatefulWidget {
   final void Function(String column, bool ascending) onRequestSort;
   final void Function(String id)? onGoToMap;
   final VoidCallback? onRowUpdated;
+  final void Function(String id, DateTime updatedAt)? onRowUpdatedWithId;
 
   const DirektoriDataGrid({
     Key? key,
@@ -32,6 +33,7 @@ class DirektoriDataGrid extends StatefulWidget {
     required this.onRequestSort,
     this.onGoToMap,
     this.onRowUpdated,
+    this.onRowUpdatedWithId,
   }) : super(key: key);
 
   @override
@@ -51,6 +53,7 @@ class _DirektoriDataGridState extends State<DirektoriDataGrid> {
       onDetail: (d) => _showDetailDialog(context, d),
       onGoToMap: widget.onGoToMap,
       onRowUpdated: widget.onRowUpdated,
+      onRowUpdatedWithId: widget.onRowUpdatedWithId,
     );
   }
 
@@ -71,13 +74,15 @@ class _DirektoriDataGridState extends State<DirektoriDataGrid> {
       'nama': 3,
       'alamat': 3,
       'status': 2,
-      'koordinat': 1,
+      'koordinat': 2,
       'aksi': 2,
     };
     final int totalWeight = weights.values.reduce((a, b) => a + b);
-    double cw(String key) => (availableWidth * (weights[key]! / totalWeight))
-        .clamp(100, availableWidth)
-        .toDouble();
+    double cw(String key) {
+      final base = availableWidth * (weights[key]! / totalWeight);
+      final min = key == 'koordinat' ? 140.0 : 100.0;
+      return base.clamp(min, availableWidth).toDouble();
+    }
 
     return Column(
       children: [
@@ -327,6 +332,7 @@ class _DirektoriDataGridSource extends DataGridSource {
   final void Function(Direktori) onDetail;
   final void Function(String id)? onGoToMap;
   final VoidCallback? onRowUpdated;
+  final void Function(String id, DateTime updatedAt)? onRowUpdatedWithId;
   final Set<String> _editingIds = <String>{};
   final Map<String, String> _editedNamaById = <String, String>{};
   final Map<String, String?> _editedAlamatById = <String, String?>{};
@@ -339,6 +345,7 @@ class _DirektoriDataGridSource extends DataGridSource {
     required this.onDetail,
     this.onGoToMap,
     this.onRowUpdated,
+    this.onRowUpdatedWithId,
   }) {
     _rows = data
         .map(
@@ -1025,6 +1032,7 @@ class _DirektoriDataGridSource extends DataGridSource {
     _recentlyUpdatedIds.add(id);
     notifyListeners();
     onRowUpdated?.call();
+    onRowUpdatedWithId?.call(id, DateTime.now().toUtc());
   }
 
   Widget _iconAction({
