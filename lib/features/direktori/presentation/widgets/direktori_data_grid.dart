@@ -526,8 +526,9 @@ class _DirektoriDataGridSource extends DataGridSource {
                               );
                               return;
                             }
+                            final q = '$name parepare';
                             final url = Uri.parse(
-                              'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(name)}',
+                              'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(q)}',
                             );
                             final ok = await launchUrl(
                               url,
@@ -618,8 +619,9 @@ class _DirektoriDataGridSource extends DataGridSource {
                               );
                               return;
                             }
+                            final q2 = '$alamat parepare';
                             final url = Uri.parse(
-                              'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(alamat)}',
+                              'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(q2)}',
                             );
                             final ok = await launchUrl(
                               url,

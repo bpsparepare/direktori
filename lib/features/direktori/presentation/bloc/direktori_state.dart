@@ -24,6 +24,7 @@ class DirektoriLoaded extends DirektoriState {
   final bool includeCoordinates;
   final Map<String, int>? stats;
   final bool allLoaded;
+  final DateTime? lastUpdatedAt;
 
   const DirektoriLoaded({
     required this.direktoriList,
@@ -37,6 +38,7 @@ class DirektoriLoaded extends DirektoriState {
     this.includeCoordinates = false,
     this.stats,
     this.allLoaded = false,
+    this.lastUpdatedAt,
   });
 
   DirektoriLoaded copyWith({
@@ -52,20 +54,23 @@ class DirektoriLoaded extends DirektoriState {
     Map<String, int>? stats,
     bool? allLoaded,
     bool? clearCurrentSearch,
+    DateTime? lastUpdatedAt,
   }) {
     return DirektoriLoaded(
       direktoriList: direktoriList ?? this.direktoriList,
       currentPage: currentPage ?? this.currentPage,
       totalCount: totalCount ?? this.totalCount,
       hasReachedMax: hasReachedMax ?? this.hasReachedMax,
-      currentSearch:
-          (clearCurrentSearch == true) ? null : (currentSearch ?? this.currentSearch),
+      currentSearch: (clearCurrentSearch == true)
+          ? null
+          : (currentSearch ?? this.currentSearch),
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       sortColumn: sortColumn ?? this.sortColumn,
       sortAscending: sortAscending ?? this.sortAscending,
       includeCoordinates: includeCoordinates ?? this.includeCoordinates,
       stats: stats ?? this.stats,
       allLoaded: allLoaded ?? this.allLoaded,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
     );
   }
 
@@ -82,6 +87,7 @@ class DirektoriLoaded extends DirektoriState {
     includeCoordinates,
     stats,
     allLoaded,
+    lastUpdatedAt,
   ];
 }
 

@@ -13,6 +13,7 @@ import '../widgets/batch_insert_dialog.dart';
 import '../../domain/usecases/get_direktori_list.dart';
 import '../../data/repositories/direktori_repository_impl.dart';
 import '../../data/datasources/direktori_remote_datasource.dart';
+import '../../data/datasources/direktori_local_datasource.dart';
 import '../../../map/data/repositories/map_repository_impl.dart';
 import '../../../map/data/models/direktori_model.dart';
 import '../../../contribution/presentation/bloc/contribution_bloc.dart';
@@ -37,11 +38,13 @@ class DirektoriListPage extends StatelessWidget {
         final getDirektoriList = GetDirektoriList(repository);
         final getDirektoriCount = GetDirektoriCount(repository);
         final getDirektoriStats = GetDirektoriStats(repository);
+        final localDataSource = DirektoriLocalDataSourceImpl();
 
         return DirektoriBloc(
           getDirektoriList: getDirektoriList,
           getDirektoriCount: getDirektoriCount,
           getDirektoriStats: getDirektoriStats,
+          localDataSource: localDataSource,
         );
       },
       child: _DirektoriListView(onNavigateToMap: onNavigateToMap),
@@ -153,6 +156,45 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
     if (total <= 0) return '0%';
     final pct = ((part / total) * 100).toStringAsFixed(1);
     return '$pct%';
+  }
+
+  String _formatDateTimeInformative(DateTime dt) {
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des',
+    ];
+    final local = dt.toLocal();
+    final dd = local.day.toString().padLeft(2, '0');
+    final mm = months[local.month - 1];
+    final yyyy = local.year;
+    final hh = local.hour.toString().padLeft(2, '0');
+    final min = local.minute.toString().padLeft(2, '0');
+    return '$dd $mm $yyyy, $hh:$min';
+  }
+
+  String _formatRelative(DateTime dt) {
+    final now = DateTime.now().toLocal();
+    final local = dt.toLocal();
+    final diff = now.difference(local);
+    if (diff.inSeconds < 60) {
+      return '${diff.inSeconds} detik lalu';
+    } else if (diff.inMinutes < 60) {
+      return '${diff.inMinutes} menit lalu';
+    } else if (diff.inHours < 24) {
+      return '${diff.inHours} jam lalu';
+    } else {
+      return '${diff.inDays} hari lalu';
+    }
   }
 
   void _showBatchInsertDialog() async {
@@ -411,12 +453,7 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                         ),
                       ),
                       const Spacer(),
-                      IconButton(
-                        onPressed: _onRefresh,
-                        icon: const Icon(Icons.refresh),
-                        tooltip: 'Refresh',
-                      ),
-                      const SizedBox(width: 8),
+
                       IconButton(
                         onPressed: () async {
                           final res = await showDialog<bool>(
@@ -493,27 +530,46 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                           final isBusy =
                               state is DirektoriLoading ||
                               (state is DirektoriLoaded && state.isLoadingMore);
-                          return Tooltip(
-                            message: 'Muat semua',
-                            child: IconButton(
-                              onPressed: isBusy
-                                  ? null
-                                  : () {
-                                      setState(() => _loadingAll = true);
-                                      context.read<DirektoriBloc>().add(
-                                        const LoadAllDirektori(),
-                                      );
-                                    },
-                              icon: isBusy
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.download),
-                            ),
+                          return Row(
+                            children: [
+                              Tooltip(
+                                message: 'Muat Lengkap',
+                                child: GestureDetector(
+                                  onTap: isBusy
+                                      ? null
+                                      : () {
+                                          setState(() => _loadingAll = true);
+                                          context.read<DirektoriBloc>().add(
+                                            const LoadAllDirektori(),
+                                          );
+                                        },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: isBusy
+                                        ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(Icons.download),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Tooltip(
+                                message: 'Segarkan',
+                                child: IconButton(
+                                  onPressed: () {
+                                    context.read<DirektoriBloc>().add(
+                                      const RefreshDirektori(),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.refresh),
+                                ),
+                              ),
+                            ],
                           );
                         },
                       ),
@@ -534,11 +590,40 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                   const SizedBox(height: 8),
                   BlocBuilder<DirektoriBloc, DirektoriState>(
                     builder: (context, state) {
+                      if (state is DirektoriLoaded && state.isLoadingMore) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            children: const [
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Menyelaraskan data...',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  BlocBuilder<DirektoriBloc, DirektoriState>(
+                    builder: (context, state) {
                       bool include = false;
                       Map<String, int>? stats;
+                      DateTime? lastUpdated;
                       if (state is DirektoriLoaded) {
                         include = state.includeCoordinates;
                         stats = state.stats;
+                        lastUpdated = state.lastUpdatedAt;
                       }
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -587,6 +672,17 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                                       '${stats!['aktif_without_coord'] ?? 0} dari ${stats!['aktif'] ?? 0}',
                                   color: Colors.red[50]!,
                                 ),
+                                if (lastUpdated != null) ...[
+                                  const SizedBox(width: 8),
+                                  _StatCard(
+                                    title: 'Terakhir Disinkronkan',
+                                    value: _formatDateTimeInformative(
+                                      lastUpdated!,
+                                    ),
+                                    small: _formatRelative(lastUpdated!),
+                                    color: Colors.purple[50]!,
+                                  ),
+                                ],
                               ],
                             ),
                           const SizedBox(height: 8),
@@ -751,42 +847,47 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                                                             const SizedBox(
                                                               height: 6,
                                                             ),
-                                                            Container(
-                                                              padding:
-                                                                  const EdgeInsets.symmetric(
-                                                                    horizontal:
-                                                                        8,
-                                                                    vertical: 2,
-                                                                  ),
-                                                              decoration: BoxDecoration(
-                                                                color: Colors
-                                                                    .blue[50],
-                                                                borderRadius:
-                                                                    BorderRadius.circular(
-                                                                      12,
+                                                            if (_showStats)
+                                                              Container(
+                                                                padding:
+                                                                    const EdgeInsets.symmetric(
+                                                                      horizontal:
+                                                                          8,
+                                                                      vertical:
+                                                                          2,
                                                                     ),
-                                                                border: Border.all(
+                                                                decoration: BoxDecoration(
                                                                   color: Colors
-                                                                      .blueAccent
-                                                                      .withOpacity(
-                                                                        0.4,
+                                                                      .blue[50],
+                                                                  borderRadius:
+                                                                      BorderRadius.circular(
+                                                                        12,
                                                                       ),
+                                                                  border: Border.all(
+                                                                    color: Colors
+                                                                        .blueAccent
+                                                                        .withOpacity(
+                                                                          0.4,
+                                                                        ),
+                                                                  ),
+                                                                ),
+                                                                child: Text(
+                                                                  (counts[ch] ??
+                                                                          0)
+                                                                      .toString(),
+                                                                  style: TextStyle(
+                                                                    fontSize:
+                                                                        11,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w600,
+                                                                    color: Colors
+                                                                        .blue[700],
+                                                                  ),
                                                                 ),
                                                               ),
-                                                              child: Text(
-                                                                (counts[ch] ??
-                                                                        0)
-                                                                    .toString(),
-                                                                style: TextStyle(
-                                                                  fontSize: 11,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600,
-                                                                  color: Colors
-                                                                      .blue[700],
-                                                                ),
-                                                              ),
-                                                            ),
+                                                            if (!_showStats)
+                                                              const SizedBox.shrink(),
                                                           ],
                                                         ),
                                                       ),

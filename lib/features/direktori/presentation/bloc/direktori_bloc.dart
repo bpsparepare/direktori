@@ -2,6 +2,7 @@ import 'package:direktori/features/direktori/domain/entities/direktori.dart';
 import 'package:direktori/features/direktori/domain/usecases/get_direktori_stats.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/usecases/get_direktori_list.dart';
+import '../../data/datasources/direktori_local_datasource.dart';
 import 'direktori_event.dart';
 import 'direktori_state.dart';
 
@@ -9,8 +10,10 @@ class DirektoriBloc extends Bloc<DirektoriEvent, DirektoriState> {
   final GetDirektoriList getDirektoriList;
   final GetDirektoriCount getDirektoriCount;
   final GetDirektoriStats getDirektoriStats;
+  final DirektoriLocalDataSource localDataSource;
 
   static const int _limit = 20;
+  static const Duration _ttl = Duration(hours: 6);
   String? _sortColumn = 'nama';
   bool _sortAscending = true;
   bool _includeCoordinates = true;
@@ -25,6 +28,7 @@ class DirektoriBloc extends Bloc<DirektoriEvent, DirektoriState> {
     required this.getDirektoriList,
     required this.getDirektoriCount,
     required this.getDirektoriStats,
+    required this.localDataSource,
   }) : super(DirektoriInitial()) {
     on<LoadDirektoriList>(_onLoadDirektoriList);
     on<SearchDirektori>(_onSearchDirektori);
@@ -296,6 +300,45 @@ class DirektoriBloc extends Bloc<DirektoriEvent, DirektoriState> {
     }
 
     try {
+      final cached = await localDataSource.loadAll();
+      Map<String, dynamic>? meta = await localDataSource.loadMeta();
+      DateTime? savedAt;
+      if (meta != null && meta['saved_at'] is String) {
+        try {
+          savedAt = DateTime.parse(meta['saved_at']).toUtc();
+        } catch (_) {}
+      }
+      bool fresh = false;
+      if (savedAt != null) {
+        final now = DateTime.now().toUtc();
+        fresh = now.difference(savedAt) < _ttl;
+      }
+      if (cached.isNotEmpty) {
+        final totalCountCached = meta?['total_count'] as int? ?? cached.length;
+        final statsCached = (meta?['stats'] as Map?)?.cast<String, int>();
+        emit(
+          DirektoriLoaded(
+            direktoriList: cached,
+            currentPage: 1,
+            totalCount: totalCountCached,
+            hasReachedMax: true,
+            currentSearch: search,
+            sortColumn: sortCol,
+            sortAscending: sortAsc,
+            includeCoordinates: include,
+            stats: statsCached,
+            allLoaded: true,
+            isLoadingMore: !(fresh && !event.forceRefresh),
+            lastUpdatedAt: savedAt,
+          ),
+        );
+        _allCache = cached;
+        _allCacheSearch = search;
+        if (fresh && !event.forceRefresh) {
+          return; // Cache masih segar, jangan refresh
+        }
+      }
+
       final List<Direktori> all = [];
       int page = 1;
       while (true) {
@@ -318,6 +361,8 @@ class DirektoriBloc extends Bloc<DirektoriEvent, DirektoriState> {
         updatedThreshold: DateTime.parse('2025-11-01 13:35:36.438909+00'),
       );
 
+      await localDataSource.saveAll(all, totalCount: totalCount, stats: stats);
+
       emit(
         DirektoriLoaded(
           direktoriList: all,
@@ -330,11 +375,13 @@ class DirektoriBloc extends Bloc<DirektoriEvent, DirektoriState> {
           includeCoordinates: include,
           stats: stats,
           allLoaded: true,
+          lastUpdatedAt: DateTime.now().toUtc(),
         ),
       );
       _allCache = all;
       _allCacheSearch = search;
     } catch (e) {
+      if (cachedAllList.isNotEmpty) return;
       emit(DirektoriError(e.toString()));
     }
   }

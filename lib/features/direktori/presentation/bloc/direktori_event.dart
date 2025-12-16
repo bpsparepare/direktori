@@ -57,7 +57,11 @@ class RefreshDirektoriHeader extends DirektoriEvent {
 }
 
 class LoadAllDirektori extends DirektoriEvent {
-  const LoadAllDirektori();
+  final bool forceRefresh;
+  const LoadAllDirektori({this.forceRefresh = false});
+
+  @override
+  List<Object?> get props => [forceRefresh];
 }
 
 class SortDirektori extends DirektoriEvent {
