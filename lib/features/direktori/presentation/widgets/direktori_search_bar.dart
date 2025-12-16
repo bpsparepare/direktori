@@ -15,6 +15,22 @@ class DirektoriSearchBar extends StatefulWidget {
 }
 
 class _DirektoriSearchBarState extends State<DirektoriSearchBar> {
+  void _controllerListener() {
+    setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_controllerListener);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_controllerListener);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -32,7 +48,9 @@ class _DirektoriSearchBarState extends State<DirektoriSearchBar> {
               ? IconButton(
                   icon: const Icon(Icons.clear, color: Colors.grey),
                   onPressed: () {
-                    widget.controller.clear();
+                    setState(() {
+                      widget.controller.clear();
+                    });
                     widget.onSearch('');
                   },
                 )
@@ -43,13 +61,13 @@ class _DirektoriSearchBarState extends State<DirektoriSearchBar> {
             vertical: 12,
           ),
         ),
-        onSubmitted: widget.onSearch,
+        onSubmitted: (value) => widget.onSearch(value.trim()),
         onChanged: (value) {
           setState(() {}); // To update suffixIcon visibility
           // Debounce search
           Future.delayed(const Duration(milliseconds: 500), () {
             if (widget.controller.text == value) {
-              widget.onSearch(value);
+              widget.onSearch(value.trim());
             }
           });
         },

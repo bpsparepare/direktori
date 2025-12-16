@@ -96,8 +96,9 @@ class MapRepositoryImpl implements MapRepository {
       final response = await _supabaseClient
           .from('direktori')
           .select('*, wilayah(*)')
-          .or('latitude.is.null,longitude.is.null')
-          .ilike('nama_usaha', '%$query%')
+          .isFilter('latitude', null)
+          .isFilter('longitude', null)
+          .or('nama_usaha.ilike.%$query%,alamat.ilike.%$query%')
           .limit(20);
 
       return (response as List)
@@ -151,8 +152,9 @@ class MapRepositoryImpl implements MapRepository {
       final response = await _supabaseClient
           .from('direktori')
           .select('*, wilayah(*)')
-          .or('latitude.is.null,longitude.is.null')
-          .ilike('nama_usaha', '%$query%')
+          .isFilter('latitude', null)
+          .isFilter('longitude', null)
+          .or('nama_usaha.ilike.%$query%,alamat.ilike.%$query%')
           .order(orderBy ?? 'updated_at', ascending: ascending)
           .range(start, end);
 
@@ -206,7 +208,7 @@ class MapRepositoryImpl implements MapRepository {
       final response = await _supabaseClient
           .from('direktori')
           .select('*, wilayah(*)')
-          .ilike('nama_usaha', '%$query%')
+          .or('nama_usaha.ilike.%$query%,alamat.ilike.%$query%')
           .order(orderBy ?? 'updated_at', ascending: ascending)
           .range(start, end);
 
@@ -243,7 +245,9 @@ class MapRepositoryImpl implements MapRepository {
     try {
       var queryBuilder = _supabaseClient.from('direktori').select('id');
       if (search != null && search.isNotEmpty) {
-        queryBuilder = queryBuilder.ilike('nama_usaha', '%$search%');
+        queryBuilder = queryBuilder.or(
+          'nama_usaha.ilike.%$search%,alamat.ilike.%$search%',
+        );
       }
       final response = await queryBuilder;
       if (response is List) {

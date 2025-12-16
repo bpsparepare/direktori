@@ -697,7 +697,7 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                                                       child: Container(
                                                         padding:
                                                             const EdgeInsets.symmetric(
-                                                              vertical: 8,
+                                                              vertical: 4,
                                                             ),
                                                         decoration: BoxDecoration(
                                                           color:
@@ -802,7 +802,7 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                                 ),
                               ],
                             ),
-                          const SizedBox(height: 8),
+                          // const SizedBox(height: 8),
                         ],
                       );
                     },
@@ -878,7 +878,9 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                               const SizedBox(height: 8),
                               TextButton(
                                 onPressed: () {
-                                  _searchController.clear();
+                                  setState(() {
+                                    _searchController.clear();
+                                  });
                                   _onSearch('');
                                 },
                                 child: const Text('Hapus pencarian'),
@@ -894,8 +896,8 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                         // Results info
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
+                            horizontal: 8,
+                            // vertical: 8,
                           ),
                           child: Row(
                             children: [
@@ -907,7 +909,9 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                                     style: const TextStyle(fontSize: 11),
                                   ),
                                   onDeleted: () {
-                                    _searchController.clear();
+                                    setState(() {
+                                      _searchController.clear();
+                                    });
                                     _onSearch('');
                                   },
                                   deleteIcon: const Icon(Icons.close, size: 16),

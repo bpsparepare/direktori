@@ -92,13 +92,14 @@ class DirektoriBloc extends Bloc<DirektoriEvent, DirektoriState> {
     if (currentState is DirektoriLoaded && currentState.allLoaded) {
       final q = event.query.trim();
       final src = _allCache;
+      final ql = q.toLowerCase();
       final filtered = q.isEmpty
           ? src
-          : src
-                .where(
-                  (d) => (d.namaUsaha).toLowerCase().contains(q.toLowerCase()),
-                )
-                .toList();
+          : src.where((d) {
+              final n = d.namaUsaha.toLowerCase();
+              final a = (d.alamat ?? '').toLowerCase();
+              return n.contains(ql) || a.contains(ql);
+            }).toList();
       emit(
         currentState.copyWith(
           direktoriList: filtered,
@@ -106,14 +107,16 @@ class DirektoriBloc extends Bloc<DirektoriEvent, DirektoriState> {
           totalCount: filtered.length,
           hasReachedMax: true,
           currentSearch: q.isEmpty ? null : q,
+          clearCurrentSearch: q.isEmpty ? true : null,
           isLoadingMore: false,
         ),
       );
     } else {
+      final q = event.query.trim();
       add(
         LoadDirektoriList(
           page: 1,
-          search: event.query,
+          search: q.isEmpty ? null : q,
           isRefresh: true,
           sortColumn: _sortColumn,
           sortAscending: _sortAscending,

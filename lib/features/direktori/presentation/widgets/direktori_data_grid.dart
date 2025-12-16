@@ -9,6 +9,7 @@ import '../../../map/data/repositories/map_repository_impl.dart';
 import '../../../map/presentation/pages/main_page.dart';
 import '../../domain/entities/direktori.dart';
 import '../bloc/direktori_bloc.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class DirektoriDataGrid extends StatefulWidget {
   final List<Direktori> direktoriList;
@@ -422,8 +423,21 @@ class _DirektoriDataGridSource extends DataGridSource {
         _recentlyUpdatedIds.contains(id) ||
         (updatedAt != null && updatedAt.isAfter(threshold));
 
+    Color? rowColor;
+    if (isRowUpdated) {
+      if (!hasCoord) {
+        rowColor = const Color(0xFFFFEBEE);
+      } else if ((status ?? 0) != 1) {
+        rowColor = const Color(0xFFFFF3E0);
+      } else {
+        rowColor = const Color(0xFFE9F7EF);
+      }
+    } else {
+      rowColor = null;
+    }
+
     return DataGridRowAdapter(
-      color: isRowUpdated ? const Color(0xFFE9F7EF) : null,
+      color: rowColor,
       cells: [
         Container(
           alignment: Alignment.centerLeft,
@@ -466,39 +480,88 @@ class _DirektoriDataGridSource extends DataGridSource {
                   onChanged: (v) => _editedNamaById[id] = v,
                 )
               else
-                Builder(
-                  builder: (ctx) => GestureDetector(
-                    onDoubleTap: () {
-                      final txt = (cells[1].value ?? '').toString();
-                      Clipboard.setData(ClipboardData(text: txt));
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                        const SnackBar(
-                          content: Text('Nama usaha disalin'),
-                          duration: Duration(milliseconds: 800),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Builder(
+                        builder: (ctx) => GestureDetector(
+                          onDoubleTap: () {
+                            final txt = (cells[1].value ?? '').toString();
+                            Clipboard.setData(ClipboardData(text: txt));
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(
+                                content: Text('Nama usaha disalin'),
+                                duration: Duration(milliseconds: 800),
+                              ),
+                            );
+                          },
+                          child: Text(
+                            cells[1].value ?? '',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      );
-                    },
-                    child: Text(
-                      cells[1].value ?? '',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message: 'Cari di Google Maps (nama)',
+                      child: Builder(
+                        builder: (ctx) => InkWell(
+                          onTap: () async {
+                            final name = (cells[1].value ?? '')
+                                .toString()
+                                .trim();
+                            if (name.isEmpty) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Nama usaha kosong'),
+                                  duration: Duration(milliseconds: 1000),
+                                ),
+                              );
+                              return;
+                            }
+                            final url = Uri.parse(
+                              'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(name)}',
+                            );
+                            final ok = await launchUrl(
+                              url,
+                              mode: LaunchMode.externalApplication,
+                            );
+                            if (!ok) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Tidak bisa membuka Google Maps',
+                                  ),
+                                  duration: Duration(milliseconds: 1000),
+                                ),
+                              );
+                            }
+                          },
+                          child: Container(
+                            width: 22,
+                            height: 22,
+                            decoration: const BoxDecoration(
+                              color: Colors.blue,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.travel_explore,
+                              color: Colors.white,
+                              size: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              if (!isEditing &&
-                  direktori.namaKomersialUsaha?.isNotEmpty == true) ...[
-                const SizedBox(height: 2),
-                Text(
-                  direktori.namaKomersialUsaha!,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
             ],
           ),
         ),
@@ -526,11 +589,70 @@ class _DirektoriDataGridSource extends DataGridSource {
                   ),
                   onChanged: (v) => _editedAlamatById[id] = v,
                 )
-              : Text(
-                  cells[2].value ?? '-',
-                  style: const TextStyle(fontSize: 13),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        cells[2].value ?? '-',
+                        style: const TextStyle(fontSize: 13),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message: 'Cari di Google Maps (alamat)',
+                      child: Builder(
+                        builder: (ctx) => InkWell(
+                          onTap: () async {
+                            final alamat = (cells[2].value ?? '')
+                                .toString()
+                                .trim();
+                            if (alamat.isEmpty || alamat == '-') {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Alamat kosong'),
+                                  duration: Duration(milliseconds: 1000),
+                                ),
+                              );
+                              return;
+                            }
+                            final url = Uri.parse(
+                              'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(alamat)}',
+                            );
+                            final ok = await launchUrl(
+                              url,
+                              mode: LaunchMode.externalApplication,
+                            );
+                            if (!ok) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Tidak bisa membuka Google Maps',
+                                  ),
+                                  duration: Duration(milliseconds: 1000),
+                                ),
+                              );
+                            }
+                          },
+                          child: Container(
+                            width: 22,
+                            height: 22,
+                            decoration: const BoxDecoration(
+                              color: Colors.blue,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.travel_explore,
+                              color: Colors.white,
+                              size: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
         ),
         Container(

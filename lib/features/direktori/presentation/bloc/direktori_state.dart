@@ -51,13 +51,15 @@ class DirektoriLoaded extends DirektoriState {
     bool? includeCoordinates,
     Map<String, int>? stats,
     bool? allLoaded,
+    bool? clearCurrentSearch,
   }) {
     return DirektoriLoaded(
       direktoriList: direktoriList ?? this.direktoriList,
       currentPage: currentPage ?? this.currentPage,
       totalCount: totalCount ?? this.totalCount,
       hasReachedMax: hasReachedMax ?? this.hasReachedMax,
-      currentSearch: currentSearch ?? this.currentSearch,
+      currentSearch:
+          (clearCurrentSearch == true) ? null : (currentSearch ?? this.currentSearch),
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       sortColumn: sortColumn ?? this.sortColumn,
       sortAscending: sortAscending ?? this.sortAscending,
