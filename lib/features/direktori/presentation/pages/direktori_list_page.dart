@@ -18,6 +18,7 @@ import '../../../map/data/repositories/map_repository_impl.dart';
 import '../../../map/data/models/direktori_model.dart';
 import '../../../contribution/presentation/bloc/contribution_bloc.dart';
 import '../../../contribution/presentation/bloc/contribution_event.dart';
+import '../../../../core/config/app_constants.dart';
 
 class DirektoriListPage extends StatelessWidget {
   final void Function(String id)? onNavigateToMap;
@@ -533,14 +534,16 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                           return Row(
                             children: [
                               Tooltip(
-                                message: 'Muat Lengkap',
+                                message: 'Muat Lengkap (paksa sinkron)',
                                 child: GestureDetector(
                                   onTap: isBusy
                                       ? null
                                       : () {
                                           setState(() => _loadingAll = true);
                                           context.read<DirektoriBloc>().add(
-                                            const LoadAllDirektori(),
+                                            const LoadAllDirektori(
+                                              forceRefresh: true,
+                                            ),
                                           );
                                         },
                                   child: Padding(

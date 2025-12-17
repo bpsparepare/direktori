@@ -38,6 +38,8 @@ class Direktori extends Equatable {
   final int? sektorInstitusi;
   final String? nmProv;
   final String? nmKab;
+  final String? kbli;
+  final List<String>? tag;
 
   const Direktori({
     required this.id,
@@ -77,6 +79,8 @@ class Direktori extends Equatable {
     this.sektorInstitusi,
     this.nmProv,
     this.nmKab,
+    this.kbli,
+    this.tag,
   });
 
   @override
@@ -118,5 +122,6 @@ class Direktori extends Equatable {
     sektorInstitusi,
     nmProv,
     nmKab,
+    kbli,
   ];
 }

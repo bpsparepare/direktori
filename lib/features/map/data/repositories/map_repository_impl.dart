@@ -9,6 +9,7 @@ import '../../domain/entities/polygon_data.dart';
 import '../models/direktori_model.dart';
 import '../../../../core/config/supabase_config.dart';
 import 'package:flutter/foundation.dart';
+import '../../../../core/config/app_constants.dart';
 import 'scraping_repository_impl.dart';
 
 class MapRepositoryImpl implements MapRepository {
@@ -95,7 +96,7 @@ class MapRepositoryImpl implements MapRepository {
     try {
       final response = await _supabaseClient
           .from('direktori')
-          .select('*, wilayah(*)')
+          .select('*, kbli, deskripsi_badan_usaha_lainnya, wilayah(*)')
           .isFilter('latitude', null)
           .isFilter('longitude', null)
           .or('nama_usaha.ilike.%$query%,alamat.ilike.%$query%')
@@ -122,10 +123,16 @@ class MapRepositoryImpl implements MapRepository {
       final end = start + limit - 1;
       final response = await _supabaseClient
           .from('direktori')
-          .select('*, wilayah(*)')
+          .select('*, kbli, deskripsi_badan_usaha_lainnya, wilayah(*)')
           .or('latitude.is.null,longitude.is.null')
           .order(orderBy ?? 'updated_at', ascending: ascending)
           .range(start, end);
+
+      if ((response as List).isNotEmpty) {
+        debugPrint(
+          'DEBUG KBLI RAW (No Coords): ${(response as List).first['kbli']}',
+        );
+      }
 
       return (response as List)
           .map((json) => DirektoriModel.fromJson(json))
@@ -151,7 +158,7 @@ class MapRepositoryImpl implements MapRepository {
       final end = start + limit - 1;
       final response = await _supabaseClient
           .from('direktori')
-          .select('*, wilayah(*)')
+          .select('*, kbli, deskripsi_badan_usaha_lainnya, wilayah(*)')
           .isFilter('latitude', null)
           .isFilter('longitude', null)
           .or('nama_usaha.ilike.%$query%,alamat.ilike.%$query%')
@@ -181,9 +188,16 @@ class MapRepositoryImpl implements MapRepository {
       final end = start + limit - 1;
       final response = await _supabaseClient
           .from('direktori')
-          .select('*, wilayah(*)')
+          .select('*, kbli, deskripsi_badan_usaha_lainnya, wilayah(*)')
           .order(orderBy ?? 'updated_at', ascending: ascending)
           .range(start, end);
+
+      if ((response as List).isNotEmpty) {
+        debugPrint('DEBUG KBLI RAW: ${(response as List).first['kbli']}');
+        debugPrint(
+          'DEBUG DESKRIPSI RAW: ${(response as List).first['deskripsi_badan_usaha_lainnya']}',
+        );
+      }
 
       return (response as List)
           .map((json) => DirektoriModel.fromJson(json))
@@ -207,7 +221,7 @@ class MapRepositoryImpl implements MapRepository {
       final end = start + limit - 1;
       final response = await _supabaseClient
           .from('direktori')
-          .select('*, wilayah(*)')
+          .select('*, kbli, deskripsi_badan_usaha_lainnya, tag, wilayah(*)')
           .or('nama_usaha.ilike.%$query%,alamat.ilike.%$query%')
           .order(orderBy ?? 'updated_at', ascending: ascending)
           .range(start, end);

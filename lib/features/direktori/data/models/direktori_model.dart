@@ -40,6 +40,8 @@ class DirektoriModel extends Direktori {
     super.sektorInstitusi,
     super.nmProv,
     super.nmKab,
+    super.kbli,
+    super.tag,
   });
 
   factory DirektoriModel.fromMapModel(MapDirektori.DirektoriModel mapModel) {
@@ -81,6 +83,7 @@ class DirektoriModel extends Direktori {
       sektorInstitusi: mapModel.sektorInstitusi,
       nmProv: mapModel.nmProv,
       nmKab: mapModel.nmKab,
+      kbli: mapModel.kbli,
     );
   }
 }

@@ -10,6 +10,7 @@ import '../../../map/presentation/pages/main_page.dart';
 import '../../domain/entities/direktori.dart';
 import '../bloc/direktori_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../../core/config/app_constants.dart';
 
 class DirektoriDataGrid extends StatefulWidget {
   final List<Direktori> direktoriList;
@@ -299,29 +300,7 @@ class _DirektoriDataGridState extends State<DirektoriDataGrid> {
   void _showDetailDialog(BuildContext context, Direktori direktori) {
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Detail'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              direktori.namaUsaha,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            Text(direktori.namaKomersialUsaha ?? ''),
-            const SizedBox(height: 8),
-            Text(direktori.alamat ?? '-'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Tutup'),
-          ),
-        ],
-      ),
+      builder: (context) => _DetailDialog(direktori: direktori),
     );
   }
 }
@@ -418,7 +397,7 @@ class _DirektoriDataGridSource extends DataGridSource {
     final DateTime? updatedAt = direktori.updatedAt;
     final String id = direktori.id;
     final bool isEditing = _editingIds.contains(id);
-    final DateTime threshold = DateTime.parse('2025-11-01 13:35:36.438909+00');
+    final DateTime threshold = AppConstants.updatedThreshold;
     final bool isRowUpdated =
         _recentlyUpdatedIds.contains(id) ||
         (updatedAt != null && updatedAt.isAfter(threshold));
@@ -1345,6 +1324,7 @@ class _DirektoriDataGridSource extends DataGridSource {
       }
 
       if (ok) {
+        if (!context.mounted) return;
         _setKoordinatForId(id, true);
         _markRowUpdated(id);
         try {
@@ -1441,6 +1421,893 @@ class _DirektoriDataGridSource extends DataGridSource {
           const SizedBox(width: 8),
           Text(label, style: const TextStyle(fontSize: 13)),
         ],
+      ),
+    );
+  }
+}
+
+class _DetailDialog extends StatefulWidget {
+  final Direktori direktori;
+
+  const _DetailDialog({super.key, required this.direktori});
+
+  @override
+  State<_DetailDialog> createState() => _DetailDialogState();
+}
+
+class _DetailDialogState extends State<_DetailDialog>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  bool _showNik = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.direktori;
+    final width = MediaQuery.of(context).size.width;
+    final isLargeScreen = width > 800;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isLargeScreen ? width * 0.15 : 16,
+        vertical: 24,
+      ),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 1000, maxHeight: 800),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            _buildHeader(d),
+            Container(
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+              ),
+              child: TabBar(
+                controller: _tabController,
+                labelColor: Colors.blue.shade700,
+                unselectedLabelColor: Colors.grey.shade600,
+                indicatorColor: Colors.blue.shade700,
+                indicatorWeight: 3,
+                labelStyle: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+                tabs: const [
+                  Tab(text: 'Ringkasan'),
+                  Tab(text: 'Kontak'),
+                  Tab(text: 'Legalitas & Lainnya'),
+                ],
+              ),
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildRingkasanTab(d),
+                  _buildKontakTab(d),
+                  _buildLegalitasTab(d),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.grey.shade700,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
+                      ),
+                    ),
+                    child: const Text('Tutup'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(Direktori d) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.business, color: Colors.blue.shade700, size: 32),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  d.namaUsaha,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                if (d.namaKomersialUsaha != null &&
+                    d.namaKomersialUsaha!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '(${d.namaKomersialUsaha})',
+                      style: TextStyle(
+                        color: Colors.grey.shade700,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _Badge(
+                      label: 'ID SBR: ${d.idSbr}',
+                      color: Colors.blue.shade100,
+                      textColor: Colors.blue.shade900,
+                    ),
+                    if (d.keberadaanUsaha != null)
+                      _StatusBadge(status: d.keberadaanUsaha!),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRingkasanTab(Direktori d) {
+    debugPrint('=== DEBUG DETAIL USAHA ===');
+    debugPrint('ID: ${d.id}');
+    debugPrint('Nama: ${d.namaUsaha}');
+    debugPrint('KBLI (Variable): ${d.kbli}');
+    debugPrint('Tags: ${d.tag}');
+    debugPrint('Kegiatan Usaha (List): ${d.kegiatanUsaha}');
+    debugPrint('Deskripsi Lainnya: ${d.deskripsiBadanUsahaLainnya}');
+    debugPrint('==========================');
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionTitle(title: 'Informasi Utama'),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth > 600;
+              return GridView.count(
+                crossAxisCount: isWide ? 4 : 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: 2.5,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 16,
+                children: [
+                  _StatCard(
+                    label: 'Tahun Berdiri',
+                    value: d.tahunBerdiri?.toString() ?? '-',
+                    icon: Icons.calendar_today,
+                  ),
+                  _StatCard(
+                    label: 'Tenaga Kerja',
+                    value: d.tenagaKerja?.toString() ?? '-',
+                    icon: Icons.people,
+                  ),
+                  _StatCard(
+                    label: 'Skala Usaha',
+                    value: d.skalaUsaha ?? '-',
+                    icon: Icons.bar_chart,
+                  ),
+                  _StatCard(
+                    label: 'Jaringan',
+                    value: _getJaringanText(d.jaringanUsaha),
+                    icon: Icons.hub,
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 32),
+          _SectionTitle(title: 'Detail Perusahaan'),
+          const SizedBox(height: 16),
+          _DetailRow(
+            label: 'Jenis Perusahaan',
+            value: d.jenisPerusahaan,
+            icon: Icons.business_center,
+          ),
+          _DetailRow(
+            label: 'Kepemilikan',
+            value: _getKepemilikanText(d.jenisKepemilikanUsaha),
+            icon: Icons.person_outline,
+          ),
+          _DetailRow(
+            label: 'Sektor Institusi',
+            value: _getSektorText(d.sektorInstitusi),
+            icon: Icons.category,
+          ),
+          _DetailRow(
+            label: 'Keterangan',
+            value: d.keterangan,
+            icon: Icons.info_outline,
+          ),
+          _DetailRow(
+            label: 'Deskripsi Lainnya',
+            value: d.deskripsiBadanUsahaLainnya,
+            icon: Icons.description,
+          ),
+          const SizedBox(height: 32),
+          _SectionTitle(title: 'Kegiatan Usaha (KBLI)'),
+          const SizedBox(height: 16),
+          // Prioritaskan variabel kbli
+          if (d.kbli != null && d.kbli!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: _KbliCard(code: d.kbli!, title: 'KBLI Utama'),
+            ),
+          // Tampilkan list kegiatan usaha jika ada
+          if (d.kegiatanUsaha.isNotEmpty)
+            ...d.kegiatanUsaha.map(
+              (k) => _KbliCard(
+                code: k['kbli']?.toString() ?? '-',
+                title: k['judul_kbli']?.toString() ?? 'Tidak diketahui',
+                category: k['kategori_kbli']?.toString(),
+              ),
+            ),
+          // Jika keduanya kosong
+          if ((d.kbli == null || d.kbli!.isEmpty) && d.kegiatanUsaha.isEmpty)
+            const Text(
+              'Tidak ada data KBLI',
+              style: TextStyle(color: Colors.grey),
+            ),
+
+          if (d.tag != null && d.tag!.isNotEmpty) ...[
+            const SizedBox(height: 32),
+            _SectionTitle(title: 'Tags'),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: d.tag!
+                  .map(
+                    (tag) => Chip(
+                      label: Text(tag),
+                      backgroundColor: Colors.blue.shade50,
+                      labelStyle: TextStyle(
+                        color: Colors.blue.shade800,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      side: BorderSide(color: Colors.blue.shade100),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+
+          const SizedBox(height: 32),
+          _SectionTitle(title: 'Lokasi'),
+          const SizedBox(height: 16),
+          _DetailRow(label: 'Alamat', value: d.alamat, icon: Icons.location_on),
+          _DetailRow(
+            label: 'Kode Pos',
+            value: d.kodePos,
+            icon: Icons.markunread_mailbox,
+          ),
+          _DetailRow(label: 'Provinsi', value: d.nmProv, icon: Icons.map),
+          _DetailRow(
+            label: 'Kab/Kota',
+            value: d.nmKab,
+            icon: Icons.location_city,
+          ),
+          const SizedBox(height: 16),
+          if ((d.latitude ?? d.lat) != null && (d.longitude ?? d.long) != null)
+            ElevatedButton.icon(
+              onPressed: () async {
+                final lat = d.latitude ?? d.lat;
+                final lng = d.longitude ?? d.long;
+                final url = Uri.parse(
+                  'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
+                );
+                await launchUrl(url, mode: LaunchMode.externalApplication);
+              },
+              icon: const Icon(Icons.map_outlined),
+              label: Text(
+                'Lihat di Peta (${d.latitude ?? d.lat}, ${d.longitude ?? d.long})',
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKontakTab(Direktori d) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionTitle(title: 'Kontak'),
+          const SizedBox(height: 16),
+          _DetailRow(
+            label: 'Telepon',
+            value: d.nomorTelepon,
+            isCopyable: true,
+            icon: Icons.phone,
+          ),
+          _DetailRow(
+            label: 'WhatsApp',
+            value: d.nomorWhatsapp,
+            isCopyable: true,
+            icon: Icons.chat,
+          ),
+          _DetailRow(
+            label: 'Email',
+            value: d.email,
+            isCopyable: true,
+            icon: Icons.email,
+          ),
+          _DetailRow(
+            label: 'Website',
+            value: d.website,
+            isLink: true,
+            icon: Icons.language,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegalitasTab(Direktori d) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionTitle(title: 'Legalitas'),
+          const SizedBox(height: 16),
+          _DetailRow(
+            label: 'NIB',
+            value: d.nib,
+            isCopyable: true,
+            icon: Icons.verified_user,
+          ),
+          _DetailRow(
+            label: 'Bentuk Hukum',
+            value: _getBadanHukumText(d.bentukBadanHukumUsaha),
+            icon: Icons.gavel,
+          ),
+
+          const SizedBox(height: 32),
+          _SectionTitle(title: 'Identitas Pemilik'),
+          const SizedBox(height: 16),
+          _DetailRow(
+            label: 'Nama Pemilik',
+            value: d.pemilik,
+            icon: Icons.person,
+          ),
+          _DetailRow(
+            label: 'No. HP Pemilik',
+            value: d.nohpPemilik,
+            isCopyable: true,
+            icon: Icons.phone_android,
+          ),
+          if (d.nikPemilik != null && d.nikPemilik!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.badge, size: 20, color: Colors.grey.shade400),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 140,
+                    child: Text(
+                      'NIK Pemilik',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Text(
+                          _showNik ? d.nikPemilik! : '••••••••••••••••',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: () => setState(() => _showNik = !_showNik),
+                          child: Icon(
+                            _showNik ? Icons.visibility_off : Icons.visibility,
+                            size: 18,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 32),
+          _SectionTitle(title: 'Metadata'),
+          const SizedBox(height: 16),
+          _DetailRow(
+            label: 'Sumber Data',
+            value: d.sumberData,
+            icon: Icons.source,
+          ),
+          _DetailRow(
+            label: 'Dibuat',
+            value: _formatDate(d.createdAt),
+            icon: Icons.calendar_today,
+          ),
+          _DetailRow(
+            label: 'Diperbarui',
+            value: _formatDate(d.updatedAt),
+            icon: Icons.update,
+          ),
+          _DetailRow(
+            label: 'ID System',
+            value: d.id,
+            isSmall: true,
+            icon: Icons.fingerprint,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime? dt) {
+    if (dt == null) return '-';
+    return '${dt.day}/${dt.month}/${dt.year}';
+  }
+
+  String _getJaringanText(int? code) {
+    if (code == 1) {
+      return 'Tunggal';
+    }
+    if (code == 2) {
+      return 'Pusat';
+    }
+    if (code == 3) {
+      return 'Cabang';
+    }
+    return '-';
+  }
+
+  String _getKepemilikanText(int? code) {
+    // Implement mapping if available, otherwise return raw or generic
+    return code?.toString() ?? '-';
+  }
+
+  String _getSektorText(int? code) {
+    // Implement mapping if available
+    return code?.toString() ?? '-';
+  }
+
+  String _getBadanHukumText(int? code) {
+    if (code == null) return '-';
+    return 'Kode $code';
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+
+  const _StatCard({
+    Key? key,
+    required this.label,
+    required this.value,
+    required this.icon,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.05),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: Colors.blue.shade700, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: Colors.black87,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KbliCard extends StatelessWidget {
+  final String code;
+  final String title;
+  final String? category;
+
+  const _KbliCard({
+    Key? key,
+    required this.code,
+    required this.title,
+    this.category,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.grey.shade300),
+      ),
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.teal.shade50,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.teal.shade200),
+              ),
+              child: Text(
+                code,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.teal.shade800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  if (category != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        category!,
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  final int status;
+
+  const _StatusBadge({super.key, required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    Color color;
+    String text;
+    switch (status) {
+      case 1:
+        color = Colors.green;
+        text = 'Aktif';
+        break;
+      case 2:
+        color = Colors.orange;
+        text = 'Tutup Sementara';
+        break;
+      case 3:
+        color = Colors.orange;
+        text = 'Belum Beroperasi';
+        break;
+      case 4:
+        color = Colors.red;
+        text = 'Tutup';
+        break;
+      default:
+        color = Colors.grey;
+        text = 'Lainnya';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String title;
+  const _SectionTitle({Key? key, required this.title}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.blue.shade900,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Container(width: 40, height: 3, color: Colors.blue.shade200),
+      ],
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String? value;
+  final bool isCopyable;
+  final bool isLink;
+  final bool isSmall;
+  final IconData? icon;
+
+  const _DetailRow({
+    Key? key,
+    required this.label,
+    required this.value,
+    this.isCopyable = false,
+    this.isLink = false,
+    this.isSmall = false,
+    this.icon,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    if (value == null || value!.isEmpty || value == '-') {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 20, color: Colors.grey.shade400),
+            const SizedBox(width: 12),
+          ],
+          SizedBox(
+            width: 140,
+            child: Text(
+              label,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+            ),
+          ),
+          Expanded(
+            child: isLink
+                ? InkWell(
+                    onTap: () => launchUrl(
+                      Uri.parse(
+                        value!.startsWith('http') ? value! : 'https://$value',
+                      ),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                    child: Text(
+                      value!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.blue,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                        child: SelectableText(
+                          value!,
+                          style: TextStyle(
+                            fontSize: isSmall ? 12 : 14,
+                            fontWeight: FontWeight.w500,
+                            color: isSmall ? Colors.grey[600] : Colors.black87,
+                          ),
+                        ),
+                      ),
+                      if (isCopyable)
+                        InkWell(
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: value!));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Disalin ke clipboard'),
+                                duration: Duration(milliseconds: 500),
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 8.0),
+                            child: Icon(
+                              Icons.copy,
+                              size: 16,
+                              color: Colors.grey.shade400,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  final String label;
+  final Color color;
+  final Color? textColor;
+
+  const _Badge({
+    Key? key,
+    required this.label,
+    required this.color,
+    this.textColor,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: textColor ?? Colors.black87,
+        ),
       ),
     );
   }

@@ -5,6 +5,7 @@ import '../../domain/usecases/get_direktori_list.dart';
 import '../../data/datasources/direktori_local_datasource.dart';
 import 'direktori_event.dart';
 import 'direktori_state.dart';
+import '../../../../core/config/app_constants.dart';
 
 class DirektoriBloc extends Bloc<DirektoriEvent, DirektoriState> {
   final GetDirektoriList getDirektoriList;
@@ -56,7 +57,7 @@ class DirektoriBloc extends Bloc<DirektoriEvent, DirektoriState> {
 
       final totalCount = await getDirektoriCount(search: event.search);
       final stats = await getDirektoriStats(
-        updatedThreshold: DateTime.parse('2025-11-01 13:35:36.438909+00'),
+        updatedThreshold: AppConstants.updatedThreshold,
       );
       final direktoriList = await getDirektoriList(
         page: event.page,
