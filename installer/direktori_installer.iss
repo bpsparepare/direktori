@@ -1,15 +1,18 @@
 ; Inno Setup Script for Direktori
+#define MyAppName "Direktori"
+#define MyAppVersion "1.0.0"
+#define BuildTime GetDateTimeString('yyyyMMdd-HHmm', '', '')
 [Setup]
 AppId={{5D9E2C6E-5A7B-4E1C-A7F7-6A8D7CD2B0C1}
-AppName=Direktori
-AppVersion=1.0.0
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
 AppPublisher=Statistik Ceria
 AppPublisherURL=https://example.com/direktori
 DefaultDirName={pf}\Direktori
 DefaultGroupName=Direktori
 DisableProgramGroupPage=yes
 OutputDir=d:\flutter\direktori\build\installer
-OutputBaseFilename=DirektoriSetup-1.0.0
+OutputBaseFilename={#MyAppName}-{#BuildTime}
 Compression=lzma
 SolidCompression=yes
 SetupIconFile=d:\flutter\direktori\windows\runner\resources\app_icon.ico
