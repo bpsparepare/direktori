@@ -691,6 +691,24 @@ class MapRepositoryImpl implements MapRepository {
     return '${r(south)}:${r(north)}:${r(west)}:${r(east)}';
   }
 
+  Future<String?> getKbliTitle(String kode) async {
+    try {
+      final resp = await _supabaseClient
+          .from('kbli')
+          .select('judul')
+          .eq('kode', kode)
+          .single();
+      if (resp is Map && resp['judul'] != null) {
+        final j = resp['judul'];
+        if (j is String && j.trim().isNotEmpty) return j.trim();
+        if (j is dynamic) return j.toString();
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Future<List<LatLng>> getFirstPolygonFromGeoJson(String assetPath) async {
     final String cleanPath = assetPath.trim().replaceAll(RegExp(r'^"|"$'), '');

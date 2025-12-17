@@ -1767,41 +1767,24 @@ class _DetailDialogState extends State<_DetailDialog>
             },
           ),
           const SizedBox(height: 32),
-          _SectionTitle(title: 'Detail Perusahaan'),
-          const SizedBox(height: 16),
-          _DetailRow(
-            label: 'Jenis Perusahaan',
-            value: d.jenisPerusahaan,
-            icon: Icons.business_center,
-          ),
-          _DetailRow(
-            label: 'Kepemilikan',
-            value: _getKepemilikanText(d.jenisKepemilikanUsaha),
-            icon: Icons.person_outline,
-          ),
-          _DetailRow(
-            label: 'Sektor Institusi',
-            value: _getSektorText(d.sektorInstitusi),
-            icon: Icons.category,
-          ),
-          _DetailRow(
-            label: 'Keterangan',
-            value: d.keterangan,
-            icon: Icons.info_outline,
-          ),
-          _DetailRow(
-            label: 'Deskripsi Lainnya',
-            value: d.deskripsiBadanUsahaLainnya,
-            icon: Icons.description,
-          ),
-          const SizedBox(height: 32),
+
           _SectionTitle(title: 'Kegiatan Usaha (KBLI)'),
           const SizedBox(height: 16),
-          // Prioritaskan variabel kbli
           if (d.kbli != null && d.kbli!.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: _KbliCard(code: d.kbli!, title: 'KBLI Utama'),
+            FutureBuilder<String?>(
+              future: MapRepositoryImpl().getKbliTitle(d.kbli!),
+              builder: (context, snapshot) {
+                final title = snapshot.data;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: _KbliCard(
+                    code: d.kbli!,
+                    title: (title == null || title.isEmpty)
+                        ? 'Tidak diketahui'
+                        : title,
+                  ),
+                );
+              },
             ),
           // Tampilkan list kegiatan usaha jika ada
           if (d.kegiatanUsaha.isNotEmpty)
@@ -1843,6 +1826,34 @@ class _DetailDialogState extends State<_DetailDialog>
             ),
           ],
 
+          const SizedBox(height: 32),
+          _SectionTitle(title: 'Detail Perusahaan'),
+          const SizedBox(height: 16),
+          _DetailRow(
+            label: 'Jenis Perusahaan',
+            value: d.jenisPerusahaan,
+            icon: Icons.business_center,
+          ),
+          _DetailRow(
+            label: 'Kepemilikan',
+            value: _getKepemilikanText(d.jenisKepemilikanUsaha),
+            icon: Icons.person_outline,
+          ),
+          _DetailRow(
+            label: 'Sektor Institusi',
+            value: _getSektorText(d.sektorInstitusi),
+            icon: Icons.category,
+          ),
+          _DetailRow(
+            label: 'Keterangan',
+            value: d.keterangan,
+            icon: Icons.info_outline,
+          ),
+          _DetailRow(
+            label: 'Deskripsi Lainnya',
+            value: d.deskripsiBadanUsahaLainnya,
+            icon: Icons.description,
+          ),
           const SizedBox(height: 32),
           _SectionTitle(title: 'Lokasi'),
           const SizedBox(height: 16),
