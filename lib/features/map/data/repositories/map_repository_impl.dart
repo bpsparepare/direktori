@@ -82,6 +82,7 @@ class MapRepositoryImpl implements MapRepository {
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('id', directory.id!);
+      invalidatePlacesCache();
       return true;
     } catch (e) {
       print('Error updating directory: $e');
@@ -127,12 +128,6 @@ class MapRepositoryImpl implements MapRepository {
           .or('latitude.is.null,longitude.is.null')
           .order(orderBy ?? 'updated_at', ascending: ascending)
           .range(start, end);
-
-      if ((response as List).isNotEmpty) {
-        debugPrint(
-          'DEBUG KBLI RAW (No Coords): ${(response as List).first['kbli']}',
-        );
-      }
 
       return (response as List)
           .map((json) => DirektoriModel.fromJson(json))
@@ -191,13 +186,6 @@ class MapRepositoryImpl implements MapRepository {
           .select('*, kbli, deskripsi_badan_usaha_lainnya, wilayah(*)')
           .order(orderBy ?? 'updated_at', ascending: ascending)
           .range(start, end);
-
-      if ((response as List).isNotEmpty) {
-        debugPrint('DEBUG KBLI RAW: ${(response as List).first['kbli']}');
-        debugPrint(
-          'DEBUG DESKRIPSI RAW: ${(response as List).first['deskripsi_badan_usaha_lainnya']}',
-        );
-      }
 
       return (response as List)
           .map((json) => DirektoriModel.fromJson(json))
@@ -364,6 +352,7 @@ class MapRepositoryImpl implements MapRepository {
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('id', id);
+      invalidatePlacesCache();
       return true;
     } catch (e) {
       print('Error updating directory coordinates: $e');
@@ -401,6 +390,7 @@ class MapRepositoryImpl implements MapRepository {
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('id', id);
+      invalidatePlacesCache();
       return true;
     } catch (e) {
       print('Error updating directory coordinates with regional data: $e');
@@ -453,6 +443,7 @@ class MapRepositoryImpl implements MapRepository {
             DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       });
+      invalidatePlacesCache();
       return true;
     } catch (e) {
       print('Error inserting directory: $e');
@@ -514,6 +505,7 @@ class MapRepositoryImpl implements MapRepository {
       if (response != null && response['id'] != null) {
         final newId = response['id'].toString();
         print('✅ [DEBUG] Directory inserted with new ID: $newId');
+        invalidatePlacesCache();
         return newId;
       }
 
@@ -1088,6 +1080,7 @@ class MapRepositoryImpl implements MapRepository {
               })
               .eq('id', id);
         }
+        invalidatePlacesCache();
         return true;
       }
 
@@ -1109,6 +1102,7 @@ class MapRepositoryImpl implements MapRepository {
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('id', id);
+      invalidatePlacesCache();
       return true;
     } catch (e) {
       debugPrint('MapRepository: Error updateDirectoryStatus: $e');
@@ -1133,10 +1127,44 @@ class MapRepositoryImpl implements MapRepository {
       }
       if (payload.length <= 1) return true; // nothing to update
       await _supabaseClient.from('direktori').update(payload).eq('id', id);
+      invalidatePlacesCache();
       return true;
     } catch (e) {
       debugPrint('MapRepository: Error updateDirectoryBasicFields: $e');
       return false;
+    }
+  }
+
+  @override
+  Future<String?> getKbliJudul(String kodeKbli) async {
+    try {
+      final response = await _supabaseClient
+          .from('kbli')
+          .select('judul')
+          .eq('kode', kodeKbli)
+          .maybeSingle();
+
+      if (response != null) {
+        return response['judul'] as String?;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('MapRepository: Error fetching KBLI judul: $e');
+      // Fallback: try querying with 'kbli' column if 'kode' fails (common variation)
+      try {
+        final response = await _supabaseClient
+            .from('kbli')
+            .select('judul')
+            .eq('kbli', kodeKbli)
+            .maybeSingle();
+
+        if (response != null) {
+          return response['judul'] as String?;
+        }
+      } catch (e2) {
+        debugPrint('MapRepository: Error fetching KBLI judul (fallback): $e2');
+      }
+      return null;
     }
   }
 }

@@ -72,7 +72,7 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
   Map<String, int> _computeAlphabetCounts(List<Direktori> list) {
     final letters = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
     final Map<String, int> counts = {for (final ch in letters) ch: 0};
-    final DateTime threshold = DateTime.parse('2025-11-01 13:35:36.438909+00');
+    final DateTime threshold = AppConstants.updatedThreshold;
     for (final d in list) {
       final n = (d.namaUsaha).trim();
       if (n.isEmpty) continue;

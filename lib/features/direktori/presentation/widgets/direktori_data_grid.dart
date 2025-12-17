@@ -300,7 +300,8 @@ class _DirektoriDataGridState extends State<DirektoriDataGrid> {
   void _showDetailDialog(BuildContext context, Direktori direktori) {
     showDialog<void>(
       context: context,
-      builder: (context) => _DetailDialog(direktori: direktori),
+      builder: (context) =>
+          _DetailDialog(direktori: direktori, onGoToMap: widget.onGoToMap),
     );
   }
 }
@@ -1428,8 +1429,9 @@ class _DirektoriDataGridSource extends DataGridSource {
 
 class _DetailDialog extends StatefulWidget {
   final Direktori direktori;
+  final void Function(String id)? onGoToMap;
 
-  const _DetailDialog({super.key, required this.direktori});
+  const _DetailDialog({super.key, required this.direktori, this.onGoToMap});
 
   @override
   State<_DetailDialog> createState() => _DetailDialogState();
@@ -1450,6 +1452,27 @@ class _DetailDialogState extends State<_DetailDialog>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _navigateToMap(BuildContext context, String focusId) {
+    List<dynamic>? cached;
+    try {
+      final bloc = context.read<DirektoriBloc>();
+      if (bloc.isAllLoaded) {
+        cached = bloc.cachedAllList;
+      }
+    } catch (_) {}
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (ctx) => const MainPage(initialTabIndex: 0),
+        settings: RouteSettings(
+          arguments: {
+            'focusDirectoryId': focusId,
+            if (cached != null) 'direktoriList': cached,
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -1597,21 +1620,38 @@ class _DetailDialogState extends State<_DetailDialog>
               ],
             ),
           ),
+          if ((d.latitude ?? d.lat) != null && (d.longitude ?? d.long) != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 16),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  if (widget.onGoToMap != null) {
+                    widget.onGoToMap!(d.id);
+                  } else {
+                    _navigateToMap(context, d.id);
+                  }
+                },
+                icon: const Icon(Icons.map_outlined, size: 18),
+                label: const Text('Lihat Peta'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
   Widget _buildRingkasanTab(Direktori d) {
-    debugPrint('=== DEBUG DETAIL USAHA ===');
-    debugPrint('ID: ${d.id}');
-    debugPrint('Nama: ${d.namaUsaha}');
-    debugPrint('KBLI (Variable): ${d.kbli}');
-    debugPrint('Tags: ${d.tag}');
-    debugPrint('Kegiatan Usaha (List): ${d.kegiatanUsaha}');
-    debugPrint('Deskripsi Lainnya: ${d.deskripsiBadanUsahaLainnya}');
-    debugPrint('==========================');
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -1619,6 +1659,78 @@ class _DetailDialogState extends State<_DetailDialog>
         children: [
           _SectionTitle(title: 'Informasi Utama'),
           const SizedBox(height: 16),
+          if (d.urlGambar != null && d.urlGambar!.isNotEmpty) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: GestureDetector(
+                onTap: () async {
+                  try {
+                    final uri = Uri.parse(d.urlGambar!);
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  } catch (_) {}
+                },
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 200,
+                  child: Image.network(
+                    d.urlGambar!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: Colors.grey.shade200,
+                        alignment: Alignment.center,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.image_not_supported,
+                              color: Colors.grey,
+                              size: 28,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Gambar tidak tersedia',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 12,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                try {
+                                  final uri = Uri.parse(d.urlGambar!);
+                                  if (await canLaunchUrl(uri)) {
+                                    await launchUrl(
+                                      uri,
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                  }
+                                } catch (_) {}
+                              },
+                              child: const Text('Buka di browser'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return Container(
+                        color: Colors.grey.shade100,
+                        alignment: Alignment.center,
+                        child: const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth > 600;
@@ -1747,32 +1859,6 @@ class _DetailDialogState extends State<_DetailDialog>
             icon: Icons.location_city,
           ),
           const SizedBox(height: 16),
-          if ((d.latitude ?? d.lat) != null && (d.longitude ?? d.long) != null)
-            ElevatedButton.icon(
-              onPressed: () async {
-                final lat = d.latitude ?? d.lat;
-                final lng = d.longitude ?? d.long;
-                final url = Uri.parse(
-                  'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
-                );
-                await launchUrl(url, mode: LaunchMode.externalApplication);
-              },
-              icon: const Icon(Icons.map_outlined),
-              label: Text(
-                'Lihat di Peta (${d.latitude ?? d.lat}, ${d.longitude ?? d.long})',
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
         ],
       ),
     );

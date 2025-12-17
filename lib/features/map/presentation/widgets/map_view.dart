@@ -62,7 +62,6 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   bool _showScrapedMarkers = true;
   bool _showMarkerLabels = true;
   Timer? _boundsDebounce;
-  bool _logPrinted = false;
 
   @override
   void initState() {
@@ -241,7 +240,6 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    _logPrinted = false;
     final centroid = _centroid(widget.polygon);
     final double fontSize = _scaledFontSize();
     final double labelWidth = widget.polygonLabel != null
@@ -255,13 +253,6 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     final List<Place> mainList = renderList
         .where((p) => !p.id.startsWith('scrape:'))
         .toList();
-    if (!_logPrinted) {
-      final capLog = _capForZoom(widget.places.length, _zoom);
-      debugPrint(
-        'MapView: zoom=${_zoom.toStringAsFixed(2)} total=${widget.places.length} rendered=${renderList.length} cap=${capLog ?? 'all'} scraped=${scrapedList.length} main=${mainList.length}',
-      );
-      _logPrinted = true;
-    }
 
     return Stack(
       children: [
@@ -695,80 +686,6 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               ),
             ),
           ),
-        // Sampling Info Panel
-        Positioned(
-          right: 16,
-          bottom: 100,
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.8),
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Sampling Info:',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Zoom: ${_zoom.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    color: Colors.lightBlue,
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-                Text(
-                  'Total: ${widget.places.length}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-                Text(
-                  'Rendered: ${renderList.length}',
-                  style: const TextStyle(
-                    color: Colors.yellow,
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-                Text(
-                  'Cap: ${_capForZoom(widget.places.length, _zoom) ?? 'all'}',
-                  style: const TextStyle(
-                    color: Colors.orange,
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-                Text(
-                  'Fraction: ${_capForZoom(widget.places.length, _zoom) == null ? '100%' : ((100 * (_capForZoom(widget.places.length, _zoom)! / widget.places.length)).toStringAsFixed(0)) + '%'}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -784,12 +701,6 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
         orElse: () => result.first,
       );
       result.add(sel);
-    }
-    if (!_logPrinted) {
-      debugPrint(
-        'MapView: zoom=${_zoom.toStringAsFixed(2)} total=${input.length} rendered=${result.length} cap=$cap',
-      );
-      _logPrinted = true;
     }
     return result;
   }
