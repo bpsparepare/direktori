@@ -79,6 +79,7 @@ class MapRepositoryImpl implements MapRepository {
             'tenaga_kerja': directory.tenagaKerja,
             'kbli': directory.kbli,
             'tag': directory.tag,
+            'idsbr_duplikat': directory.idSbrDuplikat,
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('id', directory.id!);
@@ -438,6 +439,7 @@ class MapRepositoryImpl implements MapRepository {
         'tenaga_kerja': directory.tenagaKerja,
         'kbli': directory.kbli,
         'tag': directory.tag,
+        'idsbr_duplikat': directory.idSbrDuplikat,
         'created_at':
             directory.createdAt?.toIso8601String() ??
             DateTime.now().toIso8601String(),
@@ -494,6 +496,7 @@ class MapRepositoryImpl implements MapRepository {
             'tenaga_kerja': directory.tenagaKerja,
             'kbli': directory.kbli,
             'tag': directory.tag,
+            'idsbr_duplikat': directory.idSbrDuplikat,
             'created_at':
                 directory.createdAt?.toIso8601String() ??
                 DateTime.now().toIso8601String(),
@@ -1128,10 +1131,47 @@ class MapRepositoryImpl implements MapRepository {
     }
   }
 
+  Future<bool> markDirectoryAsDuplicate(String id, String parentIdSbr) async {
+    try {
+      await _supabaseClient
+          .from('direktori')
+          .update({
+            'keberadaan_usaha': 9,
+            'idsbr_duplikat': parentIdSbr,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', id);
+      invalidatePlacesCache();
+      return true;
+    } catch (e) {
+      debugPrint('MapRepository: Error markDirectoryAsDuplicate: $e');
+      return false;
+    }
+  }
+
+  Future<bool> clearDirectoryDuplicateParent(String id) async {
+    try {
+      await _supabaseClient
+          .from('direktori')
+          .update({
+            'idsbr_duplikat': null,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', id);
+      invalidatePlacesCache();
+      return true;
+    } catch (e) {
+      debugPrint('MapRepository: Error clearDirectoryDuplicateParent: $e');
+      return false;
+    }
+  }
+
   Future<bool> updateDirectoryBasicFields(
     String id, {
     String? namaUsaha,
     String? alamat,
+    String? skalaUsaha,
+    bool updateSkalaUsaha = false,
   }) async {
     try {
       final Map<String, dynamic> payload = {
@@ -1142,6 +1182,11 @@ class MapRepositoryImpl implements MapRepository {
       }
       if (alamat != null) {
         payload['alamat'] = alamat;
+      }
+      if (updateSkalaUsaha) {
+        payload['skala_usaha'] = skalaUsaha;
+      } else if (skalaUsaha != null) {
+        payload['skala_usaha'] = skalaUsaha;
       }
       if (payload.length <= 1) return true; // nothing to update
       await _supabaseClient.from('direktori').update(payload).eq('id', id);

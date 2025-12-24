@@ -57,4 +57,5 @@ abstract class MapRepository {
   Future<bool> deleteOrCloseDirectoryById(String id);
   // Get KBLI title by code
   Future<String?> getKbliJudul(String kodeKbli);
+  Future<bool> markDirectoryAsDuplicate(String id, String parentIdSbr);
 }

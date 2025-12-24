@@ -42,6 +42,7 @@ class DirektoriModel extends Direktori {
     super.nmKab,
     super.kbli,
     super.tag,
+    super.idSbrDuplikat,
   });
 
   factory DirektoriModel.fromMapModel(MapDirektori.DirektoriModel mapModel) {
@@ -84,6 +85,7 @@ class DirektoriModel extends Direktori {
       nmProv: mapModel.nmProv,
       nmKab: mapModel.nmKab,
       kbli: mapModel.kbli,
+      idSbrDuplikat: mapModel.idSbrDuplikat,
     );
   }
 }

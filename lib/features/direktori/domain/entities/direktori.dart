@@ -40,6 +40,7 @@ class Direktori extends Equatable {
   final String? nmKab;
   final String? kbli;
   final List<String>? tag;
+  final String? idSbrDuplikat;
 
   const Direktori({
     required this.id,
@@ -81,6 +82,7 @@ class Direktori extends Equatable {
     this.nmKab,
     this.kbli,
     this.tag,
+    this.idSbrDuplikat,
   });
 
   @override
@@ -123,5 +125,6 @@ class Direktori extends Equatable {
     nmProv,
     nmKab,
     kbli,
+    idSbrDuplikat,
   ];
 }

@@ -63,6 +63,7 @@ class DirektoriModel {
   // New fields for KBLI and tags
   final String? kbli; // 5-digit KBLI code
   final List<String>? tag; // Array of tags
+  final String? idSbrDuplikat;
 
   const DirektoriModel({
     required this.id,
@@ -119,6 +120,7 @@ class DirektoriModel {
     // New fields
     this.kbli,
     this.tag,
+    this.idSbrDuplikat,
   });
 
   factory DirektoriModel.fromJson(Map<String, dynamic> json) {
@@ -191,6 +193,7 @@ class DirektoriModel {
       // New fields
       kbli: json['kbli'],
       tag: json['tag'] != null ? List<String>.from(json['tag']) : null,
+      idSbrDuplikat: json['idsbr_duplikat'],
     );
   }
 
@@ -250,6 +253,7 @@ class DirektoriModel {
       // New fields
       'kbli': kbli,
       'tag': tag,
+      'idsbr_duplikat': idSbrDuplikat,
     };
   }
 

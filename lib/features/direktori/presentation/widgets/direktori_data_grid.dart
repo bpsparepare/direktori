@@ -75,8 +75,10 @@ class _DirektoriDataGridState extends State<DirektoriDataGrid> {
       'id_sbr': 1,
       'nama': 3,
       'alamat': 3,
-      'status': 2,
-      'koordinat': 2,
+      'skala_usaha': 1,
+      'status': 1,
+      'idsbr_duplikat': 1,
+      'koordinat': 1,
       'aksi': 2,
     };
     final int totalWeight = weights.values.reduce((a, b) => a + b);
@@ -198,6 +200,25 @@ class _DirektoriDataGridState extends State<DirektoriDataGrid> {
                     ),
                   ),
                   GridColumn(
+                    columnName: 'skala_usaha',
+                    width: cw('skala_usaha'),
+                    allowSorting: false,
+                    allowFiltering: false,
+                    label: Container(
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      color: Colors.blue[50],
+                      child: const Text(
+                        'Skala Usaha',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ),
+                  GridColumn(
                     columnName: 'status',
                     width: cw('status'),
                     label: GestureDetector(
@@ -232,6 +253,25 @@ class _DirektoriDataGridState extends State<DirektoriDataGrid> {
                                 color: Colors.blue[700],
                               ),
                           ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  GridColumn(
+                    columnName: 'idsbr_duplikat',
+                    width: cw('idsbr_duplikat'),
+                    allowSorting: false,
+                    allowFiltering: false,
+                    label: Container(
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      color: Colors.blue[50],
+                      child: const Text(
+                        'ID SBR Duplikat',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Colors.black87,
                         ),
                       ),
                     ),
@@ -318,6 +358,8 @@ class _DirektoriDataGridSource extends DataGridSource {
   final Map<String, String> _editedNamaById = <String, String>{};
   final Map<String, String?> _editedAlamatById = <String, String?>{};
   final Map<String, int?> _editedStatusById = <String, int?>{};
+  final Map<String, String> _editedIdSbrDuplikatById = <String, String>{};
+  final Map<String, String?> _editedSkalaUsahaById = <String, String?>{};
   final Set<String> _savingIds = <String>{};
   final Set<String> _recentlyUpdatedIds = <String>{};
 
@@ -335,9 +377,17 @@ class _DirektoriDataGridSource extends DataGridSource {
               DataGridCell<String>(columnName: 'id_sbr', value: d.idSbr),
               DataGridCell<String>(columnName: 'nama', value: d.namaUsaha),
               DataGridCell<String?>(columnName: 'alamat', value: d.alamat),
+              DataGridCell<String?>(
+                columnName: 'skala_usaha',
+                value: d.skalaUsaha,
+              ),
               DataGridCell<int?>(
                 columnName: 'status',
                 value: d.keberadaanUsaha,
+              ),
+              DataGridCell<String?>(
+                columnName: 'idsbr_duplikat',
+                value: d.idSbrDuplikat,
               ),
               DataGridCell<bool>(
                 columnName: 'koordinat',
@@ -367,9 +417,17 @@ class _DirektoriDataGridSource extends DataGridSource {
               DataGridCell<String>(columnName: 'id_sbr', value: d.idSbr),
               DataGridCell<String>(columnName: 'nama', value: d.namaUsaha),
               DataGridCell<String?>(columnName: 'alamat', value: d.alamat),
+              DataGridCell<String?>(
+                columnName: 'skala_usaha',
+                value: d.skalaUsaha,
+              ),
               DataGridCell<int?>(
                 columnName: 'status',
                 value: d.keberadaanUsaha,
+              ),
+              DataGridCell<String?>(
+                columnName: 'idsbr_duplikat',
+                value: d.idSbrDuplikat,
               ),
               DataGridCell<bool>(
                 columnName: 'koordinat',
@@ -393,8 +451,8 @@ class _DirektoriDataGridSource extends DataGridSource {
     if (direktori == null) {
       return const DataGridRowAdapter(cells: []);
     }
-    final int? status = cells[3].value as int?;
-    final bool hasCoord = cells[4].value as bool;
+    final int? status = cells[4].value as int?;
+    final bool hasCoord = cells[6].value as bool;
     final DateTime? updatedAt = direktori.updatedAt;
     final String id = direktori.id;
     final bool isEditing = _editingIds.contains(id);
@@ -422,11 +480,51 @@ class _DirektoriDataGridSource extends DataGridSource {
         Container(
           alignment: Alignment.centerLeft,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          child: Text(
-            cells[0].value ?? '-',
-            style: const TextStyle(fontSize: 12, color: Colors.black87),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Expanded(
+                child: Text(
+                  cells[0].value ?? '-',
+                  style: const TextStyle(fontSize: 12, color: Colors.black87),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              if (((cells[0].value ?? '') as String).isNotEmpty &&
+                  (cells[0].value ?? '-') != '-')
+                Tooltip(
+                  message: 'Copy ID SBR',
+                  child: Builder(
+                    builder: (ctx) => InkWell(
+                      onTap: () {
+                        final txt = (cells[0].value ?? '').toString();
+                        Clipboard.setData(ClipboardData(text: txt));
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                            content: Text('ID SBR disalin'),
+                            duration: Duration(milliseconds: 800),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: const BoxDecoration(
+                          color: Colors.blue,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.copy,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
         Container(
@@ -641,6 +739,35 @@ class _DirektoriDataGridSource extends DataGridSource {
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           child: isEditing
+              ? DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value:
+                        (_editedSkalaUsahaById[id] ??
+                        _normalizeSkalaUsaha(direktori.skalaUsaha)),
+                    items: const [
+                      DropdownMenuItem(value: 'UMKM', child: Text('UMKM')),
+                      DropdownMenuItem(value: 'UB', child: Text('UB')),
+                    ],
+                    onChanged: (v) {
+                      _editedSkalaUsahaById[id] = v;
+                      notifyListeners();
+                    },
+                  ),
+                )
+              : Text(
+                  _normalizeSkalaUsaha(cells[3].value) ?? '-',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+        ),
+        Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: isEditing
               ? Builder(
                   builder: (ctx) => InkWell(
                     onTap: () => _pickStatus(ctx, id, status),
@@ -688,6 +815,232 @@ class _DirektoriDataGridSource extends DataGridSource {
                     ),
                   ],
                 ),
+        ),
+        Container(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Expanded(
+                child: Text(
+                  (_editedIdSbrDuplikatById[id]?.isNotEmpty == true)
+                      ? _editedIdSbrDuplikatById[id]!
+                      : (cells[5].value ?? '-') as String,
+                  style: const TextStyle(fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              if (((cells[5].value ?? '') as String).isNotEmpty &&
+                  (cells[5].value ?? '-') != '-')
+                Tooltip(
+                  message: 'Copy ID SBR Duplikat',
+                  child: Builder(
+                    builder: (ctx) => InkWell(
+                      onTap: () {
+                        final txt = (cells[5].value ?? '').toString();
+                        Clipboard.setData(ClipboardData(text: txt));
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                            content: Text('ID SBR Duplikat disalin'),
+                            duration: Duration(milliseconds: 800),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: const BoxDecoration(
+                          color: Colors.blue,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.copy,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (isEditing) ...[
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: 'Tempel ID SBR Duplikat dari clipboard',
+                  child: Builder(
+                    builder: (ctx) => InkWell(
+                      onTap: () async {
+                        try {
+                          final data = await Clipboard.getData(
+                            Clipboard.kTextPlain,
+                          );
+                          final txt = data?.text?.trim();
+                          if ((txt ?? '').isEmpty) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(
+                                content: Text('Clipboard kosong'),
+                                duration: Duration(milliseconds: 900),
+                              ),
+                            );
+                            return;
+                          }
+                          _editedIdSbrDuplikatById[id] = txt!;
+                          notifyListeners();
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                              content: Text('ID SBR duplikat ditempel'),
+                              duration: Duration(milliseconds: 900),
+                            ),
+                          );
+                        } catch (_) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                              content: Text('Gagal membaca clipboard'),
+                              duration: Duration(milliseconds: 900),
+                            ),
+                          );
+                        }
+                      },
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: const BoxDecoration(
+                          color: Colors.orange,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.content_paste,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: 'Hapus ID SBR Duplikat',
+                  child: Builder(
+                    builder: (ctx) => InkWell(
+                      onTap: () {
+                        _editedIdSbrDuplikatById[id] = '';
+                        _setIdSbrDuplikatForId(id, null);
+                        notifyListeners();
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                            content: Text('ID SBR duplikat dihapus'),
+                            duration: Duration(milliseconds: 900),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.clear,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              if (!isEditing) ...[
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: 'Tempel ID SBR Duplikat dari clipboard',
+                  child: Builder(
+                    builder: (ctx) => InkWell(
+                      onTap: () async {
+                        try {
+                          final data = await Clipboard.getData(
+                            Clipboard.kTextPlain,
+                          );
+                          final txt = data?.text?.trim();
+                          if ((txt ?? '').isEmpty) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(
+                                content: Text('Clipboard kosong'),
+                                duration: Duration(milliseconds: 900),
+                              ),
+                            );
+                            return;
+                          }
+                          _editedIdSbrDuplikatById[id] = txt!;
+                          notifyListeners();
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                              content: Text('ID SBR duplikat ditempel'),
+                              duration: Duration(milliseconds: 900),
+                            ),
+                          );
+                        } catch (_) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                              content: Text('Gagal membaca clipboard'),
+                              duration: Duration(milliseconds: 900),
+                            ),
+                          );
+                        }
+                      },
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: const BoxDecoration(
+                          color: Colors.orange,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.content_paste,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: 'Hapus ID SBR Duplikat',
+                  child: Builder(
+                    builder: (ctx) => InkWell(
+                      onTap: () {
+                        _editedIdSbrDuplikatById[id] = '';
+                        _setIdSbrDuplikatForId(id, null);
+                        notifyListeners();
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                            content: Text('ID SBR duplikat dihapus'),
+                            duration: Duration(milliseconds: 900),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.clear,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
         Container(
           alignment: Alignment.center,
@@ -900,11 +1253,40 @@ class _DirektoriDataGridSource extends DataGridSource {
                     onTap: (ctx) async {
                       _savingIds.add(id);
                       notifyListeners();
+                      if ((_editedStatusById[id] ?? status) == 9) {
+                        final parent = _editedIdSbrDuplikatById[id];
+                        if (parent == null || parent.trim().isEmpty) {
+                          _savingIds.remove(id);
+                          notifyListeners();
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Isi ID SBR duplikat terlebih dahulu',
+                              ),
+                              backgroundColor: Colors.red,
+                              duration: Duration(milliseconds: 1000),
+                            ),
+                          );
+                          return;
+                        }
+                      }
+                      final currentSkala = _normalizeSkalaUsaha(
+                        direktori.skalaUsaha,
+                      );
+                      final String? desiredUiSkala = _editedSkalaUsahaById[id];
+                      final bool skalaChanged =
+                          desiredUiSkala != null &&
+                          desiredUiSkala != currentSkala;
+                      final String? skalaToSave = skalaChanged
+                          ? _toBackendSkalaUsaha(desiredUiSkala)
+                          : null;
                       final ok = await MapRepositoryImpl()
                           .updateDirectoryBasicFields(
                             id,
                             namaUsaha: _editedNamaById[id],
                             alamat: _editedAlamatById[id],
+                            skalaUsaha: skalaToSave,
+                            updateSkalaUsaha: skalaChanged,
                           );
                       if (ok) {
                         if (_editedNamaById[id] != null) {
@@ -913,17 +1295,37 @@ class _DirektoriDataGridSource extends DataGridSource {
                         if (_editedAlamatById[id] != null) {
                           _setAlamatForId(id, _editedAlamatById[id]!);
                         }
+                        if (skalaChanged && desiredUiSkala != null) {
+                          _setSkalaUsahaForId(id, desiredUiSkala);
+                        }
                         bool statusUpdated = false;
                         int? newStatus;
                         if (_editedStatusById[id] != null &&
                             _editedStatusById[id] != status) {
-                          final okStatus = await MapRepositoryImpl()
-                              .updateDirectoryStatus(
-                                id,
-                                _editedStatusById[id]!,
-                              );
+                          bool okStatus;
+                          String? parent;
+                          if (_editedStatusById[id] == 9) {
+                            parent = _editedIdSbrDuplikatById[id];
+                            okStatus = await MapRepositoryImpl()
+                                .markDirectoryAsDuplicate(id, parent ?? '');
+                          } else {
+                            okStatus = await MapRepositoryImpl()
+                                .updateDirectoryStatus(
+                                  id,
+                                  _editedStatusById[id]!,
+                                );
+                          }
                           if (okStatus) {
                             _setStatusForId(id, _editedStatusById[id]!);
+                            if (_editedStatusById[id] == 9) {
+                              _setIdSbrDuplikatForId(id, parent);
+                            } else {
+                              final cleared = await MapRepositoryImpl()
+                                  .clearDirectoryDuplicateParent(id);
+                              if (cleared) {
+                                _setIdSbrDuplikatForId(id, null);
+                              }
+                            }
                             statusUpdated = true;
                             newStatus = _editedStatusById[id]!;
                           }
@@ -935,8 +1337,17 @@ class _DirektoriDataGridSource extends DataGridSource {
                         if (_editedAlamatById[id] != null) {
                           changes['alamat'] = _editedAlamatById[id];
                         }
+                        if (skalaChanged && desiredUiSkala != null) {
+                          changes['skala_usaha'] = desiredUiSkala;
+                        }
                         if (statusUpdated && newStatus != null) {
                           changes['keberadaan_usaha'] = newStatus;
+                          if (newStatus == 9 &&
+                              _editedIdSbrDuplikatById[id]?.isNotEmpty ==
+                                  true) {
+                            changes['idsbr_duplikat'] =
+                                _editedIdSbrDuplikatById[id];
+                          }
                         }
                         if (changes.isNotEmpty) {
                           try {
@@ -954,6 +1365,8 @@ class _DirektoriDataGridSource extends DataGridSource {
                       }
                       _editingIds.remove(id);
                       _editedStatusById.remove(id);
+                      _editedIdSbrDuplikatById.remove(id);
+                      _editedSkalaUsahaById.remove(id);
                       _savingIds.remove(id);
                       notifyListeners();
                     },
@@ -965,6 +1378,7 @@ class _DirektoriDataGridSource extends DataGridSource {
                     onTap: (ctx) {
                       _editingIds.remove(id);
                       _editedStatusById.remove(id);
+                      _editedSkalaUsahaById.remove(id);
                       notifyListeners();
                     },
                   ),
@@ -1039,9 +1453,34 @@ class _DirektoriDataGridSource extends DataGridSource {
         old[0],
         old[1],
         old[2],
+        old[3],
         DataGridCell<int?>(columnName: 'status', value: status),
-        old[4],
         old[5],
+        old[6],
+        old[7],
+      ],
+    );
+    _rows[idx] = updated;
+    notifyListeners();
+  }
+
+  void _setIdSbrDuplikatForId(String id, String? parent) {
+    final idx = _rows.indexWhere((r) {
+      final d = r.getCells().last.value as Direktori;
+      return d.id == id;
+    });
+    if (idx < 0) return;
+    final old = _rows[idx].getCells();
+    final updated = DataGridRow(
+      cells: [
+        old[0],
+        old[1],
+        old[2],
+        old[3],
+        old[4],
+        DataGridCell<String?>(columnName: 'idsbr_duplikat', value: parent),
+        old[6],
+        old[7],
       ],
     );
     _rows[idx] = updated;
@@ -1063,6 +1502,8 @@ class _DirektoriDataGridSource extends DataGridSource {
         old[3],
         old[4],
         old[5],
+        old[6],
+        old[7],
       ],
     );
     _rows[idx] = updated;
@@ -1084,6 +1525,8 @@ class _DirektoriDataGridSource extends DataGridSource {
         old[3],
         old[4],
         old[5],
+        old[6],
+        old[7],
       ],
     );
     _rows[idx] = updated;
@@ -1103,8 +1546,10 @@ class _DirektoriDataGridSource extends DataGridSource {
         old[1],
         old[2],
         old[3],
-        DataGridCell<bool>(columnName: 'koordinat', value: hasCoord),
+        old[4],
         old[5],
+        DataGridCell<bool>(columnName: 'koordinat', value: hasCoord),
+        old[7],
       ],
     );
     _rows[idx] = updated;
@@ -1118,7 +1563,7 @@ class _DirektoriDataGridSource extends DataGridSource {
     });
     if (idx < 0) return false;
     final cells = _rows[idx].getCells();
-    final bool hasCoord = cells[4].value as bool? ?? false;
+    final bool hasCoord = cells[6].value as bool? ?? false;
     return hasCoord;
   }
 
@@ -1409,6 +1854,15 @@ class _DirektoriDataGridSource extends DataGridSource {
     );
     if (selected != null) {
       _editedStatusById[id] = selected;
+      if (selected == 9) {
+        try {
+          final data = await Clipboard.getData(Clipboard.kTextPlain);
+          final txt = data?.text?.trim();
+          if ((txt ?? '').isNotEmpty) {
+            _editedIdSbrDuplikatById[id] = txt!;
+          }
+        } catch (_) {}
+      }
       notifyListeners();
     }
   }
@@ -1424,6 +1878,77 @@ class _DirektoriDataGridSource extends DataGridSource {
         ],
       ),
     );
+  }
+
+  Future<void> _promptDuplicateParent(BuildContext context, String id) async {
+    final controller = TextEditingController(
+      text: _editedIdSbrDuplikatById[id] ?? '',
+    );
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ID SBR Duplikat (Parent)'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Masukkan ID SBR parent'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () {
+              final v = controller.text.trim();
+              if (v.isNotEmpty) {
+                Navigator.of(ctx).pop(v);
+              }
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+    if (result != null && result.trim().isNotEmpty) {
+      _editedIdSbrDuplikatById[id] = result.trim();
+    }
+  }
+
+  void _setSkalaUsahaForId(String id, String skala) {
+    final idx = _rows.indexWhere((r) {
+      final d = r.getCells().last.value as Direktori;
+      return d.id == id;
+    });
+    if (idx < 0) return;
+    final old = _rows[idx].getCells();
+    final updated = DataGridRow(
+      cells: [
+        old[0],
+        old[1],
+        old[2],
+        DataGridCell<String?>(columnName: 'skala_usaha', value: skala),
+        old[4],
+        old[5],
+        old[6],
+        old[7],
+      ],
+    );
+    _rows[idx] = updated;
+    notifyListeners();
+  }
+
+  String? _normalizeSkalaUsaha(String? value) {
+    if (value == null) return 'UMKM';
+    final v = value.trim().toUpperCase();
+    return v == 'UB' ? 'UB' : 'UMKM';
+  }
+
+  String? _toBackendSkalaUsaha(String? uiValue) {
+    if (uiValue == null) return null;
+    final v = uiValue.trim().toUpperCase();
+    if (v == 'UB') return 'UB';
+    if (v == 'UMKM') return 'UMKM';
+    return null;
   }
 }
 
