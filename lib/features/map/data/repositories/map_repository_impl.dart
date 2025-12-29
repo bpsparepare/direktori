@@ -281,15 +281,40 @@ class MapRepositoryImpl implements MapRepository {
         );
         if (rpcResp is List && rpcResp.isNotEmpty && rpcResp.first is Map) {
           final row = rpcResp.first as Map;
+          // Compute UB Aktif count
+          int ubAktif = 0;
+          try {
+            final ubResp = await _supabaseClient
+                .from('direktori')
+                .select('id')
+                .eq('keberadaan_usaha', 1)
+                .eq('skala_usaha', 'UB');
+            if (ubResp is List) {
+              ubAktif = ubResp.length;
+            }
+          } catch (_) {}
           return {
             'total': (row['total'] as int?) ?? 0,
             'aktif': (row['aktif'] as int?) ?? 0,
             'updated': (row['updated'] as int?) ?? 0,
             'aktif_with_coord': (row['aktif_with_coord'] as int?) ?? 0,
             'aktif_without_coord': (row['aktif_without_coord'] as int?) ?? 0,
+            'ub_aktif': ubAktif,
           };
         }
         if (rpcResp is Map) {
+          // Compute UB Aktif count
+          int ubAktif = 0;
+          try {
+            final ubResp = await _supabaseClient
+                .from('direktori')
+                .select('id')
+                .eq('keberadaan_usaha', 1)
+                .eq('skala_usaha', 'UB');
+            if (ubResp is List) {
+              ubAktif = ubResp.length;
+            }
+          } catch (_) {}
           return {
             'total': (rpcResp['total'] as int?) ?? 0,
             'aktif': (rpcResp['aktif'] as int?) ?? 0,
@@ -297,6 +322,7 @@ class MapRepositoryImpl implements MapRepository {
             'aktif_with_coord': (rpcResp['aktif_with_coord'] as int?) ?? 0,
             'aktif_without_coord':
                 (rpcResp['aktif_without_coord'] as int?) ?? 0,
+            'ub_aktif': ubAktif,
           };
         }
       } catch (_) {}
@@ -309,12 +335,25 @@ class MapRepositoryImpl implements MapRepository {
             .limit(1);
         if (viewResp is List && viewResp.isNotEmpty && viewResp.first is Map) {
           final row = viewResp.first as Map;
+          // Compute UB Aktif count
+          int ubAktif = 0;
+          try {
+            final ubResp = await _supabaseClient
+                .from('direktori')
+                .select('id')
+                .eq('keberadaan_usaha', 1)
+                .eq('skala_usaha', 'UB');
+            if (ubResp is List) {
+              ubAktif = ubResp.length;
+            }
+          } catch (_) {}
           return {
             'total': (row['total_usaha'] as int?) ?? 0,
             'aktif': (row['jumlah_aktif'] as int?) ?? 0,
             'updated': 0,
             'aktif_with_coord': (row['aktif_with_coord'] as int?) ?? 0,
             'aktif_without_coord': (row['aktif_without_coord'] as int?) ?? 0,
+            'ub_aktif': ubAktif,
           };
         }
       } catch (_) {}
@@ -325,6 +364,7 @@ class MapRepositoryImpl implements MapRepository {
         'updated': 0,
         'aktif_with_coord': 0,
         'aktif_without_coord': 0,
+        'ub_aktif': 0,
       };
     } catch (e) {
       debugPrint('MapRepository: Error getDirektoriStats: $e');
@@ -334,6 +374,7 @@ class MapRepositoryImpl implements MapRepository {
         'updated': 0,
         'aktif_with_coord': 0,
         'aktif_without_coord': 0,
+        'ub_aktif': 0,
       };
     }
   }
@@ -1170,6 +1211,7 @@ class MapRepositoryImpl implements MapRepository {
     String id, {
     String? namaUsaha,
     String? alamat,
+    String? email,
     String? skalaUsaha,
     bool updateSkalaUsaha = false,
   }) async {
@@ -1182,6 +1224,9 @@ class MapRepositoryImpl implements MapRepository {
       }
       if (alamat != null) {
         payload['alamat'] = alamat;
+      }
+      if (email != null) {
+        payload['email'] = email;
       }
       if (updateSkalaUsaha) {
         payload['skala_usaha'] = skalaUsaha;

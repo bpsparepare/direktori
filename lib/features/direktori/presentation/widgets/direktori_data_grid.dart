@@ -23,6 +23,7 @@ class DirektoriDataGrid extends StatefulWidget {
   final void Function(String id)? onGoToMap;
   final VoidCallback? onRowUpdated;
   final void Function(String id, DateTime updatedAt)? onRowUpdatedWithId;
+  final ValueNotifier<bool>? batchModeNotifier;
 
   const DirektoriDataGrid({
     Key? key,
@@ -36,6 +37,7 @@ class DirektoriDataGrid extends StatefulWidget {
     this.onGoToMap,
     this.onRowUpdated,
     this.onRowUpdatedWithId,
+    this.batchModeNotifier,
   }) : super(key: key);
 
   @override
@@ -45,6 +47,11 @@ class DirektoriDataGrid extends StatefulWidget {
 class _DirektoriDataGridState extends State<DirektoriDataGrid> {
   late final DataGridController _gridController;
   late final _DirektoriDataGridSource _source;
+  bool _batchMode = false;
+  int? _batchSelectedStatus;
+  String _batchDuplicateParent = '';
+  bool _batchSaving = false;
+  String? _skalaFilter;
 
   @override
   void initState() {
@@ -57,6 +64,10 @@ class _DirektoriDataGridState extends State<DirektoriDataGrid> {
       onRowUpdated: widget.onRowUpdated,
       onRowUpdatedWithId: widget.onRowUpdatedWithId,
     );
+    if (widget.batchModeNotifier != null) {
+      _batchMode = widget.batchModeNotifier!.value;
+      widget.batchModeNotifier!.addListener(_onExternalBatchModeChanged);
+    }
   }
 
   @override
@@ -65,6 +76,31 @@ class _DirektoriDataGridState extends State<DirektoriDataGrid> {
     if (!identical(widget.direktoriList, oldWidget.direktoriList)) {
       _source.updateData(widget.direktoriList);
     }
+    if (oldWidget.batchModeNotifier != widget.batchModeNotifier) {
+      oldWidget.batchModeNotifier?.removeListener(_onExternalBatchModeChanged);
+      if (widget.batchModeNotifier != null) {
+        _batchMode = widget.batchModeNotifier!.value;
+        widget.batchModeNotifier!.addListener(_onExternalBatchModeChanged);
+      }
+    }
+  }
+
+  void _onExternalBatchModeChanged() {
+    setState(() {
+      _batchMode = widget.batchModeNotifier!.value;
+      if (!_batchMode) {
+        _batchSelectedStatus = null;
+        _batchDuplicateParent = '';
+        _batchSaving = false;
+      }
+    });
+  }
+
+  Future<String?> _pickSkalaFilter(
+    BuildContext context,
+    String? current,
+  ) async {
+    return await _source._pickSkalaFilter(context, current);
   }
 
   @override
@@ -75,6 +111,7 @@ class _DirektoriDataGridState extends State<DirektoriDataGrid> {
       'id_sbr': 1,
       'nama': 3,
       'alamat': 3,
+      'email': 2,
       'skala_usaha': 1,
       'status': 1,
       'idsbr_duplikat': 1,
@@ -116,7 +153,10 @@ class _DirektoriDataGridState extends State<DirektoriDataGrid> {
                 allowMultiColumnSorting: false,
                 allowTriStateSorting: false,
                 allowFiltering: true,
-                selectionMode: SelectionMode.single,
+                selectionMode: _batchMode
+                    ? SelectionMode.multiple
+                    : SelectionMode.single,
+                showCheckboxColumn: _batchMode,
                 headerGridLinesVisibility: GridLinesVisibility.horizontal,
                 gridLinesVisibility: GridLinesVisibility.horizontal,
                 columnWidthMode: ColumnWidthMode.fill,
@@ -200,20 +240,100 @@ class _DirektoriDataGridState extends State<DirektoriDataGrid> {
                     ),
                   ),
                   GridColumn(
-                    columnName: 'skala_usaha',
-                    width: cw('skala_usaha'),
+                    columnName: 'email',
+                    width: cw('email'),
                     allowSorting: false,
                     allowFiltering: false,
                     label: Container(
-                      alignment: Alignment.center,
+                      alignment: Alignment.centerLeft,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       color: Colors.blue[50],
                       child: const Text(
-                        'Skala Usaha',
+                        'Email',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
                           color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ),
+                  GridColumn(
+                    columnName: 'skala_usaha',
+                    width: cw('skala_usaha'),
+                    allowSorting: false,
+                    allowFiltering: false,
+                    label: GestureDetector(
+                      onTap: () async {
+                        final String? selected = await _pickSkalaFilter(
+                          context,
+                          _skalaFilter,
+                        );
+                        if (selected == null || selected.isEmpty) {
+                          setState(() {
+                            _skalaFilter = null;
+                          });
+                          _source.applySkalaFilter(null);
+                        } else {
+                          setState(() {
+                            _skalaFilter = selected;
+                          });
+                          _source.applySkalaFilter(selected);
+                        }
+                      },
+                      child: Container(
+                        alignment: Alignment.center,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        color: Colors.blue[50],
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            const Text(
+                              'Skala Usaha',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Wrap(
+                              alignment: WrapAlignment.center,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 6,
+                              runSpacing: 0,
+                              children: [
+                                Icon(
+                                  Icons.filter_alt,
+                                  size: 16,
+                                  color: Colors.blue[700],
+                                ),
+                                if (_skalaFilter != null)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade100,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.blue.shade200,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      _skalaFilter!,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.blue.shade900,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -333,8 +453,230 @@ class _DirektoriDataGridState extends State<DirektoriDataGrid> {
         //     ),
         //   ),
         // const SizedBox(height: 80),
+        if (_batchMode)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF8E1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFFFE082)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              'Dipilih: ${_gridController.selectedRows.length}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Ganti Status:',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 220,
+                              child: DropdownButtonFormField<int>(
+                                value: _batchSelectedStatus,
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  border: OutlineInputBorder(),
+                                  labelText: 'Status',
+                                ),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 1,
+                                    child: Text('Aktif'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 2,
+                                    child: Text('Tutup Sementara'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 3,
+                                    child: Text('Belum Beroperasi'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 4,
+                                    child: Text('Tutup'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 5,
+                                    child: Text('Alih Usaha'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 6,
+                                    child: Text('Tidak Ditemukan'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 7,
+                                    child: Text('Aktif Pindah'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 8,
+                                    child: Text('Aktif Nonrespon'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 9,
+                                    child: Text('Duplikat'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 10,
+                                    child: Text('Salah Kode Wilayah'),
+                                  ),
+                                ],
+                                onChanged: (v) {
+                                  setState(() {
+                                    _batchSelectedStatus = v;
+                                  });
+                                },
+                              ),
+                            ),
+                            const Spacer(),
+                            if (_batchSaving)
+                              const SizedBox(
+                                width: 28,
+                                height: 28,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            else ...[
+                              ElevatedButton(
+                                onPressed:
+                                    (_gridController.selectedRows.isEmpty ||
+                                        _batchSelectedStatus == null ||
+                                        (_batchSelectedStatus == 9 &&
+                                            _batchDuplicateParent
+                                                .trim()
+                                                .isEmpty))
+                                    ? null
+                                    : () async {
+                                        await _applyBatchStatus(context);
+                                      },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text('Simpan'),
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _batchMode = false;
+                                    _batchSelectedStatus = null;
+                                    _batchDuplicateParent = '';
+                                  });
+                                  widget.batchModeNotifier?.value = false;
+                                },
+                                child: const Text('Batal'),
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (_batchSelectedStatus == 9) ...[
+                          const SizedBox(height: 8),
+                          TextField(
+                            decoration: const InputDecoration(
+                              labelText: 'ID SBR Parent Duplikat',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                            onChanged: (v) {
+                              setState(() {
+                                _batchDuplicateParent = v.trim();
+                              });
+                            },
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
+  }
+
+  Future<void> _applyBatchStatus(BuildContext context) async {
+    setState(() {
+      _batchSaving = true;
+    });
+    final selected = List<DataGridRow>.from(_gridController.selectedRows);
+    int success = 0;
+    for (final row in selected) {
+      final cells = row.getCells();
+      if (cells.isEmpty) continue;
+      final Direktori d = cells.last.value as Direktori;
+      final String id = d.id;
+      bool ok = false;
+      if (_batchSelectedStatus == 9) {
+        ok = await MapRepositoryImpl().markDirectoryAsDuplicate(
+          id,
+          _batchDuplicateParent.trim(),
+        );
+      } else {
+        ok = await MapRepositoryImpl().updateDirectoryStatus(
+          id,
+          _batchSelectedStatus!,
+        );
+        final cleared = await MapRepositoryImpl().clearDirectoryDuplicateParent(
+          id,
+        );
+        if (cleared) {
+          _source._setIdSbrDuplikatForId(id, null);
+        }
+      }
+      if (ok) {
+        _source._setStatusForId(id, _batchSelectedStatus!);
+        if (_batchSelectedStatus == 9) {
+          _source._setIdSbrDuplikatForId(id, _batchDuplicateParent.trim());
+        }
+        _source._markRowUpdated(id);
+        try {
+          final Map<String, dynamic> changes = {
+            'keberadaan_usaha': _batchSelectedStatus,
+          };
+          if (_batchSelectedStatus == 9 &&
+              _batchDuplicateParent.trim().isNotEmpty) {
+            changes['idsbr_duplikat'] = _batchDuplicateParent.trim();
+          }
+          context.read<ContributionBloc>().add(
+            CreateContributionEvent(
+              actionType: 'update',
+              targetType: 'direktori',
+              targetId: id,
+              changes: changes,
+            ),
+          );
+        } catch (_) {}
+        success++;
+      }
+    }
+    setState(() {
+      _batchSaving = false;
+      _batchMode = false;
+      _batchSelectedStatus = null;
+      _batchDuplicateParent = '';
+    });
+    // Berhasil, tidak tampilkan SnackBar agar tidak mengganggu
   }
 
   void _showDetailDialog(BuildContext context, Direktori direktori) {
@@ -357,11 +699,13 @@ class _DirektoriDataGridSource extends DataGridSource {
   final Set<String> _editingIds = <String>{};
   final Map<String, String> _editedNamaById = <String, String>{};
   final Map<String, String?> _editedAlamatById = <String, String?>{};
+  final Map<String, String?> _editedEmailById = <String, String?>{};
   final Map<String, int?> _editedStatusById = <String, int?>{};
   final Map<String, String> _editedIdSbrDuplikatById = <String, String>{};
   final Map<String, String?> _editedSkalaUsahaById = <String, String?>{};
   final Set<String> _savingIds = <String>{};
   final Set<String> _recentlyUpdatedIds = <String>{};
+  String? _skalaFilter;
 
   _DirektoriDataGridSource({
     required this.data,
@@ -371,12 +715,18 @@ class _DirektoriDataGridSource extends DataGridSource {
     this.onRowUpdatedWithId,
   }) {
     _rows = data
+        .where(
+          (d) =>
+              _skalaFilter == null ||
+              _normalizeSkalaUsaha(d.skalaUsaha) == _skalaFilter,
+        )
         .map(
           (d) => DataGridRow(
             cells: [
               DataGridCell<String>(columnName: 'id_sbr', value: d.idSbr),
               DataGridCell<String>(columnName: 'nama', value: d.namaUsaha),
               DataGridCell<String?>(columnName: 'alamat', value: d.alamat),
+              DataGridCell<String?>(columnName: 'email', value: d.email),
               DataGridCell<String?>(
                 columnName: 'skala_usaha',
                 value: d.skalaUsaha,
@@ -411,12 +761,18 @@ class _DirektoriDataGridSource extends DataGridSource {
   void updateData(List<Direktori> newData) {
     data = newData;
     _rows = data
+        .where(
+          (d) =>
+              _skalaFilter == null ||
+              _normalizeSkalaUsaha(d.skalaUsaha) == _skalaFilter,
+        )
         .map(
           (d) => DataGridRow(
             cells: [
               DataGridCell<String>(columnName: 'id_sbr', value: d.idSbr),
               DataGridCell<String>(columnName: 'nama', value: d.namaUsaha),
               DataGridCell<String?>(columnName: 'alamat', value: d.alamat),
+              DataGridCell<String?>(columnName: 'email', value: d.email),
               DataGridCell<String?>(
                 columnName: 'skala_usaha',
                 value: d.skalaUsaha,
@@ -444,6 +800,47 @@ class _DirektoriDataGridSource extends DataGridSource {
     notifyListeners();
   }
 
+  void applySkalaFilter(String? filter) {
+    _skalaFilter = (filter == null || filter.isEmpty) ? null : filter;
+    _rows = data
+        .where(
+          (d) =>
+              _skalaFilter == null ||
+              _normalizeSkalaUsaha(d.skalaUsaha) == _skalaFilter,
+        )
+        .map(
+          (d) => DataGridRow(
+            cells: [
+              DataGridCell<String>(columnName: 'id_sbr', value: d.idSbr),
+              DataGridCell<String>(columnName: 'nama', value: d.namaUsaha),
+              DataGridCell<String?>(columnName: 'alamat', value: d.alamat),
+              DataGridCell<String?>(columnName: 'email', value: d.email),
+              DataGridCell<String?>(
+                columnName: 'skala_usaha',
+                value: d.skalaUsaha,
+              ),
+              DataGridCell<int?>(
+                columnName: 'status',
+                value: d.keberadaanUsaha,
+              ),
+              DataGridCell<String?>(
+                columnName: 'idsbr_duplikat',
+                value: d.idSbrDuplikat,
+              ),
+              DataGridCell<bool>(
+                columnName: 'koordinat',
+                value:
+                    ((d.latitude ?? d.lat) != null) &&
+                    ((d.longitude ?? d.long) != null),
+              ),
+              DataGridCell<Direktori>(columnName: 'aksi', value: d),
+            ],
+          ),
+        )
+        .toList();
+    notifyListeners();
+  }
+
   @override
   DataGridRowAdapter buildRow(DataGridRow row) {
     final cells = row.getCells();
@@ -451,8 +848,8 @@ class _DirektoriDataGridSource extends DataGridSource {
     if (direktori == null) {
       return const DataGridRowAdapter(cells: []);
     }
-    final int? status = cells[4].value as int?;
-    final bool hasCoord = cells[6].value as bool;
+    final int? status = cells[5].value as int?;
+    final bool hasCoord = cells[7].value as bool;
     final DateTime? updatedAt = direktori.updatedAt;
     final String id = direktori.id;
     final bool isEditing = _editingIds.contains(id);
@@ -736,6 +1133,156 @@ class _DirektoriDataGridSource extends DataGridSource {
                 ),
         ),
         Container(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Expanded(
+                child: Text(
+                  (_editedEmailById[id]?.isNotEmpty == true)
+                      ? _editedEmailById[id]!
+                      : (cells[3].value ?? '-') as String,
+                  style: const TextStyle(fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              if (isEditing) ...[
+                if ((_editedEmailById[id]?.isNotEmpty != true) &&
+                    ((((cells[3].value ?? '') as String).isEmpty) ||
+                        ((cells[3].value ?? '-') == '-')))
+                  Tooltip(
+                    message: 'Tempel Email dari clipboard',
+                    child: Builder(
+                      builder: (ctx) => InkWell(
+                        onTap: () async {
+                          try {
+                            final data = await Clipboard.getData(
+                              Clipboard.kTextPlain,
+                            );
+                            final txt = data?.text?.trim();
+                            if ((txt ?? '').isEmpty) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Clipboard kosong'),
+                                  duration: Duration(milliseconds: 900),
+                                ),
+                              );
+                              return;
+                            }
+                            _editedEmailById[id] = txt;
+                            notifyListeners();
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(
+                                content: Text('Email ditempel'),
+                                duration: Duration(milliseconds: 900),
+                              ),
+                            );
+                          } catch (_) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(
+                                content: Text('Gagal membaca clipboard'),
+                                duration: Duration(milliseconds: 900),
+                              ),
+                            );
+                          }
+                        },
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: const BoxDecoration(
+                            color: Colors.orange,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.content_paste,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ] else ...[
+                if ((_editedEmailById[id]?.isNotEmpty != true) &&
+                    ((((cells[3].value ?? '') as String).isEmpty) ||
+                        ((cells[3].value ?? '-') == '-')))
+                  Tooltip(
+                    message: 'Tempel Email dari clipboard',
+                    child: Builder(
+                      builder: (ctx) => InkWell(
+                        onTap: () async {
+                          try {
+                            final data = await Clipboard.getData(
+                              Clipboard.kTextPlain,
+                            );
+                            final txt = data?.text?.trim();
+                            if ((txt ?? '').isEmpty) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Clipboard kosong'),
+                                  duration: Duration(milliseconds: 900),
+                                ),
+                              );
+                              return;
+                            }
+                            try {
+                              final ok = await MapRepositoryImpl()
+                                  .updateDirectoryBasicFields(id, email: txt);
+                              if (ok) {
+                                _setEmailForId(id, txt!);
+                                _markRowUpdated(id);
+                                try {
+                                  ctx.read<ContributionBloc>().add(
+                                    CreateContributionEvent(
+                                      actionType: 'update',
+                                      targetType: 'direktori',
+                                      targetId: id,
+                                      changes: {'email': txt},
+                                    ),
+                                  );
+                                } catch (_) {}
+                              }
+                            } catch (_) {}
+                            notifyListeners();
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(
+                                content: Text('Email ditempel'),
+                                duration: Duration(milliseconds: 900),
+                              ),
+                            );
+                          } catch (_) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(
+                                content: Text('Gagal membaca clipboard'),
+                                duration: Duration(milliseconds: 900),
+                              ),
+                            );
+                          }
+                        },
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: const BoxDecoration(
+                            color: Colors.orange,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.content_paste,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+        Container(
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           child: isEditing
@@ -755,7 +1302,7 @@ class _DirektoriDataGridSource extends DataGridSource {
                   ),
                 )
               : Text(
-                  _normalizeSkalaUsaha(cells[3].value) ?? '-',
+                  _normalizeSkalaUsaha(cells[4].value) ?? '-',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -826,218 +1373,227 @@ class _DirektoriDataGridSource extends DataGridSource {
                 child: Text(
                   (_editedIdSbrDuplikatById[id]?.isNotEmpty == true)
                       ? _editedIdSbrDuplikatById[id]!
-                      : (cells[5].value ?? '-') as String,
+                      : (cells[6].value ?? '-') as String,
                   style: const TextStyle(fontSize: 12),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 6),
-              if (((cells[5].value ?? '') as String).isNotEmpty &&
-                  (cells[5].value ?? '-') != '-')
-                Tooltip(
-                  message: 'Copy ID SBR Duplikat',
-                  child: Builder(
-                    builder: (ctx) => InkWell(
-                      onTap: () {
-                        final txt = (cells[5].value ?? '').toString();
-                        Clipboard.setData(ClipboardData(text: txt));
-                        ScaffoldMessenger.of(ctx).showSnackBar(
-                          const SnackBar(
-                            content: Text('ID SBR Duplikat disalin'),
-                            duration: Duration(milliseconds: 800),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: const BoxDecoration(
-                          color: Colors.blue,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.copy,
-                          color: Colors.white,
-                          size: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+              if (false) const SizedBox.shrink(),
               if (isEditing) ...[
                 const SizedBox(width: 6),
-                Tooltip(
-                  message: 'Tempel ID SBR Duplikat dari clipboard',
-                  child: Builder(
-                    builder: (ctx) => InkWell(
-                      onTap: () async {
-                        try {
-                          final data = await Clipboard.getData(
-                            Clipboard.kTextPlain,
-                          );
-                          final txt = data?.text?.trim();
-                          if ((txt ?? '').isEmpty) {
+                if ((_editedIdSbrDuplikatById[id]?.isNotEmpty != true) &&
+                    ((((cells[6].value ?? '') as String).isEmpty) ||
+                        ((cells[6].value ?? '-') == '-')))
+                  Tooltip(
+                    message: 'Tempel ID SBR Duplikat dari clipboard',
+                    child: Builder(
+                      builder: (ctx) => InkWell(
+                        onTap: () async {
+                          try {
+                            final data = await Clipboard.getData(
+                              Clipboard.kTextPlain,
+                            );
+                            final txt = data?.text?.trim();
+                            if ((txt ?? '').isEmpty) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Clipboard kosong'),
+                                  duration: Duration(milliseconds: 900),
+                                ),
+                              );
+                              return;
+                            }
+                            _editedIdSbrDuplikatById[id] = txt!;
+                            _editedStatusById[id] = 9;
+                            notifyListeners();
                             ScaffoldMessenger.of(ctx).showSnackBar(
                               const SnackBar(
-                                content: Text('Clipboard kosong'),
+                                content: Text('ID SBR duplikat ditempel'),
                                 duration: Duration(milliseconds: 900),
                               ),
                             );
-                            return;
+                          } catch (_) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(
+                                content: Text('Gagal membaca clipboard'),
+                                duration: Duration(milliseconds: 900),
+                              ),
+                            );
                           }
-                          _editedIdSbrDuplikatById[id] = txt!;
+                        },
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: const BoxDecoration(
+                            color: Colors.orange,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.content_paste,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 6),
+                if ((_editedIdSbrDuplikatById[id]?.isNotEmpty == true) ||
+                    ((((cells[6].value ?? '') as String).isNotEmpty) &&
+                        (cells[6].value ?? '-') != '-')) ...[
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: 'Hapus ID SBR Duplikat',
+                    child: Builder(
+                      builder: (ctx) => InkWell(
+                        onTap: () {
+                          _editedIdSbrDuplikatById[id] = '';
+                          _setIdSbrDuplikatForId(id, null);
                           notifyListeners();
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             const SnackBar(
-                              content: Text('ID SBR duplikat ditempel'),
+                              content: Text('ID SBR duplikat dihapus'),
                               duration: Duration(milliseconds: 900),
                             ),
                           );
-                        } catch (_) {
-                          ScaffoldMessenger.of(ctx).showSnackBar(
-                            const SnackBar(
-                              content: Text('Gagal membaca clipboard'),
-                              duration: Duration(milliseconds: 900),
-                            ),
-                          );
-                        }
-                      },
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: const BoxDecoration(
-                          color: Colors.orange,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.content_paste,
-                          color: Colors.white,
-                          size: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Tooltip(
-                  message: 'Hapus ID SBR Duplikat',
-                  child: Builder(
-                    builder: (ctx) => InkWell(
-                      onTap: () {
-                        _editedIdSbrDuplikatById[id] = '';
-                        _setIdSbrDuplikatForId(id, null);
-                        notifyListeners();
-                        ScaffoldMessenger.of(ctx).showSnackBar(
-                          const SnackBar(
-                            content: Text('ID SBR duplikat dihapus'),
-                            duration: Duration(milliseconds: 900),
+                        },
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
                           ),
-                        );
-                      },
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.clear,
-                          color: Colors.white,
-                          size: 14,
+                          child: const Icon(
+                            Icons.clear,
+                            color: Colors.white,
+                            size: 14,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
               if (!isEditing) ...[
                 const SizedBox(width: 6),
-                Tooltip(
-                  message: 'Tempel ID SBR Duplikat dari clipboard',
-                  child: Builder(
-                    builder: (ctx) => InkWell(
-                      onTap: () async {
-                        try {
-                          final data = await Clipboard.getData(
-                            Clipboard.kTextPlain,
-                          );
-                          final txt = data?.text?.trim();
-                          if ((txt ?? '').isEmpty) {
+                if ((_editedIdSbrDuplikatById[id]?.isNotEmpty != true) &&
+                    ((((cells[6].value ?? '') as String).isEmpty) ||
+                        ((cells[6].value ?? '-') == '-')))
+                  Tooltip(
+                    message: 'Tempel ID SBR Duplikat dari clipboard',
+                    child: Builder(
+                      builder: (ctx) => InkWell(
+                        onTap: () async {
+                          try {
+                            final data = await Clipboard.getData(
+                              Clipboard.kTextPlain,
+                            );
+                            final txt = data?.text?.trim();
+                            if ((txt ?? '').isEmpty) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Clipboard kosong'),
+                                  duration: Duration(milliseconds: 900),
+                                ),
+                              );
+                              return;
+                            }
+                            _editedIdSbrDuplikatById[id] = txt!;
+                            try {
+                              final ok = await MapRepositoryImpl()
+                                  .markDirectoryAsDuplicate(id, txt!);
+                              if (ok) {
+                                _setStatusForId(id, 9);
+                                _setIdSbrDuplikatForId(id, txt!);
+                                _markRowUpdated(id);
+                                final Map<String, dynamic> changes = {
+                                  'keberadaan_usaha': 9,
+                                  'idsbr_duplikat': txt!,
+                                };
+                                try {
+                                  ctx.read<ContributionBloc>().add(
+                                    CreateContributionEvent(
+                                      actionType: 'update',
+                                      targetType: 'direktori',
+                                      targetId: id,
+                                      changes: changes,
+                                    ),
+                                  );
+                                } catch (_) {}
+                              }
+                            } catch (_) {}
+                            notifyListeners();
                             ScaffoldMessenger.of(ctx).showSnackBar(
                               const SnackBar(
-                                content: Text('Clipboard kosong'),
+                                content: Text('ID SBR duplikat ditempel'),
                                 duration: Duration(milliseconds: 900),
                               ),
                             );
-                            return;
+                          } catch (_) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(
+                                content: Text('Gagal membaca clipboard'),
+                                duration: Duration(milliseconds: 900),
+                              ),
+                            );
                           }
-                          _editedIdSbrDuplikatById[id] = txt!;
+                        },
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: const BoxDecoration(
+                            color: Colors.orange,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.content_paste,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 6),
+                if ((_editedIdSbrDuplikatById[id]?.isNotEmpty == true) ||
+                    ((((cells[6].value ?? '') as String).isNotEmpty) &&
+                        (cells[6].value ?? '-') != '-')) ...[
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: 'Hapus ID SBR Duplikat',
+                    child: Builder(
+                      builder: (ctx) => InkWell(
+                        onTap: () {
+                          _editedIdSbrDuplikatById[id] = '';
+                          _setIdSbrDuplikatForId(id, null);
                           notifyListeners();
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             const SnackBar(
-                              content: Text('ID SBR duplikat ditempel'),
+                              content: Text('ID SBR duplikat dihapus'),
                               duration: Duration(milliseconds: 900),
                             ),
                           );
-                        } catch (_) {
-                          ScaffoldMessenger.of(ctx).showSnackBar(
-                            const SnackBar(
-                              content: Text('Gagal membaca clipboard'),
-                              duration: Duration(milliseconds: 900),
-                            ),
-                          );
-                        }
-                      },
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: const BoxDecoration(
-                          color: Colors.orange,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.content_paste,
-                          color: Colors.white,
-                          size: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Tooltip(
-                  message: 'Hapus ID SBR Duplikat',
-                  child: Builder(
-                    builder: (ctx) => InkWell(
-                      onTap: () {
-                        _editedIdSbrDuplikatById[id] = '';
-                        _setIdSbrDuplikatForId(id, null);
-                        notifyListeners();
-                        ScaffoldMessenger.of(ctx).showSnackBar(
-                          const SnackBar(
-                            content: Text('ID SBR duplikat dihapus'),
-                            duration: Duration(milliseconds: 900),
+                        },
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
                           ),
-                        );
-                      },
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.clear,
-                          color: Colors.white,
-                          size: 14,
+                          child: const Icon(
+                            Icons.clear,
+                            color: Colors.white,
+                            size: 14,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
             ],
           ),
@@ -1227,6 +1783,7 @@ class _DirektoriDataGridSource extends DataGridSource {
                     _editingIds.add(id);
                     _editedNamaById[id] = cells[1].value ?? '';
                     _editedAlamatById[id] = cells[2].value;
+                    _editedEmailById[id] = cells[3].value;
                     notifyListeners();
                   },
                 )
@@ -1285,6 +1842,7 @@ class _DirektoriDataGridSource extends DataGridSource {
                             id,
                             namaUsaha: _editedNamaById[id],
                             alamat: _editedAlamatById[id],
+                            email: _editedEmailById[id],
                             skalaUsaha: skalaToSave,
                             updateSkalaUsaha: skalaChanged,
                           );
@@ -1294,6 +1852,9 @@ class _DirektoriDataGridSource extends DataGridSource {
                         }
                         if (_editedAlamatById[id] != null) {
                           _setAlamatForId(id, _editedAlamatById[id]!);
+                        }
+                        if (_editedEmailById[id] != null) {
+                          _setEmailForId(id, _editedEmailById[id]!);
                         }
                         if (skalaChanged && desiredUiSkala != null) {
                           _setSkalaUsahaForId(id, desiredUiSkala);
@@ -1337,6 +1898,9 @@ class _DirektoriDataGridSource extends DataGridSource {
                         if (_editedAlamatById[id] != null) {
                           changes['alamat'] = _editedAlamatById[id];
                         }
+                        if (_editedEmailById[id] != null) {
+                          changes['email'] = _editedEmailById[id];
+                        }
                         if (skalaChanged && desiredUiSkala != null) {
                           changes['skala_usaha'] = desiredUiSkala;
                         }
@@ -1367,6 +1931,7 @@ class _DirektoriDataGridSource extends DataGridSource {
                       _editedStatusById.remove(id);
                       _editedIdSbrDuplikatById.remove(id);
                       _editedSkalaUsahaById.remove(id);
+                      _editedEmailById.remove(id);
                       _savingIds.remove(id);
                       notifyListeners();
                     },
@@ -1454,10 +2019,11 @@ class _DirektoriDataGridSource extends DataGridSource {
         old[1],
         old[2],
         old[3],
+        old[4],
         DataGridCell<int?>(columnName: 'status', value: status),
-        old[5],
         old[6],
         old[7],
+        old[8],
       ],
     );
     _rows[idx] = updated;
@@ -1478,9 +2044,10 @@ class _DirektoriDataGridSource extends DataGridSource {
         old[2],
         old[3],
         old[4],
+        old[5],
         DataGridCell<String?>(columnName: 'idsbr_duplikat', value: parent),
-        old[6],
         old[7],
+        old[8],
       ],
     );
     _rows[idx] = updated;
@@ -1504,6 +2071,7 @@ class _DirektoriDataGridSource extends DataGridSource {
         old[5],
         old[6],
         old[7],
+        old[8],
       ],
     );
     _rows[idx] = updated;
@@ -1527,6 +2095,31 @@ class _DirektoriDataGridSource extends DataGridSource {
         old[5],
         old[6],
         old[7],
+        old[8],
+      ],
+    );
+    _rows[idx] = updated;
+    notifyListeners();
+  }
+
+  void _setEmailForId(String id, String emailBaru) {
+    final idx = _rows.indexWhere((r) {
+      final d = r.getCells().last.value as Direktori;
+      return d.id == id;
+    });
+    if (idx < 0) return;
+    final old = _rows[idx].getCells();
+    final updated = DataGridRow(
+      cells: [
+        old[0],
+        old[1],
+        old[2],
+        DataGridCell<String?>(columnName: 'email', value: emailBaru),
+        old[4],
+        old[5],
+        old[6],
+        old[7],
+        old[8],
       ],
     );
     _rows[idx] = updated;
@@ -1548,8 +2141,9 @@ class _DirektoriDataGridSource extends DataGridSource {
         old[3],
         old[4],
         old[5],
+        old[6],
         DataGridCell<bool>(columnName: 'koordinat', value: hasCoord),
-        old[7],
+        old[8],
       ],
     );
     _rows[idx] = updated;
@@ -1563,7 +2157,7 @@ class _DirektoriDataGridSource extends DataGridSource {
     });
     if (idx < 0) return false;
     final cells = _rows[idx].getCells();
-    final bool hasCoord = cells[6].value as bool? ?? false;
+    final bool hasCoord = cells[7].value as bool? ?? false;
     return hasCoord;
   }
 
@@ -1865,6 +2459,51 @@ class _DirektoriDataGridSource extends DataGridSource {
       }
       notifyListeners();
     }
+  }
+
+  Future<String?> _pickSkalaFilter(
+    BuildContext context,
+    String? current,
+  ) async {
+    final String? selected = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Filter Skala Usaha'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(ctx).pop('UMKM'),
+            child: Row(
+              children: [
+                Icon(Icons.filter_alt, size: 16, color: Colors.blue[600]),
+                const SizedBox(width: 8),
+                const Text('UMKM', style: TextStyle(fontSize: 13)),
+              ],
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(ctx).pop('UB'),
+            child: Row(
+              children: [
+                Icon(Icons.filter_alt, size: 16, color: Colors.blue[600]),
+                const SizedBox(width: 8),
+                const Text('UB', style: TextStyle(fontSize: 13)),
+              ],
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(ctx).pop(''),
+            child: Row(
+              children: [
+                Icon(Icons.filter_alt_off, size: 16, color: Colors.grey[700]),
+                const SizedBox(width: 8),
+                const Text('Semua', style: TextStyle(fontSize: 13)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    return selected;
   }
 
   Widget _statusItem(BuildContext ctx, int value, String label) {

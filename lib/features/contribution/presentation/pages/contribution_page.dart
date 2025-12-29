@@ -48,13 +48,6 @@ class _ContributionPageState extends State<ContributionPage> {
                 backgroundColor: Colors.red,
               ),
             );
-          } else if (state is ContributionCreated) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Kontribusi berhasil dibuat!'),
-                backgroundColor: Colors.green,
-              ),
-            );
           }
         },
         builder: (context, state) {

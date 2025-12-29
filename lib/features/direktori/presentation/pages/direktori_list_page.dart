@@ -68,6 +68,7 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
   String? _selectedLetter;
   bool _showStats = true;
   final Map<String, DateTime> _locallyUpdatedAtById = {};
+  final ValueNotifier<bool> _batchModeNotifier = ValueNotifier<bool>(false);
 
   Map<String, int> _computeAlphabetCounts(List<Direktori> list) {
     final letters = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -577,10 +578,13 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                         },
                       ),
                       Tooltip(
-                        message: 'Copy rekap alfabet',
+                        message: 'Batch Edit',
                         child: IconButton(
-                          onPressed: _copyAlphabetRecap,
-                          icon: const Icon(Icons.copy),
+                          onPressed: () {
+                            _batchModeNotifier.value =
+                                !_batchModeNotifier.value;
+                          },
+                          icon: const Icon(Icons.playlist_add_check),
                         ),
                       ),
                     ],
@@ -652,6 +656,14 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                                   title: 'Jumlah Updated',
                                   value: stats!['updated']?.toString() ?? '0',
                                   color: Colors.orange[50]!,
+                                ),
+                                const SizedBox(width: 8),
+                                _StatCard(
+                                  title: 'UB Aktif',
+                                  value: (stats!['ub_aktif'] ?? 0).toString(),
+                                  small:
+                                      '${stats!['ub_aktif'] ?? 0} dari ${stats!['aktif'] ?? 0}',
+                                  color: Colors.indigo[50]!,
                                 ),
                                 const SizedBox(width: 8),
                                 _StatCard(
@@ -1027,6 +1039,7 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                         // Table
                         Expanded(
                           child: DirektoriDataGrid(
+                            batchModeNotifier: _batchModeNotifier,
                             direktoriList: state.direktoriList,
                             scrollController: _scrollController,
                             isLoadingMore: state.isLoadingMore,
