@@ -1243,6 +1243,23 @@ class MapRepositoryImpl implements MapRepository {
     }
   }
 
+  Future<bool> updateDirectoryIdSbr(String id, String idSbr) async {
+    try {
+      await _supabaseClient
+          .from('direktori')
+          .update({
+            'id_sbr': idSbr,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', id);
+      invalidatePlacesCache();
+      return true;
+    } catch (e) {
+      debugPrint('MapRepository: Error updateDirectoryIdSbr: $e');
+      return false;
+    }
+  }
+
   @override
   Future<String?> getKbliJudul(String kodeKbli) async {
     try {

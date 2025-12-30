@@ -10,6 +10,7 @@ import '../bloc/direktori_state.dart';
 import '../widgets/direktori_data_grid.dart';
 import '../widgets/direktori_search_bar.dart';
 import '../widgets/batch_insert_dialog.dart';
+import '../widgets/sync_usaha_baru_dialog.dart';
 import '../../domain/usecases/get_direktori_list.dart';
 import '../../data/repositories/direktori_repository_impl.dart';
 import '../../data/datasources/direktori_remote_datasource.dart';
@@ -69,6 +70,20 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
   bool _showStats = true;
   final Map<String, DateTime> _locallyUpdatedAtById = {};
   final ValueNotifier<bool> _batchModeNotifier = ValueNotifier<bool>(false);
+  bool _filterSbrZeroNonActive = false;
+
+  List<Direktori> _getFilteredList(List<Direktori> list) {
+    if (_filterSbrZeroNonActive) {
+      return list
+          .where((d) => d.idSbr == '0' && d.keberadaanUsaha != 1)
+          .toList();
+    }
+    return list;
+  }
+
+  int _countUsahaBaru(List<Direktori> list) {
+    return list.where((d) => d.idSbr == '0').length;
+  }
 
   Map<String, int> _computeAlphabetCounts(List<Direktori> list) {
     final letters = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -474,6 +489,43 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                         icon: const Icon(Icons.add_box_outlined),
                         tooltip: 'Tambah Data (batch)',
                       ),
+                      Tooltip(
+                        message: 'Sinkron ID SBR (Batch)',
+                        child: IconButton(
+                          onPressed: () async {
+                            final res = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => const SyncUsahaBaruDialog(),
+                            );
+                            if (res == true) {
+                              _onRefresh();
+                              try {
+                                context.read<ContributionBloc>().add(
+                                  const RefreshAllContributionDataEvent(),
+                                );
+                              } catch (_) {}
+                            }
+                          },
+                          icon: const Icon(Icons.sync_alt, color: Colors.teal),
+                        ),
+                      ),
+                      Tooltip(
+                        message: _filterSbrZeroNonActive
+                            ? 'Tampilkan Semua'
+                            : 'Filter: ID SBR 0 & Tidak Aktif',
+                        child: IconButton(
+                          onPressed: () {
+                            setState(() {
+                              _filterSbrZeroNonActive =
+                                  !_filterSbrZeroNonActive;
+                            });
+                          },
+                          icon: Icon(
+                            Icons.filter_alt,
+                            color: _filterSbrZeroNonActive ? Colors.red : null,
+                          ),
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       Tooltip(
                         message: _showStats
@@ -667,6 +719,18 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                                 ),
                                 const SizedBox(width: 8),
                                 _StatCard(
+                                  title: 'Usaha Baru (ID SBR=0)',
+                                  value: _countUsahaBaru(
+                                    (state is DirektoriLoaded)
+                                        ? state.direktoriList
+                                        : const <Direktori>[],
+                                  ).toString(),
+                                  small:
+                                      '${_countUsahaBaru((state is DirektoriLoaded) ? state.direktoriList : const <Direktori>[])} dari ${stats!['total'] ?? 0}',
+                                  color: Colors.blueGrey[50]!,
+                                ),
+                                const SizedBox(width: 8),
+                                _StatCard(
                                   title: 'Aktif: Koordinat (%)',
                                   value: _formatPercent(
                                     stats!['aktif_with_coord'] ?? 0,
@@ -708,6 +772,9 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                                 Expanded(
                                   child: LayoutBuilder(
                                     builder: (ctx, constraints) {
+                                      final displayList = _getFilteredList(
+                                        state.direktoriList,
+                                      );
                                       final letters =
                                           '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(
                                             '',
@@ -718,7 +785,7 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                                       final DateTime threshold = DateTime.parse(
                                         '2025-11-01 13:35:36.438909+00',
                                       );
-                                      for (final d in state.direktoriList) {
+                                      for (final d in displayList) {
                                         final n = (d.namaUsaha).trim();
                                         if (n.isEmpty) continue;
                                         final first = n[0].toUpperCase();
@@ -754,8 +821,7 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                                                         setState(() {
                                                           _selectedLetter = ch;
                                                         });
-                                                        final idx = state
-                                                            .direktoriList
+                                                        final idx = displayList
                                                             .indexWhere((d) {
                                                               final n =
                                                                   (d.namaUsaha)
@@ -1040,7 +1106,9 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                         Expanded(
                           child: DirektoriDataGrid(
                             batchModeNotifier: _batchModeNotifier,
-                            direktoriList: state.direktoriList,
+                            direktoriList: _getFilteredList(
+                              state.direktoriList,
+                            ),
                             scrollController: _scrollController,
                             isLoadingMore: state.isLoadingMore,
                             hasReachedMax: state.hasReachedMax,

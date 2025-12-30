@@ -889,6 +889,75 @@ class _DirektoriDataGridSource extends DataGridSource {
                 ),
               ),
               const SizedBox(width: 6),
+              if (((cells[0].value ?? '') as String).isEmpty ||
+                  ((cells[0].value ?? '-') == '-') ||
+                  ((cells[0].value ?? '').toString().trim() == '0'))
+                Tooltip(
+                  message: 'Tempel ID SBR dari clipboard',
+                  child: Builder(
+                    builder: (ctx) => InkWell(
+                      onTap: () async {
+                        try {
+                          final data = await Clipboard.getData(
+                            Clipboard.kTextPlain,
+                          );
+                          final txt = data?.text?.trim();
+                          if ((txt ?? '').isEmpty) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(
+                                content: Text('Clipboard kosong'),
+                                duration: Duration(milliseconds: 900),
+                              ),
+                            );
+                            return;
+                          }
+                          final ok = await MapRepositoryImpl()
+                              .updateDirectoryIdSbr(id, txt!);
+                          if (ok) {
+                            _setIdSbrForId(id, txt);
+                            _markRowUpdated(id);
+                            try {
+                              ctx.read<ContributionBloc>().add(
+                                CreateContributionEvent(
+                                  actionType: 'update',
+                                  targetType: 'direktori',
+                                  targetId: id,
+                                  changes: {'id_sbr': txt},
+                                ),
+                              );
+                            } catch (_) {}
+                          }
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                              content: Text('ID SBR ditempel'),
+                              duration: Duration(milliseconds: 900),
+                            ),
+                          );
+                        } catch (_) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                              content: Text('Gagal membaca clipboard'),
+                              duration: Duration(milliseconds: 900),
+                            ),
+                          );
+                        }
+                      },
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: const BoxDecoration(
+                          color: Colors.orange,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.content_paste,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               if (((cells[0].value ?? '') as String).isNotEmpty &&
                   (cells[0].value ?? '-') != '-')
                 Tooltip(
@@ -2126,6 +2195,30 @@ class _DirektoriDataGridSource extends DataGridSource {
     notifyListeners();
   }
 
+  void _setIdSbrForId(String id, String idSbrBaru) {
+    final idx = _rows.indexWhere((r) {
+      final d = r.getCells().last.value as Direktori;
+      return d.id == id;
+    });
+    if (idx < 0) return;
+    final old = _rows[idx].getCells();
+    final updated = DataGridRow(
+      cells: [
+        DataGridCell<String>(columnName: 'id_sbr', value: idSbrBaru),
+        old[1],
+        old[2],
+        old[3],
+        old[4],
+        old[5],
+        old[6],
+        old[7],
+        old[8],
+      ],
+    );
+    _rows[idx] = updated;
+    notifyListeners();
+  }
+
   void _setKoordinatForId(String id, bool hasCoord) {
     final idx = _rows.indexWhere((r) {
       final d = r.getCells().last.value as Direktori;
@@ -2565,11 +2658,12 @@ class _DirektoriDataGridSource extends DataGridSource {
         old[0],
         old[1],
         old[2],
+        old[3],
         DataGridCell<String?>(columnName: 'skala_usaha', value: skala),
-        old[4],
         old[5],
         old[6],
         old[7],
+        old[8],
       ],
     );
     _rows[idx] = updated;
