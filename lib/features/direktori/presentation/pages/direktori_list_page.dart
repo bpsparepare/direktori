@@ -20,6 +20,10 @@ import '../../../map/data/models/direktori_model.dart';
 import '../../../contribution/presentation/bloc/contribution_bloc.dart';
 import '../../../contribution/presentation/bloc/contribution_event.dart';
 import '../../../../core/config/app_constants.dart';
+import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
+import 'package:path_provider/path_provider.dart';
+import 'package:open_file/open_file.dart';
+import 'dart:io';
 
 class DirektoriListPage extends StatelessWidget {
   final void Function(String id)? onNavigateToMap;
@@ -159,6 +163,97 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
     final maxScroll = _scrollController.position.maxScrollExtent;
     final currentScroll = _scrollController.offset;
     return currentScroll >= (maxScroll * 0.9);
+  }
+
+  Future<void> _exportGeneric({
+    required Future<List<Map<String, dynamic>>> Function() fetchData,
+    required String filenamePrefix,
+  }) async {
+    try {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Sedang mengunduh data...')));
+
+      final data = await fetchData();
+
+      if (data.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tidak ada data untuk diexport')),
+        );
+        return;
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sedang membuat file Excel...')),
+      );
+
+      final xlsio.Workbook workbook = xlsio.Workbook();
+      final xlsio.Worksheet sheet = workbook.worksheets[0];
+
+      final keys = data.first.keys.toList();
+      for (int i = 0; i < keys.length; i++) {
+        sheet.getRangeByIndex(1, i + 1).setText(keys[i]);
+        sheet.getRangeByIndex(1, i + 1).cellStyle.bold = true;
+      }
+
+      for (int r = 0; r < data.length; r++) {
+        final row = data[r];
+        for (int c = 0; c < keys.length; c++) {
+          final key = keys[c];
+          final value = row[key];
+          if (value != null) {
+            sheet.getRangeByIndex(r + 2, c + 1).setText(value.toString());
+          }
+        }
+      }
+
+      final List<int> bytes = workbook.saveAsStream();
+      workbook.dispose();
+
+      final directory = await getApplicationDocumentsDirectory();
+      final path =
+          '${directory.path}/${filenamePrefix}_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      final file = File(path);
+      await file.writeAsBytes(bytes, flush: true);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Export berhasil: $path')));
+
+      final result = await OpenFile.open(path);
+      if (result.type != ResultType.done) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal membuka file: ${result.message}')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Export gagal: $e')));
+    }
+  }
+
+  Future<void> _exportToExcel() async {
+    final repo = MapRepositoryImpl();
+    await _exportGeneric(
+      fetchData: repo.getDirektoriLengkapData,
+      filenamePrefix: 'direktori_lengkap',
+    );
+  }
+
+  Future<void> _exportSbrToExcel() async {
+    final repo = MapRepositoryImpl();
+    await _exportGeneric(
+      fetchData: repo.getDirektoriLengkapSbrData,
+      filenamePrefix: 'direktori_lengkap_sbr',
+    );
   }
 
   void _onSearch(String query) {
@@ -488,6 +583,22 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                         },
                         icon: const Icon(Icons.add_box_outlined),
                         tooltip: 'Tambah Data (batch)',
+                      ),
+                      IconButton(
+                        onPressed: _exportToExcel,
+                        icon: const Icon(
+                          Icons.file_download,
+                          color: Colors.green,
+                        ),
+                        tooltip: 'Export Excel (V_Lengkap)',
+                      ),
+                      IconButton(
+                        onPressed: _exportSbrToExcel,
+                        icon: const Icon(
+                          Icons.file_download_outlined,
+                          color: Colors.blue,
+                        ),
+                        tooltip: 'Export Excel (V_Lengkap_SBR)',
                       ),
                       Tooltip(
                         message: 'Sinkron ID SBR (Batch)',

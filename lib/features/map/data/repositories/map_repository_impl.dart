@@ -1292,4 +1292,56 @@ class MapRepositoryImpl implements MapRepository {
       return null;
     }
   }
+
+  @override
+  Future<List<Map<String, dynamic>>> getDirektoriLengkapData() async {
+    try {
+      const int batchSize = 1000;
+      int offset = 0;
+      final List<Map<String, dynamic>> all = [];
+      while (true) {
+        final response = await _supabaseClient
+            .from('v_direktori_lengkap')
+            .select()
+            .range(offset, offset + batchSize - 1);
+        final List<Map<String, dynamic>> page = List<Map<String, dynamic>>.from(
+          response,
+        );
+        if (page.isEmpty) break;
+        all.addAll(page);
+        if (page.length < batchSize) break;
+        offset += batchSize;
+      }
+      return all;
+    } catch (e) {
+      debugPrint('MapRepository: Error fetching v_direktori_lengkap: $e');
+      return [];
+    }
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getDirektoriLengkapSbrData() async {
+    try {
+      const int batchSize = 1000;
+      int offset = 0;
+      final List<Map<String, dynamic>> all = [];
+      while (true) {
+        final response = await _supabaseClient
+            .from('v_direktori_lengkap_sbr')
+            .select()
+            .range(offset, offset + batchSize - 1);
+        final List<Map<String, dynamic>> page = List<Map<String, dynamic>>.from(
+          response,
+        );
+        if (page.isEmpty) break;
+        all.addAll(page);
+        if (page.length < batchSize) break;
+        offset += batchSize;
+      }
+      return all;
+    } catch (e) {
+      debugPrint('MapRepository: Error fetching v_direktori_lengkap_sbr: $e');
+      return [];
+    }
+  }
 }

@@ -58,4 +58,6 @@ abstract class MapRepository {
   // Get KBLI title by code
   Future<String?> getKbliJudul(String kodeKbli);
   Future<bool> markDirectoryAsDuplicate(String id, String parentIdSbr);
+  Future<List<Map<String, dynamic>>> getDirektoriLengkapData();
+  Future<List<Map<String, dynamic>>> getDirektoriLengkapSbrData();
 }
