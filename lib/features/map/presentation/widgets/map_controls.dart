@@ -6,7 +6,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../../data/repositories/map_repository_impl.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'compass_widget.dart';
 import '../../domain/entities/polygon_data.dart';
 import 'map_type.dart';
@@ -28,6 +27,10 @@ class MapControls extends StatefulWidget {
   final double currentOffsetY; // Current Y offset
   final bool showScrapedMarkers; // Toggle scraped markers visibility
   final Function(bool)? onToggleScrapedMarkers; // Toggle callback
+  final bool showGroundcheckMarkers;
+  final Function(bool)? onToggleGroundcheckMarkers;
+  final bool showDirectoryMarkers;
+  final Function(bool)? onToggleDirectoryMarkers;
   final bool showMarkerLabels;
   final Function(bool)? onToggleMarkerLabels;
 
@@ -48,6 +51,10 @@ class MapControls extends StatefulWidget {
     this.currentOffsetY = 0.0, // Add to constructor
     this.showScrapedMarkers = true,
     this.onToggleScrapedMarkers,
+    this.showGroundcheckMarkers = true,
+    this.onToggleGroundcheckMarkers,
+    this.showDirectoryMarkers = true,
+    this.onToggleDirectoryMarkers,
     this.showMarkerLabels = true,
     this.onToggleMarkerLabels,
   });
@@ -236,6 +243,33 @@ class _MapControlsState extends State<MapControls> {
           ),
           const SizedBox(height: 8),
 
+          // Toggle directory markers visibility
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: Icon(
+                Icons.store,
+                color: widget.showDirectoryMarkers ? Colors.red : Colors.grey,
+              ),
+              tooltip: widget.showDirectoryMarkers
+                  ? 'Sembunyikan Marker Direktori'
+                  : 'Tampilkan Marker Direktori',
+              onPressed: () => widget.onToggleDirectoryMarkers?.call(
+                !widget.showDirectoryMarkers,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           // Toggle scraped markers visibility
           Container(
             decoration: BoxDecoration(
@@ -261,6 +295,34 @@ class _MapControlsState extends State<MapControls> {
                   : 'Tampilkan Marker Scraping',
               onPressed: () => widget.onToggleScrapedMarkers?.call(
                 !widget.showScrapedMarkers,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: Icon(
+                Icons.fact_check,
+                color: widget.showGroundcheckMarkers
+                    ? Colors.deepOrange
+                    : Colors.grey,
+              ),
+              tooltip: widget.showGroundcheckMarkers
+                  ? 'Sembunyikan Marker Groundcheck'
+                  : 'Tampilkan Marker Groundcheck',
+              onPressed: () => widget.onToggleGroundcheckMarkers?.call(
+                !widget.showGroundcheckMarkers,
               ),
             ),
           ),

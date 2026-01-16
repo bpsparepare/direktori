@@ -54,13 +54,13 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   late AnimationController _rotationAnimationController;
   late Animation<double> _rotationAnimation;
 
-  // Offset variables for manual map adjustment
   double _offsetX = 0.0;
   double _offsetY = 0.0;
 
-  // Toggle scraped markers visibility
   bool _showScrapedMarkers = true;
+  bool _showDirectoryMarkers = true;
   bool _showMarkerLabels = true;
+  bool _showGroundcheckMarkers = true;
   Timer? _boundsDebounce;
 
   @override
@@ -250,8 +250,11 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     final List<Place> scrapedList = renderList
         .where((p) => p.id.startsWith('scrape:'))
         .toList();
+    final List<Place> groundcheckList = renderList
+        .where((p) => p.id.startsWith('gc:'))
+        .toList();
     final List<Place> mainList = renderList
-        .where((p) => !p.id.startsWith('scrape:'))
+        .where((p) => !p.id.startsWith('scrape:') && !p.id.startsWith('gc:'))
         .toList();
 
     return Stack(
@@ -362,7 +365,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                   ),
                 ],
               ),
-            // Draggable markers: split into scraped (below) and main (above)
+            // Draggable markers: split into scraped (below), groundcheck, and main (above)
             if (renderList.isNotEmpty) ...[
               // Scraped markers layer (rendered first = below)
               if (_showScrapedMarkers)
@@ -442,91 +445,180 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                     );
                   }).toList(),
                 ),
-              // Main markers layer (rendered after = above)
-              DragMarkers(
-                markers: mainList.map((p) {
-                  final isSelected = widget.selectedPlace?.id == p.id;
-                  final double fontSize = (_scaledFontSize() - 8).clamp(10, 14);
-                  return DragMarker(
-                    point: p.position,
-                    size: Size(170, isSelected ? 86 : 78),
-                    offset: Offset(0, isSelected ? -20 : -16),
-                    useLongPress: true,
-                    builder: (_, __, isDragging) {
-                      final Color baseColor = isSelected
-                          ? Colors.blue
-                          : Colors.red;
-                      final IconData icon = isDragging
-                          ? Icons.edit_location
-                          : Icons.location_on;
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            decoration: isSelected
-                                ? BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: baseColor.withOpacity(0.5),
-                                        blurRadius: 10,
-                                        spreadRadius: 2,
-                                      ),
-                                    ],
-                                  )
-                                : null,
-                            child: Icon(
-                              icon,
-                              color: baseColor,
-                              size: isSelected ? 40 : 32,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          if (_showMarkerLabels)
-                            Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Text(
-                                  p.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: fontSize.toDouble(),
-                                    fontWeight: FontWeight.w600,
-                                    foreground: Paint()
-                                      ..style = PaintingStyle.stroke
-                                      ..strokeWidth = 3
-                                      ..color = Colors.black,
-                                  ),
+              if (_showGroundcheckMarkers && groundcheckList.isNotEmpty)
+                MarkerLayer(
+                  markers: groundcheckList.map((p) {
+                    final isSelected = widget.selectedPlace?.id == p.id;
+                    final Color baseColor = isSelected
+                        ? Colors.green
+                        : Colors.lightGreen;
+                    final double fontSize = (_scaledFontSize() - 8).clamp(
+                      10,
+                      14,
+                    );
+                    return Marker(
+                      point: p.position,
+                      width: 160,
+                      height: isSelected ? 84 : 76,
+                      child: GestureDetector(
+                        onTap: () => widget.onPlaceTap(p),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: isSelected ? 44 : 38,
+                              height: isSelected ? 44 : 38,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: baseColor.withOpacity(0.15),
+                                border: Border.all(
+                                  color: baseColor,
+                                  width: isSelected ? 3 : 2,
                                 ),
-                                Text(
-                                  p.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: fontSize.toDouble(),
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: baseColor.withOpacity(0.5),
+                                          blurRadius: 10,
+                                          spreadRadius: 2,
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Center(
+                                child: Icon(
+                                  Icons.check_circle,
+                                  color: baseColor,
+                                  size: isSelected ? 24 : 20,
                                 ),
-                              ],
+                              ),
                             ),
-                        ],
-                      );
-                    },
-                    onTap: (_) => widget.onPlaceTap(p),
-                    onDragEnd: (_, newPoint) =>
-                        widget.onPlaceDragEnd?.call(p, newPoint),
-                    onLongDragEnd: (_, newPoint) =>
-                        widget.onPlaceDragEnd?.call(p, newPoint),
-                    scrollMapNearEdge: true,
-                    scrollNearEdgeRatio: 2.0,
-                    scrollNearEdgeSpeed: 2.0,
-                  );
-                }).toList(),
-              ),
+                            const SizedBox(height: 2),
+                            if (_showMarkerLabels)
+                              Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Text(
+                                    p.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: fontSize.toDouble(),
+                                      fontWeight: FontWeight.w600,
+                                      foreground: Paint()
+                                        ..style = PaintingStyle.stroke
+                                        ..strokeWidth = 3
+                                        ..color = Colors.black,
+                                    ),
+                                  ),
+                                  Text(
+                                    p.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: fontSize.toDouble(),
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              if (_showDirectoryMarkers && mainList.isNotEmpty)
+                DragMarkers(
+                  markers: mainList.map((p) {
+                    final isSelected = widget.selectedPlace?.id == p.id;
+                    final double fontSize = (_scaledFontSize() - 8).clamp(
+                      10,
+                      14,
+                    );
+                    return DragMarker(
+                      point: p.position,
+                      size: Size(170, isSelected ? 86 : 78),
+                      offset: Offset(0, isSelected ? -20 : -16),
+                      useLongPress: true,
+                      builder: (_, __, isDragging) {
+                        final Color baseColor = isSelected
+                            ? Colors.blue
+                            : Colors.red;
+                        final IconData icon = isDragging
+                            ? Icons.edit_location
+                            : Icons.location_on;
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              decoration: isSelected
+                                  ? BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: baseColor.withOpacity(0.5),
+                                          blurRadius: 10,
+                                          spreadRadius: 2,
+                                        ),
+                                      ],
+                                    )
+                                  : null,
+                              child: Icon(
+                                icon,
+                                color: baseColor,
+                                size: isSelected ? 40 : 32,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            if (_showMarkerLabels)
+                              Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Text(
+                                    p.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: fontSize.toDouble(),
+                                      fontWeight: FontWeight.w600,
+                                      foreground: Paint()
+                                        ..style = PaintingStyle.stroke
+                                        ..strokeWidth = 3
+                                        ..color = Colors.black,
+                                    ),
+                                  ),
+                                  Text(
+                                    p.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: fontSize.toDouble(),
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        );
+                      },
+                      onTap: (_) => widget.onPlaceTap(p),
+                      onDragEnd: (_, newPoint) =>
+                          widget.onPlaceDragEnd?.call(p, newPoint),
+                      onLongDragEnd: (_, newPoint) =>
+                          widget.onPlaceDragEnd?.call(p, newPoint),
+                      scrollMapNearEdge: true,
+                      scrollNearEdgeRatio: 2.0,
+                      scrollNearEdgeSpeed: 2.0,
+                    );
+                  }).toList(),
+                ),
             ],
             // Keep non-draggable markers (current location and temporary)
             MarkerLayer(
@@ -573,7 +665,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           rotation: _rotation,
           polygonsMeta: widget.polygonsMeta,
           currentMapType: _currentMapType,
+          showDirectoryMarkers: _showDirectoryMarkers,
           showScrapedMarkers: _showScrapedMarkers,
+          showGroundcheckMarkers: _showGroundcheckMarkers,
           showMarkerLabels: _showMarkerLabels,
           onResetPosition: () {
             // Animate rotation to north smoothly
@@ -591,9 +685,19 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               _currentMapType = mapType;
             });
           },
+          onToggleDirectoryMarkers: (bool value) {
+            setState(() {
+              _showDirectoryMarkers = value;
+            });
+          },
           onToggleScrapedMarkers: (bool value) {
             setState(() {
               _showScrapedMarkers = value;
+            });
+          },
+          onToggleGroundcheckMarkers: (bool value) {
+            setState(() {
+              _showGroundcheckMarkers = value;
             });
           },
           onToggleMarkerLabels: (bool value) {

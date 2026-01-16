@@ -17,6 +17,62 @@ class MapRepositoryImpl implements MapRepository {
   static List<Place>? _allPlacesCache;
   static final Map<String, List<Place>> _boundsCache = {};
 
+  double? _parseDouble(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString());
+  }
+
+  Future<List<Place>> _loadGroundcheckPlacesFromAsset() async {
+    try {
+      final raw = await rootBundle.loadString('assets/json/data-gc.json');
+      final List<dynamic> decoded = jsonDecode(raw) as List<dynamic>;
+      final List<Place> results = [];
+      for (final item in decoded) {
+        if (item is! Map<String, dynamic>) continue;
+        final lat = _parseDouble(item['latitude']);
+        final lon = _parseDouble(item['longitude']);
+        if (lat == null || lon == null) continue;
+        final idsbr = (item['idsbr'] ?? '').toString();
+        if (idsbr.isEmpty) continue;
+        final name = (item['nama_usaha'] ?? '').toString();
+        final kode = (item['kode_wilayah'] ?? '').toString();
+        final status = (item['status_perusahaan'] ?? '').toString();
+        final skala = (item['skala_usaha'] ?? '').toString();
+        final gcs = (item['gcs_result'] ?? '').toString();
+        final descParts = <String>[];
+        if (kode.isNotEmpty) {
+          descParts.add('Kode wilayah: $kode');
+        }
+        if (status.isNotEmpty) {
+          descParts.add('Status: $status');
+        }
+        if (skala.isNotEmpty) {
+          descParts.add('Skala: $skala');
+        }
+        if (gcs.isNotEmpty) {
+          descParts.add('GCS: $gcs');
+        }
+        final desc = descParts.join(' | ');
+        results.add(
+          Place(
+            id: 'gc:$idsbr',
+            name: name.isNotEmpty ? name : idsbr,
+            description: desc,
+            position: LatLng(lat, lon),
+          ),
+        );
+      }
+      debugPrint(
+        'MapRepository: Loaded ${results.length} groundcheck places from asset',
+      );
+      return results;
+    } catch (e) {
+      debugPrint('MapRepository: Failed to load groundcheck places: $e');
+      return [];
+    }
+  }
+
   void invalidatePlacesCache() {
     _allPlacesCache = null;
     _boundsCache.clear();
@@ -614,15 +670,23 @@ class MapRepositoryImpl implements MapRepository {
         debugPrint(
           'MapRepository: No valid places found, returning empty list',
         );
+        final List<Place> result = [];
         try {
           final scraped = await ScrapingRepositoryImpl()
               .getScrapedPlacesAsPlace();
           debugPrint('MapRepository: Loaded ${scraped.length} scraped places');
-          return scraped;
+          result.addAll(scraped);
         } catch (e) {
           debugPrint('MapRepository: Failed to load scraped places: $e');
-          return [];
         }
+        try {
+          final gc = await _loadGroundcheckPlacesFromAsset();
+          result.addAll(gc);
+        } catch (e) {
+          debugPrint('MapRepository: Failed to append groundcheck places: $e');
+        }
+        _allPlacesCache = result;
+        return result;
       }
 
       try {
@@ -634,6 +698,14 @@ class MapRepositoryImpl implements MapRepository {
         debugPrint('MapRepository: Failed to load scraped places: $e');
       }
 
+      try {
+        final gc = await _loadGroundcheckPlacesFromAsset();
+        places.addAll(gc);
+      } catch (e) {
+        debugPrint('MapRepository: Failed to append groundcheck places: $e');
+      }
+
+      _allPlacesCache = places;
       return places;
     } catch (e) {
       debugPrint('MapRepository: Error fetching places from Supabase: $e');

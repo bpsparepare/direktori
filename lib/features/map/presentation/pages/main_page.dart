@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'map_page.dart';
 import 'saved_page.dart';
+import 'groundcheck_page.dart';
 import '../../../contribution/presentation/pages/contribution_page.dart';
 import '../../../direktori/presentation/pages/direktori_list_page.dart';
 import '../../../direktori/presentation/bloc/direktori_bloc.dart';
@@ -615,6 +617,22 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
+  void _focusGroundcheckLocation(GroundcheckRecord record) {
+    final lat = double.tryParse(record.latitude);
+    final lon = double.tryParse(record.longitude);
+
+    if (lat == null || lon == null || lat == 0.0 || lon == 0.0) return;
+
+    setState(() {
+      _selectedIndex = 0;
+    });
+
+    try {
+      // Use latlong2.LatLng via flutter_map export
+      _sharedMapController.move(LatLng(lat, lon), 18.0);
+    } catch (_) {}
+  }
+
   Widget _buildOverlayContent() {
     switch (_selectedIndex) {
       case 0:
@@ -624,7 +642,11 @@ class _MainPageState extends State<MainPage> {
       case 2:
         return const ContributionPage();
       case 3:
-        return DirektoriListPage();
+        return DirektoriListPage(
+          onNavigateToMap: (id) => _focusDirectoryById(id),
+        );
+      case 4:
+        return GroundcheckPage(onGoToMap: _focusGroundcheckLocation);
       default:
         return MapPage(mapController: _sharedMapController);
     }
@@ -656,6 +678,7 @@ class _MainPageState extends State<MainPage> {
                 DirektoriListPage(
                   onNavigateToMap: (id) => _focusDirectoryById(id),
                 ),
+                GroundcheckPage(onGoToMap: _focusGroundcheckLocation),
               ],
             ),
           ),
@@ -781,6 +804,7 @@ class _MainPageState extends State<MainPage> {
             icon: Icon(Icons.business),
             label: 'Direktori',
           ),
+          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Groundcheck'),
         ],
       ),
     );
