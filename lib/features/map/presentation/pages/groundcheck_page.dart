@@ -1,16 +1,16 @@
-import 'dart:convert';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:syncfusion_flutter_datagrid/datagrid.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart' as dotenv;
 
 import '../../data/services/bps_gc_service.dart';
+import '../../data/services/gc_credentials_service.dart';
+import '../../data/services/groundcheck_supabase_service.dart';
 
 // Optional bootstrap via --dart-define (keamanan: tidak commit rahasia ke repo)
 const String kInitialGcCookie = String.fromEnvironment(
@@ -353,6 +353,9 @@ class GroundcheckPage extends StatefulWidget {
 class _GroundcheckPageState extends State<GroundcheckPage> {
   final ScrollController _scrollController = ScrollController();
   final BpsGcService _gcService = BpsGcService();
+  final GcCredentialsService _gcCredsService = GcCredentialsService();
+  final GroundcheckSupabaseService _supabaseService =
+      GroundcheckSupabaseService();
   GroundcheckDataSource? _dataSource;
   List<GroundcheckRecord> _allRecords = [];
   List<String> _statusOptions = [];
@@ -376,12 +379,13 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   }
 
   Future<void> _loadData() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
     try {
-      final raw = await rootBundle.loadString('assets/json/data-gc.json');
-      final List<dynamic> decoded = jsonDecode(raw) as List<dynamic>;
-      final records = decoded
-          .map((e) => GroundcheckRecord.fromJson(e as Map<String, dynamic>))
-          .toList();
+      final records = await _supabaseService.fetchRecords();
+
       _allRecords = records;
       _statusOptions =
           records
@@ -414,6 +418,18 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     }
   }
 
+  Future<void> _reloadFromSupabase() async {
+    await _loadData();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Data dimuat ulang dari Supabase'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -423,61 +439,88 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
 
   Future<void> _loadStoredGcCredentials() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final cookie = prefs.getString('gc_cookie');
-      final token = prefs.getString('gc_token');
-      if (cookie != null && cookie.isNotEmpty) {
-        _gcCookie = cookie;
-        _gcService.setCookiesFromHeader(cookie);
+      // 1. Coba load dari Supabase Global
+      final remote = await _gcCredsService.loadGlobal();
+      if (remote != null) {
+        final rc = remote['gc_cookie']?.trim() ?? '';
+        final rt = remote['gc_token']?.trim() ?? '';
+        if (rc.isNotEmpty) _gcCookie = rc;
+        if (rt.isNotEmpty) _gcToken = rt;
       }
-      if (token != null && token.isNotEmpty) {
-        _gcToken = token;
+
+      // 2. Fallback .env
+      if (_gcCookie == null || _gcCookie!.isEmpty) {
+        final envCookie = dotenv.dotenv.env['GC_COOKIE'];
+        if (envCookie?.trim().isNotEmpty ?? false) {
+          _gcCookie = envCookie!.trim();
+        }
       }
-      // Bootstrap dari --dart-define jika belum tersimpan
+      if (_gcToken == null || _gcToken!.isEmpty) {
+        final envToken = dotenv.dotenv.env['GC_TOKEN'];
+        if (envToken?.trim().isNotEmpty ?? false) {
+          _gcToken = envToken!.trim();
+        }
+      }
+
+      // 3. Fallback dart-define
       if ((_gcCookie == null || _gcCookie!.isEmpty) &&
           kInitialGcCookie.isNotEmpty) {
         _gcCookie = kInitialGcCookie;
-        _gcService.setCookiesFromHeader(kInitialGcCookie);
       }
       if ((_gcToken == null || _gcToken!.isEmpty) &&
           kInitialGcToken.isNotEmpty) {
         _gcToken = kInitialGcToken;
       }
-      // Fallback dari .env jika masih kosong
-      final envCookie = dotenv.dotenv.env['GC_COOKIE'];
-      if ((_gcCookie == null || _gcCookie!.isEmpty) &&
-          (envCookie?.trim().isNotEmpty ?? false)) {
-        _gcCookie = envCookie!.trim();
-        _gcService.setCookiesFromHeader(_gcCookie!);
+
+      // 4. Default Placeholder (sesuai request user)
+      if (_gcCookie == null || _gcCookie!.isEmpty) {
+        _gcCookie = 'PASTE_COOKIE_HEADER';
       }
-      final envToken = dotenv.dotenv.env['GC_TOKEN'];
-      if ((_gcToken == null || _gcToken!.isNotEmpty == false) &&
-          (envToken?.trim().isNotEmpty ?? false)) {
-        _gcToken = envToken!.trim();
+      if (_gcToken == null || _gcToken!.isEmpty) {
+        _gcToken = 'PASTE_TOKEN';
       }
+
+      // 5. Simpan/Sync kembali ke Supabase agar terisi (jika kosong di DB)
+      // Upsert akan membuat row baru jika belum ada, atau update jika sudah ada
+      await _gcCredsService.upsertGlobal(
+        gcCookie: _gcCookie,
+        gcToken: _gcToken,
+      );
+
+      // 6. Set ke Service
       if (_gcCookie != null && _gcCookie!.isNotEmpty) {
+        _gcService.setCookiesFromHeader(_gcCookie!);
         await _gcService.autoGetCsrfToken();
+        final updatedCookie = _gcService.cookieHeader;
+        if (updatedCookie != null &&
+            updatedCookie.isNotEmpty &&
+            updatedCookie != _gcCookie) {
+          _gcCookie = updatedCookie;
+          await _saveStoredGcCredentials();
+        }
         _keepAliveTimer?.cancel();
         _keepAliveTimer = Timer.periodic(const Duration(minutes: 10), (
           _,
         ) async {
           await _gcService.keepAlive();
+          final refreshedCookie = _gcService.cookieHeader;
+          if (refreshedCookie != null &&
+              refreshedCookie.isNotEmpty &&
+              refreshedCookie != _gcCookie) {
+            _gcCookie = refreshedCookie;
+            await _saveStoredGcCredentials();
+          }
         });
-        // Persist jika berasal dari dart-define
-        await _saveStoredGcCredentials();
       }
     } catch (_) {}
   }
 
   Future<void> _saveStoredGcCredentials() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      if (_gcCookie != null && _gcCookie!.isNotEmpty) {
-        await prefs.setString('gc_cookie', _gcCookie!);
-      }
-      if (_gcToken != null && _gcToken!.isNotEmpty) {
-        await prefs.setString('gc_token', _gcToken!);
-      }
+      await _gcCredsService.upsertGlobal(
+        gcCookie: _gcCookie,
+        gcToken: _gcToken,
+      );
     } catch (_) {}
   }
 
@@ -842,6 +885,13 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                           _gcToken = newToken;
                           await _saveStoredGcCredentials();
                         }
+                        final currentCookie = _gcService.cookieHeader;
+                        if (currentCookie != null &&
+                            currentCookie.isNotEmpty &&
+                            currentCookie != _gcCookie) {
+                          _gcCookie = currentCookie;
+                          await _saveStoredGcCredentials();
+                        }
                         _applyGcInput(record, selectedHasil, laFinal, loFinal);
                         setStateSB(() {
                           isSubmitting = false;
@@ -949,9 +999,10 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     _refreshFilteredData();
   }
 
-  Future<bool> _ensureGcConfig() async {
-    // Jika kredensial sudah ada, pastikan sesi valid tanpa prompt
-    if (_gcCookie != null &&
+  Future<bool> _ensureGcConfig({bool forceShow = false}) async {
+    // Jika kredensial sudah ada, pastikan sesi valid tanpa prompt (kecuali dipaksa)
+    if (!forceShow &&
+        _gcCookie != null &&
         _gcCookie!.isNotEmpty &&
         _gcToken != null &&
         _gcToken!.isNotEmpty) {
@@ -991,6 +1042,22 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     if ((_gcToken == null || _gcToken!.isEmpty) &&
         (envToken?.trim().isNotEmpty ?? false)) {
       _gcToken = envToken!.trim();
+    }
+    // Fallback Supabase per-user
+    if ((_gcCookie == null || _gcCookie!.isEmpty) ||
+        (_gcToken == null || _gcToken!.isEmpty)) {
+      final remote = await _gcCredsService.loadGlobal();
+      if (remote != null) {
+        final rc = remote['gc_cookie']?.trim() ?? '';
+        final rt = remote['gc_token']?.trim() ?? '';
+        if (rc.isNotEmpty && (_gcCookie == null || _gcCookie!.isEmpty)) {
+          _gcCookie = rc;
+          _gcService.setCookiesFromHeader(rc);
+        }
+        if (rt.isNotEmpty && (_gcToken == null || _gcToken!.isEmpty)) {
+          _gcToken = rt;
+        }
+      }
     }
     if (_gcCookie != null && _gcCookie!.isNotEmpty) {
       try {
@@ -1064,6 +1131,8 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     _keepAliveTimer = Timer.periodic(const Duration(minutes: 10), (_) async {
       await _gcService.keepAlive();
     });
+    // Simpan juga ke Supabase
+    await _gcCredsService.upsertGlobal(gcCookie: _gcCookie, gcToken: _gcToken);
     return true;
   }
 
@@ -1196,10 +1265,15 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
         title: const Text('Groundcheck'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.cloud_upload),
+            tooltip: 'Muat ulang dari Supabase',
+            onPressed: _reloadFromSupabase,
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             tooltip: 'Pengaturan GC',
             onPressed: () async {
-              await _ensureGcConfig();
+              await _ensureGcConfig(forceShow: true);
             },
           ),
         ],

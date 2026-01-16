@@ -15,6 +15,8 @@ class BpsGcService {
     _cookieHeader = cookieString;
   }
 
+  String? get cookieHeader => _cookieHeader;
+
   Future<void> autoGetCsrfToken() async {
     final url = Uri.parse('$baseUrl/dirgc');
     final response = await _client.get(

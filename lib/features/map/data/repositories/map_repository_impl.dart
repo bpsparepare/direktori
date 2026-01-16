@@ -25,10 +25,23 @@ class MapRepositoryImpl implements MapRepository {
 
   Future<List<Place>> _loadGroundcheckPlacesFromAsset() async {
     try {
-      final raw = await rootBundle.loadString('assets/json/data-gc.json');
-      final List<dynamic> decoded = jsonDecode(raw) as List<dynamic>;
       final List<Place> results = [];
-      for (final item in decoded) {
+      final List<dynamic> data = await _supabaseClient
+          .from('groundcheck_list')
+          .select(
+            '''
+            idsbr,
+            nama_usaha,
+            kode_wilayah,
+            status_perusahaan,
+            skala_usaha,
+            gcs_result,
+            latitude,
+            longitude
+            ''',
+          );
+
+      for (final item in data) {
         if (item is! Map<String, dynamic>) continue;
         final lat = _parseDouble(item['latitude']);
         final lon = _parseDouble(item['longitude']);
@@ -64,11 +77,13 @@ class MapRepositoryImpl implements MapRepository {
         );
       }
       debugPrint(
-        'MapRepository: Loaded ${results.length} groundcheck places from asset',
+        'MapRepository: Loaded ${results.length} groundcheck places from Supabase',
       );
       return results;
     } catch (e) {
-      debugPrint('MapRepository: Failed to load groundcheck places: $e');
+      debugPrint(
+        'MapRepository: Failed to load groundcheck places from Supabase: $e',
+      );
       return [];
     }
   }
