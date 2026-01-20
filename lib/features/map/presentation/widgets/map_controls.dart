@@ -21,6 +21,8 @@ class MapControls extends StatefulWidget {
   final List<PolygonData> polygonsMeta; // Add polygons metadata
   final Function(int)?
   onPolygonSelected; // Add callback for when polygon is selected
+  final Function(List<PolygonData>)?
+  onMultiplePolygonsSelected; // Add callback for multiple polygons
   final MapType currentMapType; // Add current map type
   final Function(MapType)? onMapTypeChanged; // Add map type change callback
   final Function(double, double)? onOffsetChanged; // Add offset change callback
@@ -34,6 +36,7 @@ class MapControls extends StatefulWidget {
   final Function(bool)? onToggleMarkerLabels;
   final bool showNonVerifiedGroundchecks;
   final Function(bool)? onToggleNonVerifiedGroundchecks;
+  final bool isPolygonSelected; // Boolean to track if a polygon is selected
 
   const MapControls({
     super.key,
@@ -45,6 +48,7 @@ class MapControls extends StatefulWidget {
     this.onPolygonSelection, // Add to constructor
     this.polygonsMeta = const [], // Add to constructor
     this.onPolygonSelected, // Add to constructor
+    this.onMultiplePolygonsSelected, // Add to constructor
     required this.currentMapType, // Add to constructor
     this.onMapTypeChanged, // Add to constructor
     this.onOffsetChanged, // Add to constructor
@@ -58,6 +62,7 @@ class MapControls extends StatefulWidget {
     this.onToggleMarkerLabels,
     this.showNonVerifiedGroundchecks = true,
     this.onToggleNonVerifiedGroundchecks,
+    this.isPolygonSelected = false, // Initialize
   });
 
   @override
@@ -476,162 +481,331 @@ class _MapControlsState extends State<MapControls> {
               ),
             ),
           ),
+          if (widget.isPolygonSelected) ...[
+            const SizedBox(height: 8),
+            // Hapus Pilihan FAB
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: _clearPolygonSelection,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.layers_clear, color: Colors.red, size: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
+  void _clearPolygonSelection() {
+    widget.onMultiplePolygonsSelected?.call([]);
+  }
+
   void _showPolygonSelection() async {
     if (widget.polygonsMeta.isEmpty) return;
 
+    // Pre-process for Kelurahan groups
+    final Map<String, List<PolygonData>> kelurahanGroups = {};
+    for (final p in widget.polygonsMeta) {
+      final id = p.idsls ?? '';
+      if (id.length >= 10) {
+        final key = id.substring(0, 10);
+        kelurahanGroups.putIfAbsent(key, () => []).add(p);
+      }
+    }
+
+    // Sort Kelurahan keys
+    final sortedKelurahanKeys = kelurahanGroups.keys.toList()
+      ..sort((a, b) {
+        final pa = kelurahanGroups[a]!.first;
+        final pb = kelurahanGroups[b]!.first;
+        final ka = pa.kecamatan ?? '';
+        final kb = pb.kecamatan ?? '';
+        final c = ka.compareTo(kb);
+        if (c != 0) return c;
+        return (pa.desa ?? '').compareTo(pb.desa ?? '');
+      });
+
     await showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // Memungkinkan modal full screen
-      useSafeArea: true, // Menggunakan safe area
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
       builder: (modalContext) {
-        String query = '';
-        return StatefulBuilder(
-          builder: (ctx, setModalState) {
-            final filtered =
-                widget.polygonsMeta.where((p) {
-                  final q = query.toLowerCase();
-                  final n = (p.name ?? '').toLowerCase();
-                  final kc = (p.kecamatan ?? '').toLowerCase();
-                  final ds = (p.desa ?? '').toLowerCase();
-                  return n.contains(q) || kc.contains(q) || ds.contains(q);
-                }).toList()..sort((a, b) {
-                  // Sort by idsls field
-                  final aIdsls = a.idsls ?? '';
-                  final bIdsls = b.idsls ?? '';
-                  return aIdsls.compareTo(bIdsls);
-                });
-            return DraggableScrollableSheet(
-              initialChildSize: 0.9, // Mulai dengan 90% tinggi layar
-              minChildSize: 0.5, // Minimum 50% tinggi layar
-              maxChildSize: 0.95, // Maximum 95% tinggi layar
-              expand: false,
-              builder: (context, scrollController) {
-                return Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(20),
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(modalContext).viewInsets.bottom,
+          ),
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.9,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: DefaultTabController(
+              length: 2,
+              child: Column(
+                children: [
+                  // Handle bar
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      // Handle bar untuk drag
-                      Container(
-                        width: 40,
-                        height: 4,
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[300],
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      // Header
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.search, color: Colors.grey),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Pilih Polygon',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const Spacer(),
-                            IconButton(
-                              onPressed: () => Navigator.pop(modalContext),
-                              icon: const Icon(Icons.close),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Search field
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        child: TextField(
-                          autofocus:
-                              false, // Auto focus untuk UX yang lebih baik
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(Icons.search),
-                            hintText: 'Cari nmsls / nmkec / nmdesa',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            filled: true,
-                            fillColor: Colors.grey[50],
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.map_outlined, color: Colors.grey),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Pilih Wilayah',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
-                          onChanged: (v) => setModalState(() => query = v),
                         ),
-                      ),
-                      // Results list
-                      Expanded(
-                        child: ListView.builder(
-                          controller:
-                              scrollController, // Menggunakan scroll controller
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          itemCount: filtered.length,
-                          itemBuilder: (ctx2, i) {
-                            final item = filtered[i];
-                            final idx = widget.polygonsMeta.indexOf(item);
-                            final name = item.name ?? 'Polygon ${idx + 1}';
-                            final subtitle =
-                                'Kec: ${item.kecamatan ?? '-'} • Desa: ${item.desa ?? '-'}';
-                            return Card(
-                              margin: const EdgeInsets.symmetric(
-                                vertical: 2,
-                                horizontal: 8,
-                              ),
-                              child: ListTile(
-                                leading: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue[50],
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(
-                                    Icons.polyline,
-                                    color: Colors.blue[700],
-                                  ),
-                                ),
-                                title: Text(
-                                  name,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                subtitle: Text(subtitle),
-                                trailing: const Icon(
-                                  Icons.arrow_forward_ios,
-                                  size: 16,
-                                ),
-                                onTap: () {
-                                  Navigator.of(modalContext).pop();
-                                  widget.onPolygonSelected?.call(idx);
-                                },
-                              ),
-                            );
-                          },
+                        const Spacer(),
+                        IconButton(
+                          onPressed: () => Navigator.pop(modalContext),
+                          icon: const Icon(Icons.close),
                         ),
-                      ),
+                      ],
+                    ),
+                  ),
+                  // TabBar
+                  const TabBar(
+                    labelColor: Colors.blue,
+                    unselectedLabelColor: Colors.grey,
+                    indicatorColor: Colors.blue,
+                    tabs: [
+                      Tab(text: 'Per SLS'),
+                      Tab(text: 'Per Kelurahan'),
                     ],
                   ),
-                );
-              },
-            );
-          },
+                  // Content
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        _buildSlsTab(modalContext),
+                        _buildKelurahanTab(
+                          modalContext,
+                          kelurahanGroups,
+                          sortedKelurahanKeys,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSlsTab(BuildContext modalContext) {
+    String query = '';
+    return StatefulBuilder(
+      builder: (ctx, setState) {
+        final filtered = widget.polygonsMeta.where((p) {
+          final q = query.toLowerCase();
+          final n = (p.name ?? '').toLowerCase();
+          final kc = (p.kecamatan ?? '').toLowerCase();
+          final ds = (p.desa ?? '').toLowerCase();
+          return n.contains(q) || kc.contains(q) || ds.contains(q);
+        }).toList()..sort((a, b) => (a.idsls ?? '').compareTo(b.idsls ?? ''));
+
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search),
+                  hintText: 'Cari SLS / Kelurahan / Kec',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                ),
+                onChanged: (v) => setState(() => query = v),
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                itemCount: filtered.length,
+                itemBuilder: (context, i) {
+                  final item = filtered[i];
+                  return Card(
+                    margin: const EdgeInsets.symmetric(
+                      vertical: 4,
+                      horizontal: 8,
+                    ),
+                    elevation: 0,
+                    color: Colors.grey[50],
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(color: Colors.grey[200]!),
+                    ),
+                    child: ListTile(
+                      title: Text(
+                        item.name ?? '-',
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      subtitle: Text(
+                        'Kec: ${item.kecamatan ?? '-'} • Kel: ${item.desa ?? '-'}',
+                      ),
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: Colors.grey,
+                      ),
+                      onTap: () {
+                        Navigator.pop(modalContext);
+                        if (widget.onMultiplePolygonsSelected != null) {
+                          widget.onMultiplePolygonsSelected!([item]);
+                        } else {
+                          // Fallback to single selection if multi not defined (though it should be)
+                          final idx = widget.polygonsMeta.indexOf(item);
+                          widget.onPolygonSelected?.call(idx);
+                        }
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildKelurahanTab(
+    BuildContext modalContext,
+    Map<String, List<PolygonData>> kelurahanGroups,
+    List<String> sortedKeys,
+  ) {
+    String query = '';
+    return StatefulBuilder(
+      builder: (ctx, setState) {
+        final filteredKeys = sortedKeys.where((key) {
+          final q = query.toLowerCase();
+          final group = kelurahanGroups[key]!;
+          final first = group.first;
+          final kc = (first.kecamatan ?? '').toLowerCase();
+          final ds = (first.desa ?? '').toLowerCase();
+          return kc.contains(q) || ds.contains(q);
+        }).toList();
+
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search),
+                  hintText: 'Cari Kelurahan / Kecamatan',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                ),
+                onChanged: (v) => setState(() => query = v),
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                itemCount: filteredKeys.length,
+                itemBuilder: (context, i) {
+                  final key = filteredKeys[i];
+                  final group = kelurahanGroups[key]!;
+                  final first = group.first;
+
+                  return Card(
+                    margin: const EdgeInsets.symmetric(
+                      vertical: 4,
+                      horizontal: 8,
+                    ),
+                    elevation: 0,
+                    color: Colors.blue[50],
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(color: Colors.blue[100]!),
+                    ),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.blue[100],
+                        child: Text(
+                          group.length.toString(),
+                          style: TextStyle(
+                            color: Colors.blue[800],
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        'Kelurahan ${first.desa ?? '-'}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text('Kecamatan ${first.kecamatan ?? '-'}'),
+                      trailing: const Icon(Icons.layers, color: Colors.blue),
+                      onTap: () {
+                        Navigator.pop(modalContext);
+                        widget.onMultiplePolygonsSelected?.call(group);
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );

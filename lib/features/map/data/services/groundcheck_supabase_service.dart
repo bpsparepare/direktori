@@ -271,15 +271,28 @@ class GroundcheckSupabaseService {
     }
   }
 
-  Future<bool> updateGcsResult(String idsbr, String hasilGc) async {
+  Future<bool> updateGcsResult(
+    String idsbr,
+    String hasilGc, {
+    String? userId,
+    String? namaUsaha,
+    String? alamatUsaha,
+  }) async {
     try {
-      await _client
-          .from(_tableName)
-          .update({
-            'gcs_result': hasilGc,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('idsbr', idsbr);
+      final data = {
+        'gcs_result': hasilGc,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      if (userId != null) {
+        data['user_id'] = userId;
+      }
+      if (namaUsaha != null && namaUsaha.isNotEmpty) {
+        data['nama_usaha'] = namaUsaha;
+      }
+      if (alamatUsaha != null && alamatUsaha.isNotEmpty) {
+        data['alamat_usaha'] = alamatUsaha;
+      }
+      await _client.from(_tableName).update(data).eq('idsbr', idsbr);
       return true;
     } catch (_) {
       return false;

@@ -31,6 +31,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     on<PolygonsListRequested>(_onPolygonsListRequested);
     on<PolygonSelectedByIndex>(_onPolygonSelectedByIndex);
     on<PolygonSelected>(_onPolygonSelected);
+    on<MultiplePolygonsSelected>(_onMultiplePolygonsSelected);
     on<TemporaryMarkerAdded>(_onTemporaryMarkerAdded);
     on<TemporaryMarkerRemoved>(_onTemporaryMarkerRemoved);
   }
@@ -151,6 +152,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         polygon: sel.points,
         polygonLabel: label,
         selectedPolygonMeta: sel,
+        selectedPolygons: [], // Clear multiple selection
       ),
     );
   }
@@ -169,6 +171,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         polygon: event.polygon.points,
         polygonLabel: label,
         selectedPolygonMeta: event.polygon,
+        selectedPolygons: [], // Clear multiple selection
       ),
     );
   }
@@ -194,5 +197,49 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     Emitter<MapState> emit,
   ) {
     emit(state.copyWith(clearTemporaryMarker: true));
+  }
+
+  void _onMultiplePolygonsSelected(
+    MultiplePolygonsSelected event,
+    Emitter<MapState> emit,
+  ) {
+    if (event.polygons.isEmpty) {
+      emit(
+        state.copyWith(
+          selectedPolygons: [],
+          polygon: [],
+          polygonLabel: '',
+          clearSelectedPolygonMeta: true,
+        ),
+      );
+      return;
+    }
+
+    final first = event.polygons.first;
+    String label = '';
+    final firstId = first.idsls ?? '';
+    if (firstId.length >= 10) {
+      final prefix = firstId.substring(0, 10);
+      final sameDesa = event.polygons.every(
+        (p) => (p.idsls ?? '').startsWith(prefix),
+      );
+      if (sameDesa) {
+        label =
+            'Kelurahan: ${first.desa ?? '-'}\nKec: ${first.kecamatan ?? '-'}';
+      } else {
+        label = '${event.polygons.length} Polygons Selected';
+      }
+    } else {
+      label = '${event.polygons.length} Polygons Selected';
+    }
+
+    emit(
+      state.copyWith(
+        selectedPolygons: event.polygons,
+        polygon: first.points,
+        polygonLabel: label,
+        selectedPolygonMeta: first,
+      ),
+    );
   }
 }

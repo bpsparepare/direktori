@@ -14,6 +14,7 @@ class MapView extends StatefulWidget {
   final List<Place> places;
   final Place? selectedPlace; // Add selectedPlace parameter
   final List<LatLng> polygon;
+  final List<PolygonData> selectedPolygons; // Add selectedPolygons
   final String? polygonLabel;
   final LatLng? temporaryMarker;
   final List<PolygonData> polygonsMeta;
@@ -21,9 +22,12 @@ class MapView extends StatefulWidget {
   final void Function(Place, LatLng)? onPlaceDragEnd;
   final void Function(LatLng)? onLongPress;
   final void Function(int)? onPolygonSelected;
+  final void Function(List<PolygonData>)?
+  onMultiplePolygonsSelected; // Add callback
   final MapController? mapController; // Add optional MapController parameter
   final void Function(LatLngBounds)? onBoundsChanged;
   final void Function(List<Place>)? onNearbyPlacesTap;
+  final bool isPolygonSelected; // Add isPolygonSelected property
 
   const MapView({
     super.key,
@@ -31,6 +35,7 @@ class MapView extends StatefulWidget {
     required this.places,
     this.selectedPlace, // Add to constructor
     required this.polygon,
+    this.selectedPolygons = const [], // Add to constructor
     this.polygonLabel,
     this.temporaryMarker,
     this.polygonsMeta = const [],
@@ -38,9 +43,11 @@ class MapView extends StatefulWidget {
     this.onPlaceDragEnd,
     this.onLongPress,
     this.onPolygonSelected,
+    this.onMultiplePolygonsSelected,
     this.mapController, // Add to constructor
     this.onBoundsChanged,
     this.onNearbyPlacesTap,
+    this.isPolygonSelected = false, // Add default value
   });
 
   @override
@@ -115,15 +122,6 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     });
   }
 
-  @override
-  void didUpdateWidget(MapView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.polygon != widget.polygon && widget.polygon.isNotEmpty) {
-      // Zoom to fit the new polygon instead of just moving to centroid
-      _fitPolygonToBounds(widget.polygon);
-    }
-  }
-
   LatLng? _centroid(List<LatLng> pts) {
     if (pts.isEmpty) return null;
     if (pts.length == 1) return pts.first;
@@ -172,6 +170,28 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     return LatLng(centroidY, centroidX);
   }
 
+  LatLng? _multiPolygonCenter(List<PolygonData> polygons) {
+    if (polygons.isEmpty) return null;
+    double minLat = 90.0;
+    double maxLat = -90.0;
+    double minLng = 180.0;
+    double maxLng = -180.0;
+
+    bool hasPoints = false;
+    for (final p in polygons) {
+      for (final point in p.points) {
+        hasPoints = true;
+        if (point.latitude < minLat) minLat = point.latitude;
+        if (point.latitude > maxLat) maxLat = point.latitude;
+        if (point.longitude < minLng) minLng = point.longitude;
+        if (point.longitude > maxLng) maxLng = point.longitude;
+      }
+    }
+
+    if (!hasPoints) return null;
+    return LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2);
+  }
+
   void _fitPolygonToBounds(List<LatLng> points) {
     if (points.isEmpty) return;
 
@@ -195,6 +215,47 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     _mapController.fitCamera(
       CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50.0)),
     );
+  }
+
+  void _fitMultiPolygonToBounds(List<PolygonData> polygons) {
+    if (polygons.isEmpty) return;
+
+    double minLat = 90.0;
+    double maxLat = -90.0;
+    double minLng = 180.0;
+    double maxLng = -180.0;
+    bool hasPoints = false;
+
+    for (final p in polygons) {
+      for (final point in p.points) {
+        hasPoints = true;
+        if (point.latitude < minLat) minLat = point.latitude;
+        if (point.latitude > maxLat) maxLat = point.latitude;
+        if (point.longitude < minLng) minLng = point.longitude;
+        if (point.longitude > maxLng) maxLng = point.longitude;
+      }
+    }
+
+    if (!hasPoints) return;
+
+    final bounds = LatLngBounds(LatLng(minLat, minLng), LatLng(maxLat, maxLng));
+    _mapController.fitCamera(
+      CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50.0)),
+    );
+  }
+
+  @override
+  void didUpdateWidget(MapView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.polygon != widget.polygon &&
+        widget.polygon.isNotEmpty &&
+        widget.selectedPolygons.isEmpty) {
+      // Zoom to fit the new polygon instead of just moving to centroid
+      _fitPolygonToBounds(widget.polygon);
+    } else if (widget.selectedPolygons.isNotEmpty &&
+        oldWidget.selectedPolygons != widget.selectedPolygons) {
+      _fitMultiPolygonToBounds(widget.selectedPolygons);
+    }
   }
 
   double _scaledFontSize() {
@@ -243,7 +304,13 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final centroid = _centroid(widget.polygon);
+    LatLng? centroid;
+    if (widget.selectedPolygons.isNotEmpty) {
+      centroid = _multiPolygonCenter(widget.selectedPolygons);
+    } else {
+      centroid = _centroid(widget.polygon);
+    }
+
     final double fontSize = _scaledFontSize();
     final double labelWidth = widget.polygonLabel != null
         ? _scaledWidth(widget.polygonLabel!, fontSize)
@@ -330,7 +397,24 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                 return tileWidget;
               },
             ),
-            if (widget.polygon.isNotEmpty)
+            if (widget.selectedPolygons.isNotEmpty)
+              PolygonLayer(
+                polygons: widget.selectedPolygons.map((p) {
+                  return Polygon(
+                    points: p.points,
+                    color: Colors.blue.withValues(alpha: 0.3),
+                    borderColor: Colors.blue,
+                    borderStrokeWidth: 2,
+                    label: p.name, // Use name (nmsls) instead of idsls
+                    labelStyle: const TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  );
+                }).toList(),
+              )
+            else if (widget.polygon.isNotEmpty)
               PolygonLayer(
                 polygons: [
                   Polygon(
@@ -695,6 +779,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
             });
           },
           onPolygonSelected: widget.onPolygonSelected,
+          onMultiplePolygonsSelected: widget.onMultiplePolygonsSelected,
           onMapTypeChanged: (MapType mapType) {
             setState(() {
               _currentMapType = mapType;
@@ -728,6 +813,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           },
           currentOffsetX: _offsetX,
           currentOffsetY: _offsetY,
+          isPolygonSelected: widget.isPolygonSelected, // Pass property
         ),
         // Debug Info Panel (only show for Esri satellite with offset)
         if (_currentMapType == MapType.satellite &&
@@ -809,7 +895,59 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     );
   }
 
+  bool _isPointInPolygon(LatLng point, List<LatLng> polygon) {
+    bool c = false;
+    for (int i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      if (((polygon[i].latitude > point.latitude) !=
+              (polygon[j].latitude > point.latitude)) &&
+          (point.longitude <
+              (polygon[j].longitude - polygon[i].longitude) *
+                      (point.latitude - polygon[i].latitude) /
+                      (polygon[j].latitude - polygon[i].latitude) +
+                  polygon[i].longitude)) {
+        c = !c;
+      }
+    }
+    return c;
+  }
+
   List<Place> _placesForRender(List<Place> input) {
+    // 1. Filter by Polygon (Single or Multiple)
+    List<Place> filteredByPolygon = input;
+
+    if (widget.selectedPolygons.isNotEmpty) {
+      // Filter for Multiple Polygons (Kelurahan)
+      filteredByPolygon = input.where((p) {
+        return widget.selectedPolygons.any((poly) {
+          return _isPointInPolygon(p.position, poly.points);
+        });
+      }).toList();
+    } else if (widget.polygon.isNotEmpty) {
+      // Filter for Single Polygon (SLS)
+      filteredByPolygon = input.where((p) {
+        return _isPointInPolygon(p.position, widget.polygon);
+      }).toList();
+    }
+
+    // If a polygon selection is active, return the filtered list directly
+    // to ensure all markers in the area are shown (100% visible).
+    if (widget.selectedPolygons.isNotEmpty || widget.polygon.isNotEmpty) {
+      // Still respect selectedPlace if it exists
+      final selectedId = widget.selectedPlace?.id;
+      if (selectedId != null &&
+          filteredByPolygon.every((p) => p.id != selectedId)) {
+        // If selected place is filtered out, add it back?
+        // Or maybe it's fine to filter it out if it's outside.
+        // Usually, if we select a place, we want to see it.
+        // But if the user selected a polygon, maybe they only want to see things in the polygon.
+        // Let's check if the selected place is in the polygon.
+        // If not, maybe we shouldn't show it, or we should show it as an exception.
+        // For now, let's just return the filtered list.
+      }
+      return filteredByPolygon;
+    }
+
+    // 2. Existing Capping Logic for No Selection
     final selectedId = widget.selectedPlace?.id;
     final int? cap = _capForZoom(input.length, _zoom);
     if (cap == null || input.length <= cap) return input;

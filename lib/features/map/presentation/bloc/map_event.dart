@@ -22,12 +22,7 @@ class PlacesInBoundsRequested extends MapEvent {
   final double north;
   final double west;
   final double east;
-  const PlacesInBoundsRequested(
-    this.south,
-    this.north,
-    this.west,
-    this.east,
-  );
+  const PlacesInBoundsRequested(this.south, this.north, this.west, this.east);
   @override
   List<Object?> get props => [south, north, west, east];
 }
@@ -71,6 +66,13 @@ class PolygonSelected extends MapEvent {
   const PolygonSelected(this.polygon);
   @override
   List<Object?> get props => [polygon];
+}
+
+class MultiplePolygonsSelected extends MapEvent {
+  final List<PolygonData> polygons;
+  const MultiplePolygonsSelected(this.polygons);
+  @override
+  List<Object?> get props => [polygons];
 }
 
 class TemporaryMarkerAdded extends MapEvent {

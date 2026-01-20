@@ -66,6 +66,8 @@ class MapPage extends StatelessWidget {
                     selectedPlace:
                         state.selectedPlace, // Pass selectedPlace to MapView
                     polygon: state.polygon,
+                    selectedPolygons:
+                        state.selectedPolygons, // Pass selectedPolygons
                     polygonLabel: state.polygonLabel,
                     temporaryMarker: state.temporaryMarker,
                     polygonsMeta: state.polygonsMeta,
@@ -100,6 +102,11 @@ class MapPage extends StatelessWidget {
                         PolygonSelectedByIndex(index),
                       );
                     },
+                    onMultiplePolygonsSelected: (polygons) {
+                      context.read<MapBloc>().add(
+                        MultiplePolygonsSelected(polygons),
+                      );
+                    },
                     onBoundsChanged: (bounds) {
                       final south = bounds.south;
                       final north = bounds.north;
@@ -109,6 +116,9 @@ class MapPage extends StatelessWidget {
                         PlacesInBoundsRequested(south, north, west, east),
                       );
                     },
+                    isPolygonSelected:
+                        state.selectedPolygonMeta != null ||
+                        state.selectedPolygons.isNotEmpty,
                   ),
                   // Coordinate mode overlay: center crosshair + actions
                   if (coordinateTarget != null) ...[
@@ -2953,9 +2963,9 @@ class MapPage extends StatelessWidget {
 
                                     final service =
                                         GroundcheckSupabaseService();
-                                    final userId = editingRecord == null
-                                        ? await service.fetchCurrentUserId()
-                                        : editingRecord!.userId;
+                                    final userId =
+                                        editingRecord?.userId ??
+                                        await service.fetchCurrentUserId();
                                     final record = GroundcheckRecord(
                                       idsbr: finalIdsbr,
                                       namaUsaha: namaUsahaController.text,
@@ -5632,174 +5642,181 @@ class MapPage extends StatelessWidget {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (ctx, setState) {
-            return Container(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.8,
-              ),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 12),
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(2),
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(dialogContext).viewInsets.bottom,
+          ),
+          child: StatefulBuilder(
+            builder: (ctx, setState) {
+              return Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.8,
+                ),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 12),
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'Lokasi Groundcheck berdekatan',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Lokasi Groundcheck berdekatan',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.of(dialogContext).pop(),
-                        ),
-                      ],
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const Divider(height: 1),
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.all(16),
-                      itemCount: mutablePlaces.length,
-                      separatorBuilder: (_, __) => const Divider(height: 16),
-                      itemBuilder: (_, i) {
-                        final p = mutablePlaces[i];
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                _getPlaceIcon(p),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        p.name,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      if (p.address != null &&
-                                          p.address!.isNotEmpty)
+                    const Divider(height: 1),
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: mutablePlaces.length,
+                        separatorBuilder: (_, __) => const Divider(height: 16),
+                        itemBuilder: (_, i) {
+                          final p = mutablePlaces[i];
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  _getPlaceIcon(p),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
                                         Text(
-                                          'Alamat: ${p.address!}',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey[600],
-                                          ),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      if (p.statusPerusahaan != null &&
-                                          p.statusPerusahaan!.isNotEmpty)
-                                        Text(
-                                          'Status: ${p.statusPerusahaan}',
+                                          p.name,
                                           style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.blue,
+                                            fontWeight: FontWeight.bold,
                                           ),
                                         ),
-                                    ],
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.streetview,
-                                    color: Colors.blue,
-                                  ),
-                                  tooltip: 'Lihat Street View',
-                                  onPressed: () async {
-                                    final url = Uri.parse(
-                                      'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.position.latitude},${p.position.longitude}',
-                                    );
-                                    if (!await launchUrl(
-                                      url,
-                                      mode: LaunchMode.externalApplication,
-                                    )) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Tidak dapat membuka Street View',
+                                        if (p.address != null &&
+                                            p.address!.isNotEmpty)
+                                          Text(
+                                            'Alamat: ${p.address!}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[600],
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                        ),
+                                        if (p.statusPerusahaan != null &&
+                                            p.statusPerusahaan!.isNotEmpty)
+                                          Text(
+                                            'Status: ${p.statusPerusahaan}',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.blue,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.streetview,
+                                      color: Colors.blue,
+                                    ),
+                                    tooltip: 'Lihat Street View',
+                                    onPressed: () async {
+                                      final url = Uri.parse(
+                                        'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.position.latitude},${p.position.longitude}',
                                       );
-                                    }
-                                  },
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.edit,
-                                    color: Colors.orange,
-                                  ),
-                                  tooltip: 'Update status',
-                                  onPressed: () async {
-                                    final newCode =
-                                        await _showUpdateGroundcheckStatusDialog(
+                                      if (!await launchUrl(
+                                        url,
+                                        mode: LaunchMode.externalApplication,
+                                      )) {
+                                        ScaffoldMessenger.of(
                                           context,
-                                          p,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Tidak dapat membuka Street View',
+                                            ),
+                                          ),
                                         );
-                                    if (newCode != null) {
-                                      setState(() {
-                                        mutablePlaces[i] = Place(
-                                          id: p.id,
-                                          name: p.name,
-                                          description: p.description,
-                                          position: p.position,
-                                          urlGambar: p.urlGambar,
-                                          gcsResult: newCode,
-                                          address: p.address,
-                                          statusPerusahaan: p.statusPerusahaan,
-                                        );
-                                      });
-                                      if (mutablePlaces.length == 1) {
-                                        Navigator.of(dialogContext).pop();
                                       }
-                                    }
-                                  },
-                                ),
-                              ],
-                            ),
-                          ],
-                        );
-                      },
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.edit,
+                                      color: Colors.orange,
+                                    ),
+                                    tooltip: 'Update status',
+                                    onPressed: () async {
+                                      final newCode =
+                                          await _showUpdateGroundcheckStatusDialog(
+                                            context,
+                                            p,
+                                          );
+                                      if (newCode != null) {
+                                        setState(() {
+                                          mutablePlaces[i] = Place(
+                                            id: p.id,
+                                            name: p.name,
+                                            description: p.description,
+                                            position: p.position,
+                                            urlGambar: p.urlGambar,
+                                            gcsResult: newCode,
+                                            address: p.address,
+                                            statusPerusahaan:
+                                                p.statusPerusahaan,
+                                          );
+                                        });
+                                        if (mutablePlaces.length == 1) {
+                                          Navigator.of(dialogContext).pop();
+                                        }
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            );
-          },
+                  ],
+                ),
+              );
+            },
+          ),
         );
       },
     );
@@ -5830,6 +5847,9 @@ class MapPage extends StatelessWidget {
 
     final currentCode = normalize(place.gcsResult);
     String selectedCode = currentCode;
+    bool isExpanded = false;
+    final nameController = TextEditingController(text: place.name);
+    final addressController = TextEditingController(text: place.address ?? '');
 
     final options = <Map<String, String>>[
       {'code': '', 'label': 'Belum Groundcheck'},
@@ -5839,82 +5859,148 @@ class MapPage extends StatelessWidget {
       {'code': '4', 'label': '4. Ganda'},
     ];
 
-    final confirmed = await showModalBottomSheet<bool>(
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setStateSB) {
-            return Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
               ),
-              padding: const EdgeInsets.only(bottom: 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 12),
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Update Status Groundcheck',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                padding: const EdgeInsets.only(bottom: 24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 12),
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[300],
+                            borderRadius: BorderRadius.circular(2),
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.of(ctx).pop(false),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Update Status Groundcheck',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () => Navigator.of(ctx).pop(null),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(),
+                      ...options.map((o) {
+                        final code = o['code']!;
+                        final label = o['label']!;
+                        return RadioListTile<String>(
+                          value: code,
+                          groupValue: selectedCode,
+                          title: Text(label),
+                          onChanged: (value) {
+                            setStateSB(() {
+                              selectedCode = value ?? '';
+                            });
+                          },
+                        );
+                      }),
+                      const Divider(),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: InkWell(
+                          onTap: () {
+                            setStateSB(() {
+                              isExpanded = !isExpanded;
+                            });
+                          },
+                          child: Row(
+                            children: [
+                              Icon(
+                                isExpanded
+                                    ? Icons.keyboard_arrow_up
+                                    : Icons.keyboard_arrow_down,
+                                color: Colors.blue,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Edit Nama & Alamat Usaha',
+                                style: TextStyle(
+                                  color: Colors.blue,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (isExpanded) ...[
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: TextField(
+                            controller: nameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Nama Usaha',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: TextField(
+                            controller: addressController,
+                            decoration: const InputDecoration(
+                              labelText: 'Alamat Usaha',
+                              border: OutlineInputBorder(),
+                            ),
+                            maxLines: 2,
+                          ),
                         ),
                       ],
-                    ),
-                  ),
-                  const Divider(),
-                  ...options.map((o) {
-                    final code = o['code']!;
-                    final label = o['label']!;
-                    return RadioListTile<String>(
-                      value: code,
-                      groupValue: selectedCode,
-                      title: Text(label),
-                      onChanged: (value) {
-                        setStateSB(() {
-                          selectedCode = value ?? '';
-                        });
-                      },
-                    );
-                  }),
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48),
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () => Navigator.of(ctx).pop({
+                            'confirmed': true,
+                            'selectedCode': selectedCode,
+                            'name': nameController.text.trim(),
+                            'address': addressController.text.trim(),
+                          }),
+                          child: const Text('Simpan'),
+                        ),
                       ),
-                      onPressed: () => Navigator.of(ctx).pop(true),
-                      child: const Text('Simpan'),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             );
           },
@@ -5922,14 +6008,31 @@ class MapPage extends StatelessWidget {
       },
     );
 
-    if (confirmed != true) return null;
-    if (selectedCode == currentCode) {
+    if (result == null || result['confirmed'] != true) return null;
+
+    final newCode = result['selectedCode'] as String;
+    final newName = result['name'] as String;
+    final newAddress = result['address'] as String;
+
+    // Check if anything changed
+    final codeChanged = newCode != currentCode;
+    final nameChanged = newName != place.name;
+    final addressChanged = newAddress != (place.address ?? '');
+
+    if (!codeChanged && !nameChanged && !addressChanged) {
       return null;
     }
 
     try {
       final service = GroundcheckSupabaseService();
-      final ok = await service.updateGcsResult(idsbr, selectedCode);
+      final userId = await service.fetchCurrentUserId();
+      final ok = await service.updateGcsResult(
+        idsbr,
+        newCode,
+        userId: userId,
+        namaUsaha: nameChanged ? newName : null,
+        alamatUsaha: addressChanged ? newAddress : null,
+      );
       if (!ok) {
         scaffoldMessenger.showSnackBar(
           const SnackBar(

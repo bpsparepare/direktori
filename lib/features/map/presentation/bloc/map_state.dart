@@ -15,6 +15,7 @@ class MapState extends Equatable {
   final String? polygonLabel;
   final List<PolygonData> polygonsMeta;
   final PolygonData? selectedPolygonMeta;
+  final List<PolygonData> selectedPolygons; // New field for multiple selection
   final LatLng? temporaryMarker;
   final String? error;
 
@@ -27,6 +28,7 @@ class MapState extends Equatable {
     this.polygonLabel,
     this.polygonsMeta = const [],
     this.selectedPolygonMeta,
+    this.selectedPolygons = const [], // Initialize
     this.temporaryMarker,
     this.error,
   });
@@ -40,10 +42,12 @@ class MapState extends Equatable {
     String? polygonLabel,
     List<PolygonData>? polygonsMeta,
     PolygonData? selectedPolygonMeta,
+    List<PolygonData>? selectedPolygons, // Parameter
     LatLng? temporaryMarker,
     String? error,
     bool clearSelectedPlace = false,
     bool clearTemporaryMarker = false,
+    bool clearSelectedPolygonMeta = false,
   }) {
     return MapState(
       status: status ?? this.status,
@@ -55,7 +59,10 @@ class MapState extends Equatable {
       polygon: polygon ?? this.polygon,
       polygonLabel: polygonLabel ?? this.polygonLabel,
       polygonsMeta: polygonsMeta ?? this.polygonsMeta,
-      selectedPolygonMeta: selectedPolygonMeta ?? this.selectedPolygonMeta,
+      selectedPolygonMeta: clearSelectedPolygonMeta
+          ? null
+          : (selectedPolygonMeta ?? this.selectedPolygonMeta),
+      selectedPolygons: selectedPolygons ?? this.selectedPolygons, // Assign
       temporaryMarker: clearTemporaryMarker
           ? null
           : (temporaryMarker ?? this.temporaryMarker),
@@ -73,6 +80,7 @@ class MapState extends Equatable {
     polygonLabel,
     polygonsMeta,
     selectedPolygonMeta,
+    selectedPolygons, // Add to props
     temporaryMarker,
     error,
   ];
