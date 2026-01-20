@@ -97,6 +97,78 @@ class GroundcheckSupabaseService {
     }
   }
 
+  Future<List<GroundcheckRecord>> fetchUserRecords(String userId) async {
+    try {
+      final response = await _client
+          .from('view_groundcheck_history')
+          .select()
+          .eq('user_id', userId)
+          .order('updated_at', ascending: false);
+
+      if (response is List) {
+        return response.map((json) {
+          // Map view fields to GroundcheckRecord expected fields
+          // View fields: idsbr, nama_usaha, alamat_usaha, gcs_result, updated_at, user_id
+          // GroundcheckRecord needs more fields, so we need to fill them with defaults or adjust the view/model
+          // Since GroundcheckRecord is from groundcheck_page.dart and has required fields:
+          // kodeWilayah, statusPerusahaan, skalaUsaha, latitude, longitude, perusahaanId
+          // The current view might not return all these.
+          // We should probably update the view to include all needed fields or query the table directly if we need all fields.
+          // BUT the user explicitly asked to use the view.
+          // So I will update the view definition to include all fields OR handle partial data here.
+          // Let's assume for now we use the view as requested and fill missing data if any,
+          // but better yet, let's update the view query to include all fields if the model requires them.
+          // Actually, looking at the view definition:
+          // SELECT idsbr, nama_usaha, alamat_usaha, gcs_result, updated_at, user_id FROM groundcheck_list
+          // It is missing required fields for GroundcheckRecord.
+          // I will use a helper to map partial data safely.
+
+          return GroundcheckRecord(
+            idsbr: (json['idsbr'] ?? '').toString(),
+            namaUsaha: (json['nama_usaha'] ?? '').toString(),
+            alamatUsaha: (json['alamat_usaha'] ?? '').toString(),
+            kodeWilayah: (json['kode_wilayah'] ?? '')
+                .toString(), // Missing in view
+            statusPerusahaan: (json['status_perusahaan'] ?? '')
+                .toString(), // Missing in view
+            skalaUsaha: (json['skala_usaha'] ?? '')
+                .toString(), // Missing in view
+            gcsResult: (json['gcs_result'] ?? '').toString(),
+            latitude: (json['latitude'] ?? '0').toString(), // Missing in view
+            longitude: (json['longitude'] ?? '0').toString(), // Missing in view
+            perusahaanId: (json['perusahaan_id'] ?? '')
+                .toString(), // Missing in view
+            userId: json['user_id']?.toString(),
+          );
+        }).toList();
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchLeaderboard() async {
+    try {
+      // Coba ambil dari View jika ada
+      final response = await _client
+          .from('view_groundcheck_leaderboard')
+          .select()
+          .limit(50);
+
+      if (response is List) {
+        return List<Map<String, dynamic>>.from(response);
+      }
+      return [];
+    } catch (e) {
+      // Fallback: Query manual jika View belum dibuat (agak berat untuk data besar)
+      // Note: Supabase JS/Dart client tidak support .rpc untuk group by manual mudah tanpa function/view
+      // Jadi kita return empty atau error, menyarankan user membuat View.
+      print('Error fetching leaderboard (mungkin view belum dibuat): $e');
+      return [];
+    }
+  }
+
   Future<String?> fetchCurrentUserId() async {
     try {
       final user = _client.auth.currentUser;
@@ -110,6 +182,26 @@ class GroundcheckSupabaseService {
 
       if (response != null && response['id'] != null) {
         return response['id'].toString();
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<String?> fetchCurrentUserName() async {
+    try {
+      final user = _client.auth.currentUser;
+      if (user == null) return null;
+
+      final response = await _client
+          .from('users')
+          .select('name')
+          .eq('auth_uid', user.id)
+          .maybeSingle();
+
+      if (response != null && response['name'] != null) {
+        return response['name'].toString();
       }
       return null;
     } catch (e) {

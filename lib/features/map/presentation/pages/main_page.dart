@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'groundcheck_history_page.dart';
 import 'map_page.dart';
 import 'saved_page.dart';
 import 'groundcheck_page.dart';
@@ -226,7 +227,7 @@ class _MainPageState extends State<MainPage> {
       case 1:
         return SavedPage(mapController: _sharedMapController);
       case 2:
-        return const ContributionPage();
+        return const GroundcheckHistoryPage();
       case 3:
         return GroundcheckPage(onGoToMap: _focusGroundcheckLocation);
       default:
@@ -248,7 +249,7 @@ class _MainPageState extends State<MainPage> {
               index: _selectedIndex == 0 ? 0 : _selectedIndex - 1,
               children: [
                 SavedPage(mapController: _sharedMapController),
-                const ContributionPage(),
+                const GroundcheckHistoryPage(),
                 GroundcheckPage(onGoToMap: _focusGroundcheckLocation),
               ],
             ),
