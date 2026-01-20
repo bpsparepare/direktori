@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -25,6 +27,10 @@ import '../bloc/map_state.dart';
 import '../../../../core/widgets/image_upload_widget.dart';
 import '../../../contribution/presentation/bloc/contribution_bloc.dart';
 import '../../../contribution/presentation/bloc/contribution_event.dart';
+import '../../data/services/groundcheck_supabase_service.dart';
+import '../../data/services/bps_gc_service.dart';
+import '../../data/services/gc_credentials_service.dart';
+import 'groundcheck_page.dart';
 
 class MapPage extends StatelessWidget {
   final MapController? mapController;
@@ -68,11 +74,22 @@ class MapPage extends StatelessWidget {
                       context.read<MapBloc>().add(PlaceSelected(place));
                     },
                     onPlaceDragEnd: (place, newPoint) {
-                      _confirmMovePlaceAndUpdateRegional(
-                        context,
-                        place,
-                        newPoint,
-                      );
+                      if (place.id.startsWith('gc:')) {
+                        _confirmMoveGroundcheckCoordinates(
+                          context,
+                          place,
+                          newPoint,
+                        );
+                      } else {
+                        _confirmMovePlaceAndUpdateRegional(
+                          context,
+                          place,
+                          newPoint,
+                        );
+                      }
+                    },
+                    onNearbyPlacesTap: (places) {
+                      _showNearbyGroundcheckPopup(context, places);
                     },
                     onLongPress: (point) {
                       context.read<MapBloc>().add(TemporaryMarkerAdded(point));
@@ -176,30 +193,31 @@ class MapPage extends StatelessWidget {
                       ),
                     ),
                   ],
+
                   // Refresh places button (top-right)
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: Material(
-                      color: Colors.white,
-                      shape: const CircleBorder(),
-                      elevation: 2,
-                      child: IconButton(
-                        tooltip: 'Refresh marker',
-                        icon: const Icon(Icons.refresh),
-                        onPressed: () {
-                          MapRepositoryImpl().invalidatePlacesCache();
-                          context.read<MapBloc>().add(const PlacesRequested());
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Marker diperbarui'),
-                              duration: Duration(milliseconds: 800),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
+                  // Positioned(
+                  //   top: 12,
+                  //   right: 12,
+                  //   child: Material(
+                  //     color: Colors.white,
+                  //     shape: const CircleBorder(),
+                  //     elevation: 2,
+                  //     child: IconButton(
+                  //       tooltip: 'Refresh marker',
+                  //       icon: const Icon(Icons.refresh),
+                  //       onPressed: () {
+                  //         MapRepositoryImpl().invalidatePlacesCache();
+                  //         context.read<MapBloc>().add(const PlacesRequested());
+                  //         ScaffoldMessenger.of(context).showSnackBar(
+                  //           const SnackBar(
+                  //             content: Text('Marker diperbarui'),
+                  //             duration: Duration(milliseconds: 800),
+                  //           ),
+                  //         );
+                  //       },
+                  //     ),
+                  //   ),
+                  // ),
                   if (state.selectedPlace != null)
                     LayoutBuilder(
                       builder: (context, constraints) {
@@ -368,8 +386,8 @@ class MapPage extends StatelessWidget {
                                             width: 48,
                                             height: 48,
                                             decoration: BoxDecoration(
-                                              color: Colors.grey.withOpacity(
-                                                0.1,
+                                              color: Colors.grey.withValues(
+                                                alpha: 0.1,
                                               ),
                                               borderRadius:
                                                   BorderRadius.circular(24),
@@ -1926,6 +1944,37 @@ class MapPage extends StatelessWidget {
               },
             ),
             ListTile(
+              leading: const Icon(
+                Icons.playlist_add_check,
+                color: Colors.purple,
+              ),
+              title: const Text('Tambah Groundcheck'),
+              subtitle: const Text('Cari & Tambah/Edit data groundcheck'),
+              onTap: () {
+                Navigator.pop(context);
+                parentContext.read<MapBloc>().add(
+                  const TemporaryMarkerRemoved(),
+                );
+
+                // Calculate region data
+                String idSls = '';
+                String? namaSls;
+                final polygons = parentContext
+                    .read<MapBloc>()
+                    .state
+                    .polygonsMeta;
+                for (final polygon in polygons) {
+                  if (_isPointInPolygon(point, polygon.points)) {
+                    idSls = polygon.idsls ?? '';
+                    namaSls = polygon.name;
+                    break;
+                  }
+                }
+
+                _showAddGroundcheckForm(context, point, idSls, namaSls);
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.navigation, color: Colors.orange),
               title: const Text('Navigasi'),
               subtitle: const Text('Navigasi ke lokasi'),
@@ -2389,6 +2438,579 @@ class MapPage extends StatelessWidget {
     // TODO: Implement navigasi functionality
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Fitur Navigasi akan segera hadir')),
+    );
+  }
+
+  void _showAddGroundcheckForm(
+    BuildContext context,
+    LatLng point,
+    String idSls,
+    String? namaSls,
+  ) {
+    // Controllers
+    final idsbrController = TextEditingController();
+    final namaUsahaController = TextEditingController();
+    final alamatController = TextEditingController();
+
+    // Dropdown values
+    String? selectedStatus;
+    String? selectedSkala;
+    String? selectedGcsResult;
+
+    // Search state
+    List<GroundcheckRecord> searchResults = [];
+    bool isSearching = false;
+    bool showSuggestions = false;
+    Timer? _debounce;
+
+    // Phase tracking: 1 = Search, 2 = Form
+    int currentPhase = 1;
+    GroundcheckRecord? editingRecord;
+    bool useCurrentLocation =
+        true; // For editing: update location to clicked point?
+
+    // Helper to normalize status for dropdown
+    String? _normalizeStatus(String status) {
+      if (status.isEmpty) return null;
+      final lower = status.toLowerCase();
+      if (lower.contains('aktif')) return 'Aktif';
+      if (lower.contains('tutup sementara')) return 'Tutup Sementara';
+      if (lower.contains('belum beroperasi')) return 'Belum Beroperasi';
+      if (lower.contains('tutup')) return 'Tutup';
+      if (lower.contains('alih usaha')) return 'Alih Usaha';
+      if (lower.contains('tidak ditemukan')) return 'Tidak Ditemukan';
+      return status; // Fallback
+    }
+
+    // Helper to normalize GCS for dropdown
+    String? _normalizeGcs(String gcs) {
+      if (gcs.isEmpty) return null;
+      final lower = gcs.toLowerCase();
+      if (lower.contains('ditemukan') && !lower.contains('tidak'))
+        return '1. Ditemukan';
+      if (lower.contains('tutup')) return '3. Tutup';
+      if (lower.contains('ganda')) return '4. Ganda';
+      if (lower.contains('tidak ditemukan')) return '0. Tidak Ditemukan';
+      return gcs;
+    }
+
+    // Pre-fill function
+    void _prefillForm(GroundcheckRecord record) {
+      idsbrController.text = record.idsbr;
+      namaUsahaController.text = record.namaUsaha;
+      alamatController.text = record.alamatUsaha;
+      selectedStatus = _normalizeStatus(record.statusPerusahaan);
+      selectedSkala = record.skalaUsaha.isEmpty ? null : record.skalaUsaha;
+      selectedGcsResult = _normalizeGcs(record.gcsResult);
+    }
+
+    Color _getGcsColor(String gcsResult) {
+      final lower = gcsResult.toLowerCase();
+      if (lower.isEmpty || lower == '-- pilih --') {
+        return Colors.grey;
+      } else if (lower == '0' || lower.contains('tidak ditemukan')) {
+        return Colors.red;
+      } else if (lower == '1' || lower.contains('ditemukan')) {
+        return Colors.green;
+      } else if (lower == '3' || lower.contains('tutup')) {
+        return Colors.blueGrey;
+      } else if (lower == '4' || lower.contains('ganda')) {
+        return Colors.orange;
+      } else if (lower == '5' ||
+          lower.contains('usaha') ||
+          lower.contains('tambahan')) {
+        return Colors.blue;
+      } else {
+        return Colors.blueGrey;
+      }
+    }
+
+    String _getGcsLabel(String gcsResult) {
+      final lower = gcsResult.toLowerCase();
+      if (lower.isEmpty || lower == '-- pilih --') {
+        return 'Belum GC';
+      } else if (lower == '0' || lower.contains('tidak ditemukan')) {
+        return '0. Tidak Ditemukan';
+      } else if (lower == '1' || lower.contains('ditemukan')) {
+        return '1. Ditemukan';
+      } else if (lower == '3' || lower.contains('tutup')) {
+        return '3. Tutup';
+      } else if (lower == '4' || lower.contains('ganda')) {
+        return '4. Ganda';
+      } else if (lower == '5' ||
+          lower.contains('usaha') ||
+          lower.contains('tambahan')) {
+        return '5. Usaha Baru';
+      } else {
+        return gcsResult;
+      }
+    }
+
+    Color _getStatusColor(String status) {
+      final lower = status.toLowerCase();
+      if (lower.contains('aktif')) {
+        return Colors.green;
+      } else if (lower.contains('tutup sementara')) {
+        return Colors.orange;
+      } else if (lower.contains('belum beroperasi')) {
+        return Colors.blue;
+      } else if (lower.contains('tutup')) {
+        return Colors.red;
+      } else if (lower.contains('alih usaha')) {
+        return Colors.purple;
+      } else if (lower.contains('tidak ditemukan')) {
+        return Colors.grey;
+      } else {
+        return Colors.grey;
+      }
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (bottomSheetContext) => StatefulBuilder(
+        builder: (context, setState) => DraggableScrollableSheet(
+          initialChildSize: 0.9,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) => Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+            ),
+            child: Column(
+              children: [
+                // Drag handle
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                // Header
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        currentPhase == 1
+                            ? 'Cari / Tambah Groundcheck'
+                            : (editingRecord != null
+                                  ? 'Edit Groundcheck'
+                                  : 'Tambah Baru'),
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(bottomSheetContext).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    controller: scrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (currentPhase == 1) ...[
+                          TextField(
+                            decoration: InputDecoration(
+                              labelText: 'Cari Nama Usaha / IDSBR',
+                              prefixIcon: const Icon(Icons.search),
+                              border: const OutlineInputBorder(),
+                              suffixIcon: isSearching
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            onChanged: (query) {
+                              if (_debounce?.isActive ?? false)
+                                _debounce!.cancel();
+                              _debounce = Timer(
+                                const Duration(milliseconds: 500),
+                                () {
+                                  if (!context.mounted) return;
+                                  if (query.length >= 2) {
+                                    setState(() {
+                                      isSearching = true;
+                                      showSuggestions = true;
+                                    });
+                                    GroundcheckSupabaseService()
+                                        .searchRecords(query)
+                                        .then((results) {
+                                          if (!context.mounted) return;
+                                          setState(() {
+                                            searchResults = results;
+                                            isSearching = false;
+                                          });
+                                        });
+                                  } else {
+                                    setState(() {
+                                      searchResults = [];
+                                      isSearching = false;
+                                      showSuggestions = false;
+                                    });
+                                  }
+                                },
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          if (searchResults.isNotEmpty)
+                            ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: searchResults.length,
+                              separatorBuilder: (context, index) =>
+                                  const Divider(),
+                              itemBuilder: (context, index) {
+                                final record = searchResults[index];
+                                final gcsLabel = _getGcsLabel(record.gcsResult);
+                                final statusLabel =
+                                    record.statusPerusahaan.isEmpty
+                                    ? 'Belum Ada Status'
+                                    : record.statusPerusahaan;
+                                final lat = double.tryParse(record.latitude);
+                                final lon = double.tryParse(record.longitude);
+                                final hasCoord =
+                                    lat != null &&
+                                    lon != null &&
+                                    lat != 0.0 &&
+                                    lon != 0.0;
+
+                                return ListTile(
+                                  leading: Icon(
+                                    Icons.location_on,
+                                    color: _getGcsColor(record.gcsResult),
+                                    size: 32,
+                                  ),
+                                  title: Text(record.namaUsaha),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text('${record.alamatUsaha}'),
+                                      const SizedBox(height: 8),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 4,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color:
+                                                  (hasCoord
+                                                          ? Colors.blue
+                                                          : Colors.red)
+                                                      .withValues(alpha: 0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              border: Border.all(
+                                                color:
+                                                    (hasCoord
+                                                            ? Colors.blue
+                                                            : Colors.red)
+                                                        .withValues(alpha: 0.5),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  hasCoord
+                                                      ? Icons.location_on
+                                                      : Icons.location_off,
+                                                  size: 12,
+                                                  color: hasCoord
+                                                      ? Colors.blue
+                                                      : Colors.red,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  hasCoord
+                                                      ? 'Ada Koordinat'
+                                                      : 'Tanpa Koordinat',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: hasCoord
+                                                        ? Colors.blue
+                                                        : Colors.red,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          if (record.gcsResult.isNotEmpty)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 2,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: _getGcsColor(
+                                                  record.gcsResult,
+                                                ).withValues(alpha: 0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                border: Border.all(
+                                                  color: _getGcsColor(
+                                                    record.gcsResult,
+                                                  ).withValues(alpha: 0.5),
+                                                ),
+                                              ),
+                                              child: Text(
+                                                gcsLabel,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: _getGcsColor(
+                                                    record.gcsResult,
+                                                  ),
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          if (record
+                                              .statusPerusahaan
+                                              .isNotEmpty)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 2,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: _getStatusColor(
+                                                  record.statusPerusahaan,
+                                                ).withValues(alpha: 0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                border: Border.all(
+                                                  color: _getStatusColor(
+                                                    record.statusPerusahaan,
+                                                  ).withValues(alpha: 0.5),
+                                                ),
+                                              ),
+                                              child: Text(
+                                                statusLabel,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: _getStatusColor(
+                                                    record.statusPerusahaan,
+                                                  ),
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  isThreeLine: true,
+                                  onTap: () {
+                                    setState(() {
+                                      editingRecord = record;
+                                      _prefillForm(record);
+                                      currentPhase = 2;
+                                      useCurrentLocation =
+                                          false; // Default to keeping existing location
+                                    });
+                                  },
+                                );
+                              },
+                            ),
+                          if (searchResults.isEmpty &&
+                              showSuggestions &&
+                              !isSearching)
+                            const Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: Text(
+                                'Tidak ditemukan. Silakan buat baru.',
+                              ),
+                            ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  currentPhase = 2;
+                                  editingRecord = null;
+                                  // Clear form
+                                  idsbrController.clear();
+                                  namaUsahaController.clear();
+                                  alamatController.clear();
+                                  selectedStatus = null;
+                                  selectedSkala = null;
+                                  selectedGcsResult = null;
+                                  useCurrentLocation = true;
+                                });
+                              },
+                              icon: const Icon(Icons.add),
+                              label: const Text('Buat Data Baru'),
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ] else ...[
+                          // Phase 2: Form
+                          if (editingRecord != null)
+                            CheckboxListTile(
+                              title: const Text(
+                                'Update Lokasi ke Titik Pilihan',
+                              ),
+                              subtitle: Text(
+                                'Lat: ${point.latitude.toStringAsFixed(6)}, Lng: ${point.longitude.toStringAsFixed(6)}',
+                              ),
+                              value: useCurrentLocation,
+                              onChanged: (val) {
+                                setState(() {
+                                  useCurrentLocation = val ?? false;
+                                });
+                              },
+                            ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: namaUsahaController,
+                            decoration: const InputDecoration(
+                              labelText: 'Nama Usaha *',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: alamatController,
+                            decoration: const InputDecoration(
+                              labelText: 'Alamat Usaha',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      currentPhase = 1;
+                                    });
+                                  },
+                                  child: const Text('Kembali'),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () async {
+                                    if (namaUsahaController.text.isEmpty) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Nama Usaha wajib diisi',
+                                          ),
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    // Auto-generate IDSBR if empty or if creating new
+                                    String finalIdsbr;
+                                    if (editingRecord != null) {
+                                      finalIdsbr = editingRecord!.idsbr;
+                                    } else {
+                                      // If creating new, generate temp ID
+                                      finalIdsbr =
+                                          'TEMP-${DateTime.now().millisecondsSinceEpoch}';
+                                    }
+
+                                    final service =
+                                        GroundcheckSupabaseService();
+                                    final userId = editingRecord == null
+                                        ? await service.fetchCurrentUserId()
+                                        : editingRecord!.userId;
+                                    final record = GroundcheckRecord(
+                                      idsbr: finalIdsbr,
+                                      namaUsaha: namaUsahaController.text,
+                                      alamatUsaha: alamatController.text,
+                                      kodeWilayah:
+                                          idSls, // Use the region where the point is
+                                      statusPerusahaan: 'Aktif',
+                                      skalaUsaha: '', // Null/empty as requested
+                                      gcsResult: editingRecord != null
+                                          ? '1' // Ditemukan
+                                          : '5', // Tambahan
+                                      latitude: useCurrentLocation
+                                          ? point.latitude.toString()
+                                          : (editingRecord?.latitude ??
+                                                point.latitude.toString()),
+                                      longitude: useCurrentLocation
+                                          ? point.longitude.toString()
+                                          : (editingRecord?.longitude ??
+                                                point.longitude.toString()),
+                                      perusahaanId:
+                                          editingRecord?.perusahaanId ??
+                                          finalIdsbr,
+                                      userId: userId,
+                                    );
+
+                                    await service.updateRecord(record);
+
+                                    if (context.mounted) {
+                                      Navigator.of(context).pop();
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Data berhasil disimpan',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  child: const Text('Simpan'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -4700,14 +5322,36 @@ class MapPage extends StatelessWidget {
     }
 
     // Tampilkan dialog konfirmasi
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showModalBottomSheet<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Konfirmasi Pemindahan Lokasi'),
-        content: Column(
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const Text(
+              'Konfirmasi Pemindahan Lokasi',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
             Text('Pindahkan "${place.name}" ke lokasi baru?'),
             const SizedBox(height: 8),
             Text('Latitude: ${newPoint.latitude.toStringAsFixed(6)}'),
@@ -4722,18 +5366,30 @@ class MapPage extends StatelessWidget {
               if (namaSls != null) Text('Nama SLS: $namaSls'),
               if (kodePos != null) Text('Kode Pos: $kodePos'),
             ],
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Batal'),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Pindahkan'),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Pindahkan'),
-          ),
-        ],
       ),
     );
 
@@ -4832,6 +5488,476 @@ class MapPage extends StatelessWidget {
     }
   }
 
+  void _confirmMoveGroundcheckCoordinates(
+    BuildContext context,
+    Place place,
+    LatLng newPoint,
+  ) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final mapBloc = context.read<MapBloc>();
+    final idsbr = place.id.startsWith('gc:') ? place.id.substring(3) : place.id;
+
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const Text(
+              'Konfirmasi Pemindahan Marker Groundcheck',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Text('Pindahkan "${place.name}" ke lokasi baru?'),
+            const SizedBox(height: 8),
+            Text('Latitude: ${newPoint.latitude.toStringAsFixed(6)}'),
+            Text('Longitude: ${newPoint.longitude.toStringAsFixed(6)}'),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Batal'),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Pindahkan'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final service = GroundcheckSupabaseService();
+        final success = await service.updateCoordinates(
+          idsbr: idsbr,
+          latitude: newPoint.latitude,
+          longitude: newPoint.longitude,
+        );
+        if (success) {
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                'Lokasi groundcheck "${place.name}" berhasil diperbarui',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+          try {
+            MapRepositoryImpl().invalidatePlacesCache();
+          } catch (_) {}
+          mapBloc.add(const PlacesRequested());
+        } else {
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Text('Gagal memperbarui lokasi groundcheck'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (e) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Widget _getPlaceIcon(Place p) {
+    IconData icon;
+    Color color;
+    switch (p.gcsResult) {
+      case '1': // Ditemukan
+        color = Colors.green;
+        icon = Icons.check_circle;
+        break;
+      case '99': // Tidak ditemukan
+        color = Colors.red;
+        icon = Icons.cancel;
+        break;
+      case '3': // Tutup
+        color = Colors.brown;
+        icon = Icons.block;
+        break;
+      case '4': // Ganda
+        color = Colors.purple;
+        icon = Icons.content_copy;
+        break;
+      default: // Belum Groundcheck (null/empty)
+        color = Colors.orange;
+        icon = Icons.help;
+        break;
+    }
+    return Icon(icon, color: color);
+  }
+
+  void _showNearbyGroundcheckPopup(
+    BuildContext context,
+    List<Place> places,
+  ) async {
+    final mutablePlaces = List<Place>.from(places);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.8,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 12),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Lokasi Groundcheck berdekatan',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: mutablePlaces.length,
+                      separatorBuilder: (_, __) => const Divider(height: 16),
+                      itemBuilder: (_, i) {
+                        final p = mutablePlaces[i];
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                _getPlaceIcon(p),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        p.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      if (p.address != null &&
+                                          p.address!.isNotEmpty)
+                                        Text(
+                                          'Alamat: ${p.address!}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      if (p.statusPerusahaan != null &&
+                                          p.statusPerusahaan!.isNotEmpty)
+                                        Text(
+                                          'Status: ${p.statusPerusahaan}',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.blue,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.streetview,
+                                    color: Colors.blue,
+                                  ),
+                                  tooltip: 'Lihat Street View',
+                                  onPressed: () async {
+                                    final url = Uri.parse(
+                                      'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.position.latitude},${p.position.longitude}',
+                                    );
+                                    if (!await launchUrl(
+                                      url,
+                                      mode: LaunchMode.externalApplication,
+                                    )) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Tidak dapat membuka Street View',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.edit,
+                                    color: Colors.orange,
+                                  ),
+                                  tooltip: 'Update status',
+                                  onPressed: () async {
+                                    final newCode =
+                                        await _showUpdateGroundcheckStatusDialog(
+                                          context,
+                                          p,
+                                        );
+                                    if (newCode != null) {
+                                      setState(() {
+                                        mutablePlaces[i] = Place(
+                                          id: p.id,
+                                          name: p.name,
+                                          description: p.description,
+                                          position: p.position,
+                                          urlGambar: p.urlGambar,
+                                          gcsResult: newCode,
+                                          address: p.address,
+                                          statusPerusahaan: p.statusPerusahaan,
+                                        );
+                                      });
+                                      if (mutablePlaces.length == 1) {
+                                        Navigator.of(dialogContext).pop();
+                                      }
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<String?> _showUpdateGroundcheckStatusDialog(
+    BuildContext context,
+    Place place,
+  ) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final mapBloc = context.read<MapBloc>();
+    final idsbr = place.id.replaceFirst('gc:', '');
+    if (idsbr.isEmpty) {
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('ID groundcheck tidak valid'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return null;
+    }
+
+    String normalize(String? value) {
+      if (value == null) return '';
+      if (value == '0') return '99';
+      return value;
+    }
+
+    final currentCode = normalize(place.gcsResult);
+    String selectedCode = currentCode;
+
+    final options = <Map<String, String>>[
+      {'code': '', 'label': 'Belum Groundcheck'},
+      {'code': '1', 'label': '1. Ditemukan'},
+      {'code': '99', 'label': '99. Tidak Ditemukan'},
+      {'code': '3', 'label': '3. Tutup'},
+      {'code': '4', 'label': '4. Ganda'},
+    ];
+
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setStateSB) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              padding: const EdgeInsets.only(bottom: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 12),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Update Status Groundcheck',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(),
+                  ...options.map((o) {
+                    final code = o['code']!;
+                    final label = o['label']!;
+                    return RadioListTile<String>(
+                      value: code,
+                      groupValue: selectedCode,
+                      title: Text(label),
+                      onChanged: (value) {
+                        setStateSB(() {
+                          selectedCode = value ?? '';
+                        });
+                      },
+                    );
+                  }),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      child: const Text('Simpan'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true) return null;
+    if (selectedCode == currentCode) {
+      return null;
+    }
+
+    try {
+      final service = GroundcheckSupabaseService();
+      final ok = await service.updateGcsResult(idsbr, selectedCode);
+      if (!ok) {
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(
+            content: Text('Gagal mengupdate status groundcheck'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return null;
+      }
+      try {
+        MapRepositoryImpl().invalidatePlacesCache();
+      } catch (_) {}
+      mapBloc.add(const PlacesRequested());
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('Status groundcheck berhasil diupdate'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      return selectedCode;
+    } catch (e) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+      return null;
+    }
+  }
+
   void _searchDirectories(
     String query,
     StateSetter setState,
@@ -4904,14 +6030,36 @@ class MapPage extends StatelessWidget {
     }
 
     // Show confirmation dialog with regional info
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showModalBottomSheet<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Konfirmasi Update'),
-        content: Column(
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const Text(
+              'Konfirmasi Update',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
             Text('Update koordinat untuk "${directory.namaUsaha}"?'),
             const SizedBox(height: 8),
             Text('Latitude: ${point.latitude.toStringAsFixed(6)}'),
@@ -4926,18 +6074,30 @@ class MapPage extends StatelessWidget {
               if (namaSls != null) Text('Nama SLS: $namaSls'),
               if (kodePos != null) Text('Kode Pos: $kodePos'),
             ],
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Batal'),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Update'),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Update'),
-          ),
-        ],
       ),
     );
 
@@ -5052,126 +6212,147 @@ class MapPage extends StatelessWidget {
     List<DirektoriModel> searchResults = [];
     bool isSearching = false;
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => Dialog(
-          child: Container(
-            width: MediaQuery.of(context).size.width * 0.8,
-            height: MediaQuery.of(context).size.height * 0.7,
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
+        builder: (context, setState) => Container(
+          height: MediaQuery.of(context).size.height * 0.85,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            8,
+            20,
+            MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Expanded(
+                    child: Text(
                       'Pilih Direktori untuk Update Koordinat',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    IconButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: searchController,
-                  decoration: const InputDecoration(
-                    labelText: 'Cari nama usaha',
-                    hintText: 'Ketik minimal 3 karakter untuk mencari...',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
                   ),
-                  onChanged: (query) {
-                    if (query.length >= 3) {
-                      setState(() {
-                        isSearching = true;
-                      });
-                      _searchDirectories(query, setState, (results, loading) {
-                        searchResults = results;
-                        isSearching = loading;
-                      }, context);
-                    } else {
-                      setState(() {
-                        searchResults = [];
-                        isSearching = false;
-                      });
-                    }
-                  },
+                  IconButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: searchController,
+                decoration: const InputDecoration(
+                  labelText: 'Cari nama usaha',
+                  hintText: 'Ketik minimal 3 karakter untuk mencari...',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
                 ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: isSearching
-                      ? const Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              CircularProgressIndicator(),
-                              SizedBox(height: 16),
-                              Text('Mencari...'),
-                            ],
-                          ),
-                        )
-                      : searchResults.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'Tidak ada usaha yang ditemukan',
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        )
-                      : ListView.separated(
-                          itemCount: searchResults.length,
-                          separatorBuilder: (context, index) =>
-                              const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final directory = searchResults[index];
-                            return ListTile(
-                              title: Text(
-                                directory.namaUsaha,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (directory.alamat != null)
-                                    Text(
-                                      directory.alamat!,
-                                      style: const TextStyle(fontSize: 12),
-                                    ),
-                                  Text(
-                                    'ID SLS: ${directory.idSls}',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              trailing: ElevatedButton(
-                                onPressed: () {
-                                  Navigator.of(dialogContext).pop();
-                                  _updateDirectoryCoordinates(
-                                    context,
-                                    directory,
-                                    point,
-                                  );
-                                },
-                                child: const Text('Update Koordinat'),
-                              ),
-                            );
-                          },
+                onChanged: (query) {
+                  if (query.length >= 3) {
+                    setState(() {
+                      isSearching = true;
+                    });
+                    _searchDirectories(query, setState, (results, loading) {
+                      searchResults = results;
+                      isSearching = loading;
+                    }, context);
+                  } else {
+                    setState(() {
+                      searchResults = [];
+                      isSearching = false;
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: isSearching
+                    ? const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 16),
+                            Text('Mencari...'),
+                          ],
                         ),
-                ),
-              ],
-            ),
+                      )
+                    : searchResults.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'Tidak ada usaha yang ditemukan',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: searchResults.length,
+                        separatorBuilder: (context, index) =>
+                            const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final directory = searchResults[index];
+                          return ListTile(
+                            title: Text(
+                              directory.namaUsaha,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (directory.alamat != null)
+                                  Text(
+                                    directory.alamat!,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                Text(
+                                  'ID SLS: ${directory.idSls}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            trailing: ElevatedButton(
+                              onPressed: () {
+                                Navigator.of(dialogContext).pop();
+                                _updateDirectoryCoordinates(
+                                  context,
+                                  directory,
+                                  point,
+                                );
+                              },
+                              child: const Text('Update Koordinat'),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
           ),
         ),
       ),

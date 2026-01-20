@@ -6,6 +6,9 @@ class Place {
   final String description;
   final LatLng position;
   final String? urlGambar;
+  final String? gcsResult;
+  final String? address;
+  final String? statusPerusahaan;
 
   const Place({
     required this.id,
@@ -13,5 +16,8 @@ class Place {
     required this.description,
     required this.position,
     this.urlGambar,
+    this.gcsResult,
+    this.address,
+    this.statusPerusahaan,
   });
 }

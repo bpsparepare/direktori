@@ -10,7 +10,7 @@ import '../models/direktori_model.dart';
 import '../../../../core/config/supabase_config.dart';
 import 'package:flutter/foundation.dart';
 import '../../../../core/config/app_constants.dart';
-import 'scraping_repository_impl.dart';
+import '../services/groundcheck_supabase_service.dart';
 
 class MapRepositoryImpl implements MapRepository {
   final SupabaseClient _supabaseClient = SupabaseConfig.client;
@@ -25,57 +25,8 @@ class MapRepositoryImpl implements MapRepository {
 
   Future<List<Place>> _loadGroundcheckPlacesFromAsset() async {
     try {
-      final List<Place> results = [];
-      final List<dynamic> data = await _supabaseClient
-          .from('groundcheck_list')
-          .select(
-            '''
-            idsbr,
-            nama_usaha,
-            kode_wilayah,
-            status_perusahaan,
-            skala_usaha,
-            gcs_result,
-            latitude,
-            longitude
-            ''',
-          );
-
-      for (final item in data) {
-        if (item is! Map<String, dynamic>) continue;
-        final lat = _parseDouble(item['latitude']);
-        final lon = _parseDouble(item['longitude']);
-        if (lat == null || lon == null) continue;
-        final idsbr = (item['idsbr'] ?? '').toString();
-        if (idsbr.isEmpty) continue;
-        final name = (item['nama_usaha'] ?? '').toString();
-        final kode = (item['kode_wilayah'] ?? '').toString();
-        final status = (item['status_perusahaan'] ?? '').toString();
-        final skala = (item['skala_usaha'] ?? '').toString();
-        final gcs = (item['gcs_result'] ?? '').toString();
-        final descParts = <String>[];
-        if (kode.isNotEmpty) {
-          descParts.add('Kode wilayah: $kode');
-        }
-        if (status.isNotEmpty) {
-          descParts.add('Status: $status');
-        }
-        if (skala.isNotEmpty) {
-          descParts.add('Skala: $skala');
-        }
-        if (gcs.isNotEmpty) {
-          descParts.add('GCS: $gcs');
-        }
-        final desc = descParts.join(' | ');
-        results.add(
-          Place(
-            id: 'gc:$idsbr',
-            name: name.isNotEmpty ? name : idsbr,
-            description: desc,
-            position: LatLng(lat, lon),
-          ),
-        );
-      }
+      final service = GroundcheckSupabaseService();
+      final results = await service.fetchPlaces();
       debugPrint(
         'MapRepository: Loaded ${results.length} groundcheck places from Supabase',
       );
@@ -634,97 +585,14 @@ class MapRepositoryImpl implements MapRepository {
   @override
   Future<List<Place>> getPlaces() async {
     try {
-      final List<Place> places = [];
-      const int batchSize = 1000;
-      int start = 0;
-
-      while (true) {
-        final batch = await _supabaseClient
-            .from('direktori')
-            .select('''
-              *,
-              wilayah(*)
-            ''')
-            .eq('keberadaan_usaha', 1)
-            .not('latitude', 'is', null)
-            .not('longitude', 'is', null)
-            .order('updated_at', ascending: false)
-            .order('created_at', ascending: false)
-            .range(start, start + batchSize - 1);
-
-        if (batch.isEmpty) break;
-
-        for (final item in batch) {
-          try {
-            final Map<String, dynamic> flattenedData =
-                Map<String, dynamic>.from(item);
-            if (item['wilayah'] != null && item['wilayah'] is Map) {
-              final wilayahData = item['wilayah'] as Map<String, dynamic>;
-              flattenedData.addAll(wilayahData);
-            }
-            final direktori = DirektoriModel.fromJson(flattenedData);
-            if (direktori.hasValidCoordinates) {
-              places.add(direktori.toPlace());
-            }
-          } catch (e) {
-            debugPrint('MapRepository: Error parsing direktori item: $e');
-            continue;
-          }
-        }
-
-        if (batch.length < batchSize) break;
-        start += batchSize;
-      }
-
-      _allPlacesCache = places;
+      final gcPlaces = await _loadGroundcheckPlacesFromAsset();
+      _allPlacesCache = gcPlaces;
       debugPrint(
-        'MapRepository: Successfully loaded ${places.length} places from Supabase',
+        'MapRepository: Loaded ${gcPlaces.length} groundcheck places as markers',
       );
-
-      if (places.isEmpty) {
-        debugPrint(
-          'MapRepository: No valid places found, returning empty list',
-        );
-        final List<Place> result = [];
-        try {
-          final scraped = await ScrapingRepositoryImpl()
-              .getScrapedPlacesAsPlace();
-          debugPrint('MapRepository: Loaded ${scraped.length} scraped places');
-          result.addAll(scraped);
-        } catch (e) {
-          debugPrint('MapRepository: Failed to load scraped places: $e');
-        }
-        try {
-          final gc = await _loadGroundcheckPlacesFromAsset();
-          result.addAll(gc);
-        } catch (e) {
-          debugPrint('MapRepository: Failed to append groundcheck places: $e');
-        }
-        _allPlacesCache = result;
-        return result;
-      }
-
-      try {
-        final scraped = await ScrapingRepositoryImpl()
-            .getScrapedPlacesAsPlace();
-        debugPrint('MapRepository: Loaded ${scraped.length} scraped places');
-        places.addAll(scraped);
-      } catch (e) {
-        debugPrint('MapRepository: Failed to load scraped places: $e');
-      }
-
-      try {
-        final gc = await _loadGroundcheckPlacesFromAsset();
-        places.addAll(gc);
-      } catch (e) {
-        debugPrint('MapRepository: Failed to append groundcheck places: $e');
-      }
-
-      _allPlacesCache = places;
-      return places;
+      return gcPlaces;
     } catch (e) {
-      debugPrint('MapRepository: Error fetching places from Supabase: $e');
-      // Jika ada error, return list kosong
+      debugPrint('MapRepository: Error fetching groundcheck places: $e');
       return [];
     }
   }
@@ -737,16 +605,8 @@ class MapRepositoryImpl implements MapRepository {
     double east,
   ) async {
     try {
-      if (_allPlacesCache != null) {
-        final filtered = _allPlacesCache!.where((p) {
-          final lat = p.position.latitude;
-          final lon = p.position.longitude;
-          return lat >= south && lat <= north && lon >= west && lon <= east;
-        }).toList();
-        debugPrint(
-          'MapRepository: Loaded ${filtered.length} places in bounds from cache',
-        );
-        return filtered;
+      if (_allPlacesCache == null) {
+        _allPlacesCache = await _loadGroundcheckPlacesFromAsset();
       }
 
       final key = _boundsKey(south, north, west, east);
@@ -757,54 +617,12 @@ class MapRepositoryImpl implements MapRepository {
         );
         return cached;
       }
-      final List<Place> places = [];
-      const int batchSize = 1000;
-      int start = 0;
 
-      while (true) {
-        final batch = await _supabaseClient
-            .from('direktori')
-            .select('''
-              id,
-              nama_usaha,
-              latitude,
-              longitude,
-              url_gambar,
-              updated_at,
-              created_at,
-              wilayah(nm_sls,kd_prov,kd_kab,kd_kec,kd_desa)
-            ''')
-            .eq('keberadaan_usaha', 1)
-            .gte('latitude', south)
-            .lte('latitude', north)
-            .gte('longitude', west)
-            .lte('longitude', east)
-            .order('updated_at', ascending: false)
-            .range(start, start + batchSize - 1);
-
-        if (batch.isEmpty) break;
-
-        for (final item in batch) {
-          try {
-            final Map<String, dynamic> flattenedData =
-                Map<String, dynamic>.from(item);
-            if (item['wilayah'] != null && item['wilayah'] is Map) {
-              final wilayahData = item['wilayah'] as Map<String, dynamic>;
-              flattenedData.addAll(wilayahData);
-            }
-            final direktori = DirektoriModel.fromJson(flattenedData);
-            if (direktori.hasValidCoordinates) {
-              places.add(direktori.toPlace());
-            }
-          } catch (e) {
-            debugPrint('MapRepository(bounds): parse item error: $e');
-            continue;
-          }
-        }
-
-        if (batch.length < batchSize) break;
-        start += batchSize;
-      }
+      final places = _allPlacesCache!.where((p) {
+        final lat = p.position.latitude;
+        final lon = p.position.longitude;
+        return lat >= south && lat <= north && lon >= west && lon <= east;
+      }).toList();
 
       _boundsCache[key] = places;
       debugPrint(

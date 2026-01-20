@@ -23,6 +23,7 @@ class MapView extends StatefulWidget {
   final void Function(int)? onPolygonSelected;
   final MapController? mapController; // Add optional MapController parameter
   final void Function(LatLngBounds)? onBoundsChanged;
+  final void Function(List<Place>)? onNearbyPlacesTap;
 
   const MapView({
     super.key,
@@ -39,6 +40,7 @@ class MapView extends StatefulWidget {
     this.onPolygonSelected,
     this.mapController, // Add to constructor
     this.onBoundsChanged,
+    this.onNearbyPlacesTap,
   });
 
   @override
@@ -57,11 +59,12 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   double _offsetX = 0.0;
   double _offsetY = 0.0;
 
-  bool _showScrapedMarkers = true;
   bool _showDirectoryMarkers = true;
   bool _showMarkerLabels = true;
   bool _showGroundcheckMarkers = true;
+  bool _showNonVerifiedGroundchecks = true;
   Timer? _boundsDebounce;
+  bool _isDragging = false; // Track dragging state
 
   @override
   void initState() {
@@ -247,14 +250,17 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
         : 120;
     final double labelHeight = _scaledHeight(fontSize);
     final List<Place> renderList = _placesForRender(widget.places);
-    final List<Place> scrapedList = renderList
-        .where((p) => p.id.startsWith('scrape:'))
-        .toList();
     final List<Place> groundcheckList = renderList
-        .where((p) => p.id.startsWith('gc:'))
+        .where(
+          (p) =>
+              p.id.startsWith('gc:') &&
+              (_showNonVerifiedGroundchecks ||
+                  p.gcsResult == '1' ||
+                  (p.gcsResult?.isEmpty ?? true)),
+        )
         .toList();
     final List<Place> mainList = renderList
-        .where((p) => !p.id.startsWith('scrape:') && !p.id.startsWith('gc:'))
+        .where((p) => !p.id.startsWith('gc:'))
         .toList();
 
     return Stack(
@@ -274,13 +280,25 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               }
             },
             onMapEvent: (evt) {
-              setState(() {
+              bool shouldSetState = false;
+              // Only update state if zoom or rotation changed significantly
+              if ((evt.camera.zoom - _zoom).abs() > 0.001) {
                 _zoom = evt.camera.zoom;
+                shouldSetState = true;
+              }
+              if ((evt.camera.rotation - _rotation).abs() > 0.001) {
                 _rotation = evt.camera.rotation;
-              });
-              if (widget.onBoundsChanged != null) {
+                shouldSetState = true;
+              }
+
+              if (shouldSetState) {
+                setState(() {});
+              }
+
+              if (widget.onBoundsChanged != null && !_isDragging) {
                 _boundsDebounce?.cancel();
                 _boundsDebounce = Timer(const Duration(milliseconds: 300), () {
+                  if (_isDragging) return; // Double check inside timer
                   final b = _mapController.camera.visibleBounds;
                   widget.onBoundsChanged!(b);
                 });
@@ -317,7 +335,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                 polygons: [
                   Polygon(
                     points: widget.polygon,
-                    color: Colors.blue.withOpacity(0.3),
+                    color: Colors.blue.withValues(alpha: 0.3),
                     borderColor: Colors.blue,
                     borderStrokeWidth: 2,
                   ),
@@ -365,27 +383,64 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                   ),
                 ],
               ),
-            // Draggable markers: split into scraped (below), groundcheck, and main (above)
+            // Draggable markers: split into groundcheck and main (above)
             if (renderList.isNotEmpty) ...[
-              // Scraped markers layer (rendered first = below)
-              if (_showScrapedMarkers)
-                MarkerLayer(
-                  markers: scrapedList.map((p) {
+              if (_showGroundcheckMarkers && groundcheckList.isNotEmpty)
+                DragMarkers(
+                  markers: groundcheckList.map((p) {
                     final isSelected = widget.selectedPlace?.id == p.id;
-                    final Color baseColor = isSelected
-                        ? Colors.blue
-                        : Colors.purple;
                     final double fontSize = (_scaledFontSize() - 8).clamp(
                       10,
                       14,
                     );
-                    return Marker(
+                    return DragMarker(
+                      key: ValueKey(p.id),
                       point: p.position,
-                      width: 160,
-                      height: isSelected ? 84 : 76,
-                      child: GestureDetector(
-                        onTap: () => widget.onPlaceTap(p),
-                        child: Column(
+                      size: Size(170, isSelected ? 86 : 78),
+                      offset: Offset(0, isSelected ? -20 : -16),
+                      useLongPress: true,
+                      builder: (_, __, isDragging) {
+                        Color baseColor;
+                        IconData icon;
+
+                        if (isDragging) {
+                          baseColor = Colors.blue;
+                          icon = Icons.edit_location_alt;
+                        } else {
+                          switch (p.gcsResult) {
+                            case '1': // Ditemukan
+                              baseColor = Colors.green;
+                              icon = Icons.check_circle;
+                              break;
+                            case '99': // Tidak ditemukan
+                              baseColor = Colors.red;
+                              icon = Icons.cancel;
+                              break;
+                            case '3': // Tutup
+                              baseColor = Colors.pinkAccent;
+                              icon = Icons.block;
+                              break;
+                            case '4': // Ganda
+                              baseColor = Colors.purple;
+                              icon = Icons.content_copy;
+                              break;
+                            case '5': // Usaha Baru
+                              baseColor = Colors.blue;
+                              icon = Icons.add_location;
+                              break;
+                            default: // Belum Groundcheck (null/empty)
+                              baseColor = Colors.orange;
+                              icon = Icons.help;
+                              break;
+                          }
+                        }
+
+                        // Highlight color when selected if needed, or just keep status color
+                        if (isSelected) {
+                          // Optional: make it slightly different or just rely on size
+                        }
+
+                        return Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Container(
@@ -394,7 +449,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                                       shape: BoxShape.circle,
                                       boxShadow: [
                                         BoxShadow(
-                                          color: baseColor.withOpacity(0.5),
+                                          color: baseColor.withValues(
+                                            alpha: 0.5,
+                                          ),
                                           blurRadius: 10,
                                           spreadRadius: 2,
                                         ),
@@ -402,7 +459,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                                     )
                                   : null,
                               child: Icon(
-                                Icons.location_pin,
+                                icon,
                                 color: baseColor,
                                 size: isSelected ? 40 : 32,
                               ),
@@ -440,94 +497,42 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                                 ],
                               ),
                           ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              if (_showGroundcheckMarkers && groundcheckList.isNotEmpty)
-                MarkerLayer(
-                  markers: groundcheckList.map((p) {
-                    final isSelected = widget.selectedPlace?.id == p.id;
-                    final Color baseColor = isSelected
-                        ? Colors.green
-                        : Colors.lightGreen;
-                    final double fontSize = (_scaledFontSize() - 8).clamp(
-                      10,
-                      14,
-                    );
-                    return Marker(
-                      point: p.position,
-                      width: 160,
-                      height: isSelected ? 84 : 76,
-                      child: GestureDetector(
-                        onTap: () => widget.onPlaceTap(p),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: isSelected ? 44 : 38,
-                              height: isSelected ? 44 : 38,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: baseColor.withOpacity(0.15),
-                                border: Border.all(
-                                  color: baseColor,
-                                  width: isSelected ? 3 : 2,
-                                ),
-                                boxShadow: isSelected
-                                    ? [
-                                        BoxShadow(
-                                          color: baseColor.withOpacity(0.5),
-                                          blurRadius: 10,
-                                          spreadRadius: 2,
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                              child: Center(
-                                child: Icon(
-                                  Icons.check_circle,
-                                  color: baseColor,
-                                  size: isSelected ? 24 : 20,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            if (_showMarkerLabels)
-                              Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  Text(
-                                    p.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: fontSize.toDouble(),
-                                      fontWeight: FontWeight.w600,
-                                      foreground: Paint()
-                                        ..style = PaintingStyle.stroke
-                                        ..strokeWidth = 3
-                                        ..color = Colors.black,
-                                    ),
-                                  ),
-                                  Text(
-                                    p.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: fontSize.toDouble(),
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                          ],
-                        ),
-                      ),
+                        );
+                      },
+                      onTap: (_) {
+                        final d = const Distance();
+                        final nearby = groundcheckList
+                            .where(
+                              (other) =>
+                                  d.as(
+                                    LengthUnit.Meter,
+                                    p.position,
+                                    other.position,
+                                  ) <=
+                                  4.0,
+                            )
+                            .toList();
+                        if (widget.onNearbyPlacesTap != null) {
+                          final list = nearby.isNotEmpty ? nearby : [p];
+                          widget.onNearbyPlacesTap!(list);
+                        } else {
+                          widget.onPlaceTap(p);
+                        }
+                      },
+                      onDragStart: (_, __) {
+                        _isDragging = true;
+                      },
+                      onDragEnd: (_, newPoint) {
+                        _isDragging = false;
+                        widget.onPlaceDragEnd?.call(p, newPoint);
+                      },
+                      onLongDragEnd: (_, newPoint) {
+                        _isDragging = false;
+                        widget.onPlaceDragEnd?.call(p, newPoint);
+                      },
+                      scrollMapNearEdge: true,
+                      scrollNearEdgeRatio: 2.0,
+                      scrollNearEdgeSpeed: 2.0,
                     );
                   }).toList(),
                 ),
@@ -540,6 +545,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                       14,
                     );
                     return DragMarker(
+                      key: ValueKey(p.id),
                       point: p.position,
                       size: Size(170, isSelected ? 86 : 78),
                       offset: Offset(0, isSelected ? -20 : -16),
@@ -560,7 +566,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                                       shape: BoxShape.circle,
                                       boxShadow: [
                                         BoxShadow(
-                                          color: baseColor.withOpacity(0.5),
+                                          color: baseColor.withValues(
+                                            alpha: 0.5,
+                                          ),
                                           blurRadius: 10,
                                           spreadRadius: 2,
                                         ),
@@ -609,10 +617,17 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                         );
                       },
                       onTap: (_) => widget.onPlaceTap(p),
-                      onDragEnd: (_, newPoint) =>
-                          widget.onPlaceDragEnd?.call(p, newPoint),
-                      onLongDragEnd: (_, newPoint) =>
-                          widget.onPlaceDragEnd?.call(p, newPoint),
+                      onDragStart: (_, __) {
+                        _isDragging = true;
+                      },
+                      onDragEnd: (_, newPoint) {
+                        _isDragging = false;
+                        widget.onPlaceDragEnd?.call(p, newPoint);
+                      },
+                      onLongDragEnd: (_, newPoint) {
+                        _isDragging = false;
+                        widget.onPlaceDragEnd?.call(p, newPoint);
+                      },
                       scrollMapNearEdge: true,
                       scrollNearEdgeRatio: 2.0,
                       scrollNearEdgeSpeed: 2.0,
@@ -631,7 +646,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                     height: _getMarkerSize(),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.3),
+                        color: Colors.blue.withValues(alpha: 0.3),
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.blue, width: 2),
                       ),
@@ -666,9 +681,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           polygonsMeta: widget.polygonsMeta,
           currentMapType: _currentMapType,
           showDirectoryMarkers: _showDirectoryMarkers,
-          showScrapedMarkers: _showScrapedMarkers,
           showGroundcheckMarkers: _showGroundcheckMarkers,
           showMarkerLabels: _showMarkerLabels,
+          showNonVerifiedGroundchecks: _showNonVerifiedGroundchecks,
           onResetPosition: () {
             // Animate rotation to north smoothly
             _animateToNorth();
@@ -690,11 +705,6 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               _showDirectoryMarkers = value;
             });
           },
-          onToggleScrapedMarkers: (bool value) {
-            setState(() {
-              _showScrapedMarkers = value;
-            });
-          },
           onToggleGroundcheckMarkers: (bool value) {
             setState(() {
               _showGroundcheckMarkers = value;
@@ -703,6 +713,11 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           onToggleMarkerLabels: (bool value) {
             setState(() {
               _showMarkerLabels = value;
+            });
+          },
+          onToggleNonVerifiedGroundchecks: (bool value) {
+            setState(() {
+              _showNonVerifiedGroundchecks = value;
             });
           },
           onOffsetChanged: (double offsetX, double offsetY) {
@@ -723,11 +738,11 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.8),
+                color: Colors.black.withValues(alpha: 0.8),
                 borderRadius: BorderRadius.circular(8),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withValues(alpha: 0.3),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
@@ -798,13 +813,34 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     final selectedId = widget.selectedPlace?.id;
     final int? cap = _capForZoom(input.length, _zoom);
     if (cap == null || input.length <= cap) return input;
-    final List<Place> result = input.take(cap).toList();
+    final List<Place> main = [];
+    final List<Place> gc = [];
+    for (final p in input) {
+      if (p.id.startsWith('gc:')) {
+        gc.add(p);
+      } else {
+        main.add(p);
+      }
+    }
+    final List<Place> result = [];
+    int iMain = 0, iGc = 0;
+    while (result.length < cap && (iMain < main.length || iGc < gc.length)) {
+      if (iMain < main.length && result.length < cap) {
+        result.add(main[iMain++]);
+      }
+      if (iGc < gc.length && result.length < cap) {
+        result.add(gc[iGc++]);
+      }
+    }
     if (selectedId != null && result.every((p) => p.id != selectedId)) {
       final sel = input.firstWhere(
         (p) => p.id == selectedId,
         orElse: () => result.first,
       );
-      result.add(sel);
+      result.insert(0, sel);
+      if (result.length > cap) {
+        result.removeLast();
+      }
     }
     return result;
   }
@@ -814,12 +850,12 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     // if (z < 12) return 10;
     // if (z < 13) return 20;
     // if (z < 14) return 5;
-    if (z < 14) return 5;
-    if (z < 16) return 10;
-    if (z < 17) return 20;
-    if (z < 18) return 30;
-    if (z < 19) return 40;
-    if (z < 20) return 50;
+    if (z < 14) return 35;
+    if (z < 16) return 40;
+    if (z < 17) return 50;
+    if (z < 18) return 60;
+    if (z < 19) return 70;
+    if (z < 20) return 80;
     return null; // >=19 show all
   }
 

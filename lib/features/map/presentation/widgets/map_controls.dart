@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../../data/repositories/map_repository_impl.dart';
+import '../../data/services/bps_gc_service.dart';
 import 'compass_widget.dart';
 import '../../domain/entities/polygon_data.dart';
 import 'map_type.dart';
@@ -25,14 +26,14 @@ class MapControls extends StatefulWidget {
   final Function(double, double)? onOffsetChanged; // Add offset change callback
   final double currentOffsetX; // Current X offset
   final double currentOffsetY; // Current Y offset
-  final bool showScrapedMarkers; // Toggle scraped markers visibility
-  final Function(bool)? onToggleScrapedMarkers; // Toggle callback
   final bool showGroundcheckMarkers;
   final Function(bool)? onToggleGroundcheckMarkers;
   final bool showDirectoryMarkers;
   final Function(bool)? onToggleDirectoryMarkers;
   final bool showMarkerLabels;
   final Function(bool)? onToggleMarkerLabels;
+  final bool showNonVerifiedGroundchecks;
+  final Function(bool)? onToggleNonVerifiedGroundchecks;
 
   const MapControls({
     super.key,
@@ -49,14 +50,14 @@ class MapControls extends StatefulWidget {
     this.onOffsetChanged, // Add to constructor
     this.currentOffsetX = 0.0, // Add to constructor
     this.currentOffsetY = 0.0, // Add to constructor
-    this.showScrapedMarkers = true,
-    this.onToggleScrapedMarkers,
     this.showGroundcheckMarkers = true,
     this.onToggleGroundcheckMarkers,
     this.showDirectoryMarkers = true,
     this.onToggleDirectoryMarkers,
     this.showMarkerLabels = true,
     this.onToggleMarkerLabels,
+    this.showNonVerifiedGroundchecks = true,
+    this.onToggleNonVerifiedGroundchecks,
   });
 
   @override
@@ -207,7 +208,7 @@ class _MapControlsState extends State<MapControls> {
               borderRadius: BorderRadius.circular(8),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
+                  color: Colors.black.withValues(alpha: 0.2),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -243,118 +244,6 @@ class _MapControlsState extends State<MapControls> {
           ),
           const SizedBox(height: 8),
 
-          // Toggle directory markers visibility
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: IconButton(
-              icon: Icon(
-                Icons.store,
-                color: widget.showDirectoryMarkers ? Colors.red : Colors.grey,
-              ),
-              tooltip: widget.showDirectoryMarkers
-                  ? 'Sembunyikan Marker Direktori'
-                  : 'Tampilkan Marker Direktori',
-              onPressed: () => widget.onToggleDirectoryMarkers?.call(
-                !widget.showDirectoryMarkers,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          // Toggle scraped markers visibility
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: IconButton(
-              icon: Icon(
-                widget.showScrapedMarkers
-                    ? Icons.visibility
-                    : Icons.visibility_off,
-                color: Colors.black87,
-              ),
-              tooltip: widget.showScrapedMarkers
-                  ? 'Sembunyikan Marker Scraping'
-                  : 'Tampilkan Marker Scraping',
-              onPressed: () => widget.onToggleScrapedMarkers?.call(
-                !widget.showScrapedMarkers,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: IconButton(
-              icon: Icon(
-                Icons.fact_check,
-                color: widget.showGroundcheckMarkers
-                    ? Colors.deepOrange
-                    : Colors.grey,
-              ),
-              tooltip: widget.showGroundcheckMarkers
-                  ? 'Sembunyikan Marker Groundcheck'
-                  : 'Tampilkan Marker Groundcheck',
-              onPressed: () => widget.onToggleGroundcheckMarkers?.call(
-                !widget.showGroundcheckMarkers,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          // Toggle marker labels visibility
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: IconButton(
-              icon: Icon(
-                widget.showMarkerLabels
-                    ? Icons.text_fields
-                    : Icons.text_fields_outlined,
-                color: Colors.black87,
-              ),
-              tooltip: widget.showMarkerLabels
-                  ? 'Sembunyikan Nama Marker'
-                  : 'Tampilkan Nama Marker',
-              onPressed: () =>
-                  widget.onToggleMarkerLabels?.call(!widget.showMarkerLabels),
-            ),
-          ),
-          const SizedBox(height: 8),
           // Offset Controls (only show for Esri satellite)
           if (widget.currentMapType == MapType.satellite)
             Container(
@@ -363,7 +252,7 @@ class _MapControlsState extends State<MapControls> {
                 borderRadius: BorderRadius.circular(8),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
+                    color: Colors.black.withValues(alpha: 0.2),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
@@ -454,7 +343,7 @@ class _MapControlsState extends State<MapControls> {
               borderRadius: BorderRadius.circular(8),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
+                  color: Colors.black.withValues(alpha: 0.2),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -480,7 +369,7 @@ class _MapControlsState extends State<MapControls> {
               borderRadius: BorderRadius.circular(8),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
+                  color: Colors.black.withValues(alpha: 0.2),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -502,6 +391,49 @@ class _MapControlsState extends State<MapControls> {
             ),
           ),
           const SizedBox(height: 8),
+          // Toggle Non-Verified Groundcheck Markers
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: IconButton(
+              onPressed: () {
+                if (widget.onToggleNonVerifiedGroundchecks != null) {
+                  widget.onToggleNonVerifiedGroundchecks!(
+                    !widget.showNonVerifiedGroundchecks,
+                  );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        !widget.showNonVerifiedGroundchecks
+                            ? 'Menampilkan semua hasil GC'
+                            : 'Menampilkan hanya GC yang sudah selesai (Kode 1)',
+                      ),
+                      duration: const Duration(milliseconds: 1000),
+                    ),
+                  );
+                }
+              },
+              icon: Icon(
+                widget.showNonVerifiedGroundchecks
+                    ? Icons.filter_alt_off
+                    : Icons.filter_alt,
+                color: widget.showNonVerifiedGroundchecks
+                    ? Colors.grey
+                    : Colors.blue,
+              ),
+              tooltip: 'Filter Status GC (Kode 1)',
+            ),
+          ),
+          const SizedBox(height: 8),
           // Pilih Polygon FAB
           Container(
             decoration: BoxDecoration(
@@ -509,7 +441,7 @@ class _MapControlsState extends State<MapControls> {
               borderRadius: BorderRadius.circular(8),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
+                  color: Colors.black.withValues(alpha: 0.2),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),

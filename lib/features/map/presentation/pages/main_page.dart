@@ -6,17 +6,11 @@ import 'map_page.dart';
 import 'saved_page.dart';
 import 'groundcheck_page.dart';
 import '../../../contribution/presentation/pages/contribution_page.dart';
-import '../../../direktori/presentation/pages/direktori_list_page.dart';
-import '../../../direktori/presentation/bloc/direktori_bloc.dart';
-import '../../../direktori/domain/usecases/get_direktori_list.dart';
-import '../../../direktori/data/repositories/direktori_repository_impl.dart';
-import '../../../direktori/data/datasources/direktori_remote_datasource.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
 import '../../data/repositories/map_repository_impl.dart';
 import '../../domain/entities/place.dart';
-import '../../data/models/direktori_model.dart';
 import '../../domain/usecases/get_initial_map_config.dart';
 import '../../domain/usecases/get_places.dart';
 import '../../domain/usecases/get_first_polygon_meta_from_geojson.dart';
@@ -38,10 +32,7 @@ class _MainPageState extends State<MainPage> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   List<Place> _searchResults = [];
-  List<DirektoriModel> _directoryResults = [];
   List<Place> _allPlaces = [];
-  DirektoriModel?
-  _pendingCoordinateDirectory; // Directory selected to add coordinates
 
   @override
   void initState() {
@@ -54,123 +45,6 @@ class _MainPageState extends State<MainPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Read route arguments here (available after build) and focus map once
-    if (!_handledFocusArgs) {
-      _handledFocusArgs = true;
-      _focusDirectoryIfProvided();
-    }
-  }
-
-  void _focusDirectoryIfProvided() async {
-    // Check route settings for focusDirectoryId passed via arguments
-    final args = ModalRoute.of(context)?.settings.arguments;
-    String? focusDirectoryId;
-    if (args is Map && args['focusDirectoryId'] != null) {
-      focusDirectoryId = args['focusDirectoryId']?.toString();
-    }
-
-    if (focusDirectoryId == null || focusDirectoryId.isEmpty) return;
-
-    try {
-      DirektoriModel? dir;
-      // Prefer list passed via arguments to avoid refetch
-      if (args is Map && args['direktoriList'] is List) {
-        final list = (args['direktoriList'] as List);
-        final found = list.cast<dynamic>().firstWhere(
-          (d) => (d as dynamic).id == focusDirectoryId,
-          orElse: () => null,
-        );
-        if (found != null) {
-          // Map basic fields to DirektoriModel
-          dir = DirektoriModel(
-            id: found.id,
-            idSbr: found.idSbr,
-            namaUsaha: found.namaUsaha,
-            alamat: found.alamat,
-            idSls: found.idSls,
-            kegiatanUsaha: found.kegiatanUsaha,
-            latitude: found.latitude ?? found.lat,
-            longitude: found.longitude ?? found.long,
-            urlGambar: found.urlGambar,
-            kodePos: found.kodePos,
-          );
-        }
-      }
-      // Fallback to repository fetch
-      dir ??= await MapRepositoryImpl().getDirectoryById(focusDirectoryId);
-      if (dir == null) {
-        return;
-      }
-      // Ensure map tab is active
-      if (_selectedIndex != 0) {
-        setState(() {
-          _selectedIndex = 0;
-        });
-      }
-
-      if (dir.hasValidCoordinates) {
-        final place = dir.toPlace();
-        // Zoom to the selected place location (similar to MapPage behavior)
-        _sharedMapController.move(place.position, 18.0);
-        if (mounted) {
-          context.read<MapBloc>().add(PlaceSelected(place));
-        }
-      } else {
-        setState(() {
-          _pendingCoordinateDirectory = dir;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Direktori belum memiliki koordinat. Geser peta ke lokasi lalu tekan Simpan.',
-              ),
-              backgroundColor: Colors.blue,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-      }
-    } catch (_) {
-      // Silent fail to avoid disrupting navigation
-    }
-  }
-
-  Future<void> _focusDirectoryById(String focusDirectoryId) async {
-    if (focusDirectoryId.isEmpty) return;
-    try {
-      final dir = await MapRepositoryImpl().getDirectoryById(focusDirectoryId);
-      if (dir == null) {
-        return;
-      }
-      if (_selectedIndex != 0) {
-        setState(() {
-          _selectedIndex = 0;
-        });
-      }
-      if (dir.hasValidCoordinates) {
-        final place = dir.toPlace();
-        _sharedMapController.move(place.position, 18.0);
-        if (mounted) {
-          context.read<MapBloc>().add(PlaceSelected(place));
-        }
-      } else {
-        setState(() {
-          _pendingCoordinateDirectory = dir;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Direktori belum memiliki koordinat. Geser peta ke lokasi lalu tekan Simpan.',
-              ),
-              backgroundColor: Colors.blue,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-      }
-    } catch (_) {}
   }
 
   void _loadPlaces() async {
@@ -183,36 +57,23 @@ class _MainPageState extends State<MainPage> {
     if (query.isEmpty) {
       setState(() {
         _searchResults = [];
-        _directoryResults = [];
       });
       return;
     }
 
-    // Search places with coordinates
+    final lower = query.toLowerCase();
     final placesWithCoordinates = _allPlaces
         .where(
           (place) =>
-              place.name.toLowerCase().contains(query.toLowerCase()) ||
-              place.description.toLowerCase().contains(query.toLowerCase()),
+              place.name.toLowerCase().contains(lower) ||
+              place.description.toLowerCase().contains(lower),
         )
         .toList();
 
-    // Search directories without coordinates
-    List<DirektoriModel> directoriesWithoutCoordinates = [];
-    try {
-      final repository = MapRepositoryImpl();
-      directoriesWithoutCoordinates = await repository
-          .searchDirectoriesWithoutCoordinates(query);
-    } catch (e) {
-      print('Error searching directories without coordinates: $e');
-    }
-
     setState(() {
       _searchResults = placesWithCoordinates;
-      _directoryResults = directoriesWithoutCoordinates;
     });
 
-    // Show bottom sheet with results
     _showSearchResults();
   }
 
@@ -232,7 +93,6 @@ class _MainPageState extends State<MainPage> {
           ),
           child: Column(
             children: [
-              // Handle bar
               Container(
                 margin: const EdgeInsets.only(top: 8),
                 width: 40,
@@ -242,7 +102,6 @@ class _MainPageState extends State<MainPage> {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              // Header
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(
@@ -259,9 +118,8 @@ class _MainPageState extends State<MainPage> {
                   ],
                 ),
               ),
-              // Search results
               Expanded(
-                child: (_searchResults.isEmpty && _directoryResults.isEmpty)
+                child: _searchResults.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -284,133 +142,57 @@ class _MainPageState extends State<MainPage> {
                       )
                     : ListView.builder(
                         controller: scrollController,
-                        itemCount:
-                            _searchResults.length + _directoryResults.length,
+                        itemCount: _searchResults.length,
                         itemBuilder: (context, index) {
-                          // Show places with coordinates first
-                          if (index < _searchResults.length) {
-                            final place = _searchResults[index];
-                            return ListTile(
-                              leading: const Icon(
-                                Icons.location_on,
-                                color: Colors.red,
-                              ),
-                              title: Text(place.name),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(place.description),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: const [
-                                      Icon(
-                                        Icons.auto_awesome,
-                                        size: 14,
+                          final place = _searchResults[index];
+                          return ListTile(
+                            leading: const Icon(
+                              Icons.location_on,
+                              color: Colors.red,
+                            ),
+                            title: Text(place.name),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(place.description),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: const [
+                                    Icon(
+                                      Icons.auto_awesome,
+                                      size: 14,
+                                      color: Colors.deepPurple,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Sumber: Groundcheck',
+                                      style: TextStyle(
+                                        fontSize: 11,
                                         color: Colors.deepPurple,
                                       ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'Sumber: Scraping',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.deepPurple,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              trailing: const Icon(
-                                Icons.map,
-                                color: Colors.green,
-                                size: 16,
-                              ),
-                              onTap: () {
-                                // Close bottom sheet and navigate to location
-                                Navigator.pop(context);
-                                _sharedMapController.move(place.position, 18.0);
-                                // Switch to map tab if not already there
-                                if (_selectedIndex != 0) {
-                                  setState(() {
-                                    _selectedIndex = 0;
-                                  });
-                                }
-                                // Clear search and unfocus
-                                _searchController.clear();
-                                _searchFocusNode.unfocus();
-                                // Add place selection to MapBloc for visual indicator
-                                context.read<MapBloc>().add(
-                                  PlaceSelected(place),
-                                );
-                              },
-                            );
-                          } else {
-                            // Show directories without coordinates
-                            final directoryIndex =
-                                index - _searchResults.length;
-                            final directory = _directoryResults[directoryIndex];
-                            return ListTile(
-                              leading: const Icon(
-                                Icons.business,
-                                color: Colors.orange,
-                              ),
-                              title: Text(directory.namaUsaha),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: const [
-                                      Icon(
-                                        Icons.dataset,
-                                        size: 14,
-                                        color: Colors.orange,
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'Sumber: Direktori',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.orange,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (directory.alamat != null)
-                                    Text(
-                                      directory.alamat!,
-                                      style: const TextStyle(fontSize: 12),
                                     ),
-                                  Text(
-                                    'Status: ${_getKeberadaanUsahaDescription(directory.keberadaanUsaha)}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: directory.keberadaanUsaha == 1
-                                          ? Colors.green
-                                          : directory.keberadaanUsaha == 4
-                                          ? Colors.red
-                                          : Colors.orange,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  Text(
-                                    'ID SLS: ${directory.idSls} • Tanpa koordinat',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              trailing: const Icon(
-                                Icons.location_off,
-                                color: Colors.grey,
-                                size: 16,
-                              ),
-                              onTap: () {
-                                _promptKeberadaanForDirectory(directory);
-                              },
-                            );
-                          }
+                                  ],
+                                ),
+                              ],
+                            ),
+                            trailing: const Icon(
+                              Icons.map,
+                              color: Colors.green,
+                              size: 16,
+                            ),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _sharedMapController.move(place.position, 18.0);
+                              if (_selectedIndex != 0) {
+                                setState(() {
+                                  _selectedIndex = 0;
+                                });
+                              }
+                              _searchController.clear();
+                              _searchFocusNode.unfocus();
+                              context.read<MapBloc>().add(PlaceSelected(place));
+                            },
+                          );
                         },
                       ),
               ),
@@ -418,202 +200,6 @@ class _MainPageState extends State<MainPage> {
           ),
         ),
       ),
-    );
-  }
-
-  void _promptKeberadaanForDirectory(DirektoriModel directory) async {
-    int selected = directory.keberadaanUsaha ?? 1;
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return AlertDialog(
-              title: const Text('Pilih Status Keberadaan'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    RadioListTile<int>(
-                      title: const Text('Aktif'),
-                      value: 1,
-                      groupValue: selected,
-                      onChanged: (val) =>
-                          setStateDialog(() => selected = val ?? 1),
-                    ),
-                    RadioListTile<int>(
-                      title: const Text('Tutup Sementara'),
-                      value: 2,
-                      groupValue: selected,
-                      onChanged: (val) =>
-                          setStateDialog(() => selected = val ?? 2),
-                    ),
-                    RadioListTile<int>(
-                      title: const Text('Belum Beroperasi/Berproduksi'),
-                      value: 3,
-                      groupValue: selected,
-                      onChanged: (val) =>
-                          setStateDialog(() => selected = val ?? 3),
-                    ),
-                    RadioListTile<int>(
-                      title: const Text('Tutup'),
-                      value: 4,
-                      groupValue: selected,
-                      onChanged: (val) =>
-                          setStateDialog(() => selected = val ?? 4),
-                    ),
-                    RadioListTile<int>(
-                      title: const Text('Alih Usaha'),
-                      value: 5,
-                      groupValue: selected,
-                      onChanged: (val) =>
-                          setStateDialog(() => selected = val ?? 5),
-                    ),
-                    RadioListTile<int>(
-                      title: const Text('Tidak Ditemukan'),
-                      value: 6,
-                      groupValue: selected,
-                      onChanged: (val) =>
-                          setStateDialog(() => selected = val ?? 6),
-                    ),
-                    RadioListTile<int>(
-                      title: const Text('Aktif Pindah'),
-                      value: 7,
-                      groupValue: selected,
-                      onChanged: (val) =>
-                          setStateDialog(() => selected = val ?? 7),
-                    ),
-                    RadioListTile<int>(
-                      title: const Text('Aktif Nonrespon'),
-                      value: 8,
-                      groupValue: selected,
-                      onChanged: (val) =>
-                          setStateDialog(() => selected = val ?? 8),
-                    ),
-                    RadioListTile<int>(
-                      title: const Text('Duplikat'),
-                      value: 9,
-                      groupValue: selected,
-                      onChanged: (val) =>
-                          setStateDialog(() => selected = val ?? 9),
-                    ),
-                    RadioListTile<int>(
-                      title: const Text('Salah Kode Wilayah'),
-                      value: 10,
-                      groupValue: selected,
-                      onChanged: (val) =>
-                          setStateDialog(() => selected = val ?? 10),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Status saat ini: ${_getKeberadaanUsahaDescription(directory.keberadaanUsaha)}',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Batal'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    Navigator.of(dialogContext).pop();
-                    // Simpan status tanpa lanjut ke tambah koordinat
-                    final repo = MapRepositoryImpl();
-                    final ok = await repo.updateDirectoryStatus(
-                      directory.id,
-                      selected,
-                    );
-                    if (ok) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Status disimpan: ${_getKeberadaanUsahaDescription(selected)}',
-                          ),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Gagal menyimpan status keberadaan.'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                    // Tutup bottom sheet hasil pencarian jika terbuka
-                    Navigator.pop(context);
-                    _searchController.clear();
-                    _searchFocusNode.unfocus();
-                  },
-                  child: const Text('Simpan'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    Navigator.of(dialogContext).pop();
-                    if (selected == 1) {
-                      // Lanjutkan ke mode tambah koordinat seperti sebelumnya
-                      Navigator.pop(
-                        context,
-                      ); // Tutup bottom sheet hasil pencarian
-                      setState(() {
-                        _selectedIndex = 0;
-                        _pendingCoordinateDirectory = directory;
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Geser peta untuk menentukan posisi pusat, lalu tekan Simpan.',
-                          ),
-                          backgroundColor: Colors.blue,
-                          duration: Duration(seconds: 3),
-                        ),
-                      );
-                      _searchController.clear();
-                      _searchFocusNode.unfocus();
-                    } else {
-                      // Update status keberadaan saja
-                      final repo = MapRepositoryImpl();
-                      final ok = await repo.updateDirectoryStatus(
-                        directory.id,
-                        selected,
-                      );
-                      if (ok) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Status diperbarui: ${_getKeberadaanUsahaDescription(selected)}',
-                            ),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Gagal memperbarui status keberadaan.',
-                            ),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                      Navigator.pop(
-                        context,
-                      ); // Tutup bottom sheet hasil pencarian
-                      _searchController.clear();
-                      _searchFocusNode.unfocus();
-                    }
-                  },
-                  child: const Text('Lanjut'),
-                ),
-              ],
-            );
-          },
-        );
-      },
     );
   }
 
@@ -642,10 +228,6 @@ class _MainPageState extends State<MainPage> {
       case 2:
         return const ContributionPage();
       case 3:
-        return DirektoriListPage(
-          onNavigateToMap: (id) => _focusDirectoryById(id),
-        );
-      case 4:
         return GroundcheckPage(onGoToMap: _focusGroundcheckLocation);
       default:
         return MapPage(mapController: _sharedMapController);
@@ -658,15 +240,7 @@ class _MainPageState extends State<MainPage> {
       body: Stack(
         children: [
           // Base map layer - always MapPage to maintain consistent map
-          MapPage(
-            mapController: _sharedMapController,
-            coordinateTarget: _pendingCoordinateDirectory,
-            onExitCoordinateMode: () {
-              setState(() {
-                _pendingCoordinateDirectory = null;
-              });
-            },
-          ),
+          MapPage(mapController: _sharedMapController),
           // Overlay content: keep pages mounted to preserve state across tab changes
           Offstage(
             offstage: _selectedIndex == 0,
@@ -675,9 +249,6 @@ class _MainPageState extends State<MainPage> {
               children: [
                 SavedPage(mapController: _sharedMapController),
                 const ContributionPage(),
-                DirektoriListPage(
-                  onNavigateToMap: (id) => _focusDirectoryById(id),
-                ),
                 GroundcheckPage(onGoToMap: _focusGroundcheckLocation),
               ],
             ),
@@ -695,7 +266,7 @@ class _MainPageState extends State<MainPage> {
                   borderRadius: BorderRadius.circular(28),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -800,46 +371,9 @@ class _MainPageState extends State<MainPage> {
             icon: Icon(Icons.add_circle_outline),
             label: 'Kontribusi',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.business),
-            label: 'Direktori',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Groundcheck'),
         ],
       ),
     );
-  }
-
-  // Helper function to get keberadaan usaha description
-  String _getKeberadaanUsahaDescription(int? keberadaanUsaha) {
-    if (keberadaanUsaha == null) {
-      return 'Undefined';
-    }
-
-    switch (keberadaanUsaha) {
-      case 1:
-        return 'Aktif';
-      case 2:
-        return 'Tutup Sementara';
-      case 3:
-        return 'Belum Beroperasi/Berproduksi';
-      case 4:
-        return 'Tutup';
-      case 5:
-        return 'Alih Usaha';
-      case 6:
-        return 'Tidak Ditemukan';
-      case 7:
-        return 'Aktif Pindah';
-      case 8:
-        return 'Aktif Nonrespon';
-      case 9:
-        return 'Duplikat';
-      case 10:
-        return 'Salah Kode Wilayah';
-      default:
-        return 'Tidak Diketahui';
-    }
   }
 
   void _showLogoutDialog(BuildContext context) {

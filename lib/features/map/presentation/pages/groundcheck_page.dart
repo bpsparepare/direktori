@@ -7,10 +7,14 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart' as dotenv;
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../data/services/bps_gc_service.dart';
 import '../../data/services/gc_credentials_service.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
+import '../bloc/map_bloc.dart';
+import '../bloc/map_event.dart';
+import '../../data/repositories/map_repository_impl.dart';
 
 // Optional bootstrap via --dart-define (keamanan: tidak commit rahasia ke repo)
 const String kInitialGcCookie = String.fromEnvironment(
@@ -33,6 +37,7 @@ class GroundcheckRecord {
   final String latitude;
   final String longitude;
   final String perusahaanId;
+  final String? userId;
 
   GroundcheckRecord({
     required this.idsbr,
@@ -45,6 +50,7 @@ class GroundcheckRecord {
     required this.latitude,
     required this.longitude,
     required this.perusahaanId,
+    this.userId,
   });
 
   factory GroundcheckRecord.fromJson(Map<String, dynamic> json) {
@@ -63,6 +69,7 @@ class GroundcheckRecord {
       latitude: lat,
       longitude: lon,
       perusahaanId: perusahaan,
+      userId: json['user_id']?.toString(),
     );
   }
 }
@@ -127,9 +134,9 @@ class GroundcheckDataSource extends DataGridSource {
                 code.isNotEmpty ? '$code. $label' : label,
                 style: TextStyle(color: base.shade700, fontSize: 12),
               ),
-              backgroundColor: base.withOpacity(0.12),
+              backgroundColor: base.withValues(alpha: 0.12),
               shape: StadiumBorder(
-                side: BorderSide(color: base.withOpacity(0.3)),
+                side: BorderSide(color: base.withValues(alpha: 0.3)),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 8),
               visualDensity: VisualDensity.compact,
@@ -224,7 +231,7 @@ class GroundcheckDataSource extends DataGridSource {
               label = '10. Salah Kode Wilayah';
             } else if (lower.contains('aktif')) {
               base = Colors.green;
-              label = '1. Aktif';
+              label = 'Aktif';
             } else {
               base = Colors.grey;
             }
@@ -237,9 +244,9 @@ class GroundcheckDataSource extends DataGridSource {
                 label,
                 style: TextStyle(color: base.shade700, fontSize: 12),
               ),
-              backgroundColor: base.withOpacity(0.12),
+              backgroundColor: base.withValues(alpha: 0.12),
               shape: StadiumBorder(
-                side: BorderSide(color: base.withOpacity(0.3)),
+                side: BorderSide(color: base.withValues(alpha: 0.3)),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 8),
               visualDensity: VisualDensity.compact,
@@ -267,7 +274,7 @@ class GroundcheckDataSource extends DataGridSource {
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.teal.withOpacity(0.1),
+                          color: Colors.teal.withValues(alpha: 0.1),
                         ),
                         child: const Icon(
                           Icons.map,
@@ -610,13 +617,13 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                                   : Colors.black87,
                               fontSize: 12,
                             ),
-                            selectedColor: base.withOpacity(0.18),
-                            backgroundColor: Colors.grey.withOpacity(0.1),
+                            selectedColor: base.withValues(alpha: 0.18),
+                            backgroundColor: Colors.grey.withValues(alpha: 0.1),
                             shape: StadiumBorder(
                               side: BorderSide(
                                 color: isSelected
-                                    ? base.withOpacity(0.4)
-                                    : Colors.grey.withOpacity(0.3),
+                                    ? base.withValues(alpha: 0.4)
+                                    : Colors.grey.withValues(alpha: 0.3),
                               ),
                             ),
                           );
@@ -892,7 +899,12 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                           _gcCookie = currentCookie;
                           await _saveStoredGcCredentials();
                         }
-                        _applyGcInput(record, selectedHasil, laFinal, loFinal);
+                        await _applyGcInput(
+                          record,
+                          selectedHasil,
+                          laFinal,
+                          loFinal,
+                        );
                         setStateSB(() {
                           isSubmitting = false;
                         });
@@ -974,12 +986,12 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     );
   }
 
-  void _applyGcInput(
+  Future<void> _applyGcInput(
     GroundcheckRecord record,
     String hasilGc,
     double? lat,
     double? lon,
-  ) {
+  ) async {
     final updated = GroundcheckRecord(
       idsbr: record.idsbr,
       namaUsaha: record.namaUsaha,
@@ -991,12 +1003,20 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       latitude: lat != null ? lat.toString() : record.latitude,
       longitude: lon != null ? lon.toString() : record.longitude,
       perusahaanId: record.perusahaanId,
+      userId: record.userId,
     );
     final idx = _allRecords.indexWhere((r) => r.idsbr == record.idsbr);
     if (idx != -1) {
       _allRecords[idx] = updated;
     }
     _refreshFilteredData();
+    await _supabaseService.updateRecord(updated);
+    try {
+      MapRepositoryImpl().invalidatePlacesCache();
+      if (mounted) {
+        context.read<MapBloc>().add(const PlacesRequested());
+      }
+    } catch (_) {}
   }
 
   Future<bool> _ensureGcConfig({bool forceShow = false}) async {
@@ -1254,6 +1274,43 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
             ),
           ],
         ),
+        const SizedBox(height: 8),
+        Builder(
+          builder: (context) {
+            final total = _allRecords.length;
+            final shown = _filteredRecords().length;
+            return Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue[100]!),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.list_alt, color: Colors.blue),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Jumlah data groundcheck: $total | Ditampilkan: $shown',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ],
     );
   }
@@ -1300,7 +1357,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.grey.withOpacity(0.1),
+                            color: Colors.grey.withValues(alpha: 0.1),
                             spreadRadius: 1,
                             blurRadius: 3,
                             offset: const Offset(0, 1),
