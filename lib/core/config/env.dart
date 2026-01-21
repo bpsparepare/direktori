@@ -8,17 +8,22 @@ import 'package:flutter_dotenv/flutter_dotenv.dart' as dotenv;
 class Env {
   // Compile-time injected values (empty string if not provided)
   static const String _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-  static const String _supabaseAnonKey =
-      String.fromEnvironment('SUPABASE_ANON_KEY');
-  static const String _googleClientId =
-      String.fromEnvironment('GOOGLE_CLIENT_ID');
+  static const String _supabaseAnonKey = String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
+  );
+  static const String _googleClientId = String.fromEnvironment(
+    'GOOGLE_CLIENT_ID',
+  );
 
-  static const String _uploadApiBaseUrl =
-      String.fromEnvironment('UPLOAD_API_BASE_URL');
-  static const String _uploadApiUploadPath =
-      String.fromEnvironment('UPLOAD_API_UPLOAD_PATH');
-  static const String _uploadApiMaxBytesStr =
-      String.fromEnvironment('UPLOAD_API_MAX_BYTES');
+  static const String _uploadApiBaseUrl = String.fromEnvironment(
+    'UPLOAD_API_BASE_URL',
+  );
+  static const String _uploadApiUploadPath = String.fromEnvironment(
+    'UPLOAD_API_UPLOAD_PATH',
+  );
+  static const String _uploadApiMaxBytesStr = String.fromEnvironment(
+    'UPLOAD_API_MAX_BYTES',
+  );
 
   /// Read Supabase URL, prefer dart-define, fallback to dotenv.
   static String get supabaseUrl {
