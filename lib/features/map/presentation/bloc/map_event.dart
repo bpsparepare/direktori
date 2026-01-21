@@ -17,6 +17,13 @@ class PlacesRequested extends MapEvent {
   const PlacesRequested();
 }
 
+class PlacesRefreshRequested extends MapEvent {
+  final bool onlyToday;
+  const PlacesRefreshRequested({this.onlyToday = false});
+  @override
+  List<Object?> get props => [onlyToday];
+}
+
 class PlacesInBoundsRequested extends MapEvent {
   final double south;
   final double north;

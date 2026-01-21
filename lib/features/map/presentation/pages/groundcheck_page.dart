@@ -555,6 +555,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
+      useRootNavigator: true,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setStateSB) {
@@ -795,6 +796,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 50),
                     ],
                   ),
                 ),
@@ -963,15 +965,26 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     final pretty = const JsonEncoder.withIndent('  ').convert(resp);
     await showDialog<void>(
       context: context,
+      useRootNavigator: true,
       builder: (ctx) {
         return AlertDialog(
           title: const Text('Respons Konfirmasi GC'),
           content: SizedBox(
             width: 600,
             child: SingleChildScrollView(
-              child: SelectableText(
-                pretty,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SelectableText(
+                    pretty,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
               ),
             ),
           ),
@@ -1095,6 +1108,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
 
     final result = await showDialog<bool>(
       context: context,
+      useRootNavigator: true,
       builder: (ctx) {
         return AlertDialog(
           title: const Text('Konfigurasi Groundcheck'),

@@ -77,242 +77,249 @@ class _LoginPageState extends State<LoginPage> {
           }
         },
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Logo/Title
-                const Icon(Icons.map, size: 80, color: Colors.blue),
-                const SizedBox(height: 24),
-                const Text(
-                  'Selamat Datang',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Logo/Title
+                  const Icon(Icons.map, size: 80, color: Colors.blue),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Selamat Datang',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Masuk untuk melanjutkan',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 48),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Masuk untuk melanjutkan',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 48),
 
-                // Login Form
-                Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      // Email Field
-                      TextFormField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: InputDecoration(
-                          labelText: 'Email',
-                          prefixIcon: const Icon(Icons.email_outlined),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey[50],
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Email tidak boleh kosong';
-                          }
-                          if (!RegExp(
-                            r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                          ).hasMatch(value)) {
-                            return 'Format email tidak valid';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Password Field
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: !_isPasswordVisible,
-                        decoration: InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: const Icon(Icons.lock_outlined),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _isPasswordVisible
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
+                  // Login Form
+                  Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        // Email Field
+                        TextFormField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: InputDecoration(
+                            labelText: 'Email',
+                            prefixIcon: const Icon(Icons.email_outlined),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            onPressed: () {
-                              setState(() {
-                                _isPasswordVisible = !_isPasswordVisible;
-                              });
-                            },
+                            filled: true,
+                            fillColor: Colors.grey[50],
                           ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey[50],
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Email tidak boleh kosong';
+                            }
+                            if (!RegExp(
+                              r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                            ).hasMatch(value)) {
+                              return 'Format email tidak valid';
+                            }
+                            return null;
+                          },
                         ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Password tidak boleh kosong';
-                          }
-                          if (value.length < 6) {
-                            return 'Password minimal 6 karakter';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 24),
+                        const SizedBox(height: 16),
 
-                      // Remember Me Checkbox
-                      Row(
-                        children: [
-                          Checkbox(
-                            value: _rememberMe,
-                            onChanged: (value) {
-                              setState(() {
-                                _rememberMe = value ?? false;
-                              });
-                            },
-                            activeColor: Colors.blue,
-                          ),
-                          const Text(
-                            'Ingat email & password',
-                            style: TextStyle(fontSize: 14, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Login Button
-                      BlocBuilder<AuthBloc, AuthState>(
-                        builder: (context, state) {
-                          return SizedBox(
-                            width: double.infinity,
-                            height: 50,
-                            child: ElevatedButton(
-                              onPressed: state is AuthLoading
-                                  ? null
-                                  : () async {
-                                      if (_formKey.currentState!.validate()) {
-                                        await _saveRememberMe();
-                                        context.read<AuthBloc>().add(
-                                          AuthSignInWithEmailRequested(
-                                            email: _emailController.text.trim(),
-                                            password: _passwordController.text,
-                                          ),
-                                        );
-                                      }
-                                    },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                elevation: 2,
+                        // Password Field
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: !_isPasswordVisible,
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            prefixIcon: const Icon(Icons.lock_outlined),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _isPasswordVisible
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
                               ),
-                              child: state is AuthLoading
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                              Colors.white,
-                                            ),
-                                      ),
-                                    )
-                                  : const Text(
-                                      'Masuk',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
+                              onPressed: () {
+                                setState(() {
+                                  _isPasswordVisible = !_isPasswordVisible;
+                                });
+                              },
                             ),
-                          );
-                        },
-                      ),
-                    ],
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey[50],
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Password tidak boleh kosong';
+                            }
+                            if (value.length < 6) {
+                              return 'Password minimal 6 karakter';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Remember Me Checkbox
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: _rememberMe,
+                              onChanged: (value) {
+                                setState(() {
+                                  _rememberMe = value ?? false;
+                                });
+                              },
+                              activeColor: Colors.blue,
+                            ),
+                            const Text(
+                              'Ingat email & password',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Login Button
+                        BlocBuilder<AuthBloc, AuthState>(
+                          builder: (context, state) {
+                            return SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: ElevatedButton(
+                                onPressed: state is AuthLoading
+                                    ? null
+                                    : () async {
+                                        if (_formKey.currentState!.validate()) {
+                                          await _saveRememberMe();
+                                          context.read<AuthBloc>().add(
+                                            AuthSignInWithEmailRequested(
+                                              email: _emailController.text
+                                                  .trim(),
+                                              password:
+                                                  _passwordController.text,
+                                            ),
+                                          );
+                                        }
+                                      },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 2,
+                                ),
+                                child: state is AuthLoading
+                                    ? const SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                Colors.white,
+                                              ),
+                                        ),
+                                      )
+                                    : const Text(
+                                        'Masuk',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
-                ),
 
-                // const SizedBox(height: 24),
+                  // const SizedBox(height: 24),
 
-                // // Divider
-                // Row(
-                //   children: [
-                //     Expanded(child: Divider(color: Colors.grey[300])),
-                //     Padding(
-                //       padding: const EdgeInsets.symmetric(horizontal: 16),
-                //       child: Text(
-                //         'atau',
-                //         style: TextStyle(color: Colors.grey[600]),
-                //       ),
-                //     ),
-                //     Expanded(child: Divider(color: Colors.grey[300])),
-                //   ],
-                // ),
+                  // // Divider
+                  // Row(
+                  //   children: [
+                  //     Expanded(child: Divider(color: Colors.grey[300])),
+                  //     Padding(
+                  //       padding: const EdgeInsets.symmetric(horizontal: 16),
+                  //       child: Text(
+                  //         'atau',
+                  //         style: TextStyle(color: Colors.grey[600]),
+                  //       ),
+                  //     ),
+                  //     Expanded(child: Divider(color: Colors.grey[300])),
+                  //   ],
+                  // ),
 
-                // const SizedBox(height: 24),
+                  // const SizedBox(height: 24),
 
-                // // Google Sign In Button
-                // BlocBuilder<AuthBloc, AuthState>(
-                //   builder: (context, state) {
-                //     return SizedBox(
-                //       width: double.infinity,
-                //       height: 50,
-                //       child: OutlinedButton.icon(
-                //         onPressed: state is AuthLoading
-                //             ? null
-                //             : () {
-                //                 context.read<AuthBloc>().add(
-                //                   AuthSignInWithGoogleRequested(),
-                //                 );
-                //               },
-                //         icon: Image.asset(
-                //           'assets/images/google_logo.png',
-                //           height: 20,
-                //           width: 20,
-                //           errorBuilder: (context, error, stackTrace) {
-                //             return const Icon(
-                //               Icons.g_mobiledata,
-                //               size: 24,
-                //               color: Colors.red,
-                //             );
-                //           },
-                //         ),
-                //         label: const Text(
-                //           'Masuk dengan Google',
-                //           style: TextStyle(
-                //             fontSize: 16,
-                //             fontWeight: FontWeight.w600,
-                //             color: Colors.black87,
-                //           ),
-                //         ),
-                //         style: OutlinedButton.styleFrom(
-                //           side: BorderSide(color: Colors.grey[300]!),
-                //           shape: RoundedRectangleBorder(
-                //             borderRadius: BorderRadius.circular(12),
-                //           ),
-                //           backgroundColor: Colors.white,
-                //         ),
-                //       ),
-                //     );
-                //   },
-                // ),
-                const SizedBox(height: 24),
-              ],
+                  // // Google Sign In Button
+                  // BlocBuilder<AuthBloc, AuthState>(
+                  //   builder: (context, state) {
+                  //     return SizedBox(
+                  //       width: double.infinity,
+                  //       height: 50,
+                  //       child: OutlinedButton.icon(
+                  //         onPressed: state is AuthLoading
+                  //             ? null
+                  //             : () {
+                  //                 context.read<AuthBloc>().add(
+                  //                   AuthSignInWithGoogleRequested(),
+                  //                 );
+                  //               },
+                  //         icon: Image.asset(
+                  //           'assets/images/google_logo.png',
+                  //           height: 20,
+                  //           width: 20,
+                  //           errorBuilder: (context, error, stackTrace) {
+                  //             return const Icon(
+                  //               Icons.g_mobiledata,
+                  //               size: 24,
+                  //               color: Colors.red,
+                  //             );
+                  //           },
+                  //         ),
+                  //         label: const Text(
+                  //           'Masuk dengan Google',
+                  //           style: TextStyle(
+                  //             fontSize: 16,
+                  //             fontWeight: FontWeight.w600,
+                  //             color: Colors.black87,
+                  //           ),
+                  //         ),
+                  //         style: OutlinedButton.styleFrom(
+                  //           side: BorderSide(color: Colors.grey[300]!),
+                  //           shape: RoundedRectangleBorder(
+                  //             borderRadius: BorderRadius.circular(12),
+                  //           ),
+                  //           backgroundColor: Colors.white,
+                  //         ),
+                  //       ),
+                  //     );
+                  //   },
+                  // ),
+                  const SizedBox(height: 24),
+                ],
+              ),
             ),
           ),
         ),

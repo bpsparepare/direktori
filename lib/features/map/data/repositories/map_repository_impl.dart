@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../domain/entities/map_config.dart';
 import '../../domain/entities/place.dart';
 import '../../domain/repositories/map_repository.dart';
@@ -17,26 +19,45 @@ class MapRepositoryImpl implements MapRepository {
   static List<Place>? _allPlacesCache;
   static final Map<String, List<Place>> _boundsCache = {};
 
+  Future<File> get _localFile async {
+    final directory = await getApplicationDocumentsDirectory();
+    return File('${directory.path}/places_cache.json');
+  }
+
+  Future<List<Place>> _loadPlacesFromLocal() async {
+    try {
+      final file = await _localFile;
+      if (!await file.exists()) return [];
+      final content = await file.readAsString();
+      final List<dynamic> jsonList = jsonDecode(content);
+      final places = jsonList.map((e) => Place.fromJson(e)).toList();
+      debugPrint(
+        'MapRepository: Loaded ${places.length} places from local storage',
+      );
+      return places;
+    } catch (e) {
+      debugPrint('MapRepository: Error loading local places: $e');
+      return [];
+    }
+  }
+
+  Future<void> _savePlacesToLocal(List<Place> places) async {
+    try {
+      final file = await _localFile;
+      final jsonList = places.map((e) => e.toJson()).toList();
+      await file.writeAsString(jsonEncode(jsonList));
+      debugPrint(
+        'MapRepository: Saved ${places.length} places to local storage',
+      );
+    } catch (e) {
+      debugPrint('MapRepository: Error saving local places: $e');
+    }
+  }
+
   double? _parseDouble(dynamic v) {
     if (v == null) return null;
     if (v is num) return v.toDouble();
     return double.tryParse(v.toString());
-  }
-
-  Future<List<Place>> _loadGroundcheckPlacesFromAsset() async {
-    try {
-      final service = GroundcheckSupabaseService();
-      final results = await service.fetchPlaces();
-      debugPrint(
-        'MapRepository: Loaded ${results.length} groundcheck places from Supabase',
-      );
-      return results;
-    } catch (e) {
-      debugPrint(
-        'MapRepository: Failed to load groundcheck places from Supabase: $e',
-      );
-      return [];
-    }
   }
 
   void invalidatePlacesCache() {
@@ -585,15 +606,64 @@ class MapRepositoryImpl implements MapRepository {
   @override
   Future<List<Place>> getPlaces() async {
     try {
-      final gcPlaces = await _loadGroundcheckPlacesFromAsset();
-      _allPlacesCache = gcPlaces;
-      debugPrint(
-        'MapRepository: Loaded ${gcPlaces.length} groundcheck places as markers',
-      );
-      return gcPlaces;
+      if (_allPlacesCache != null) return _allPlacesCache!;
+
+      final local = await _loadPlacesFromLocal();
+      if (local.isNotEmpty) {
+        _allPlacesCache = local;
+        debugPrint(
+          'MapRepository: Loaded ${local.length} places from local cache',
+        );
+        return local;
+      }
+
+      // If no local cache, do full refresh
+      return refreshPlaces(onlyToday: false);
     } catch (e) {
       debugPrint('MapRepository: Error fetching groundcheck places: $e');
       return [];
+    }
+  }
+
+  @override
+  Future<List<Place>> refreshPlaces({bool onlyToday = false}) async {
+    try {
+      final service = GroundcheckSupabaseService();
+      List<Place> updates = [];
+
+      if (onlyToday) {
+        final now = DateTime.now();
+        final startOfDay = DateTime(now.year, now.month, now.day);
+        // Convert to UTC as Supabase usually works with UTC
+        updates = await service.fetchPlacesUpdatedSince(startOfDay.toUtc());
+        debugPrint(
+          'MapRepository: Fetched ${updates.length} updates since ${startOfDay.toUtc()} (Local: $startOfDay)',
+        );
+      } else {
+        updates = await service.fetchPlaces();
+        debugPrint('MapRepository: Fetched ${updates.length} places (full)');
+      }
+
+      if (onlyToday) {
+        // Load current cache (memory or local)
+        List<Place> current = _allPlacesCache ?? await _loadPlacesFromLocal();
+        final Map<String, Place> map = {for (var p in current) p.id: p};
+        for (var p in updates) {
+          map[p.id] = p;
+        }
+        _allPlacesCache = map.values.toList();
+      } else {
+        _allPlacesCache = updates;
+      }
+
+      if (_allPlacesCache != null) {
+        await _savePlacesToLocal(_allPlacesCache!);
+      }
+      _boundsCache.clear();
+      return _allPlacesCache ?? [];
+    } catch (e) {
+      debugPrint('MapRepository: Error refreshing places: $e');
+      return _allPlacesCache ?? [];
     }
   }
 
@@ -606,7 +676,12 @@ class MapRepositoryImpl implements MapRepository {
   ) async {
     try {
       if (_allPlacesCache == null) {
-        _allPlacesCache = await _loadGroundcheckPlacesFromAsset();
+        final local = await _loadPlacesFromLocal();
+        if (local.isNotEmpty) {
+          _allPlacesCache = local;
+        } else {
+          await refreshPlaces(onlyToday: false);
+        }
       }
 
       final key = _boundsKey(south, north, west, east);

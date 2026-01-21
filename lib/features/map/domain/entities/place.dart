@@ -20,4 +20,34 @@ class Place {
     this.address,
     this.statusPerusahaan,
   });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'description': description,
+      'lat': position.latitude,
+      'lng': position.longitude,
+      'urlGambar': urlGambar,
+      'gcsResult': gcsResult,
+      'address': address,
+      'statusPerusahaan': statusPerusahaan,
+    };
+  }
+
+  factory Place.fromJson(Map<String, dynamic> json) {
+    return Place(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      description: json['description'] as String,
+      position: LatLng(
+        (json['lat'] as num).toDouble(),
+        (json['lng'] as num).toDouble(),
+      ),
+      urlGambar: json['urlGambar'] as String?,
+      gcsResult: json['gcsResult'] as String?,
+      address: json['address'] as String?,
+      statusPerusahaan: json['statusPerusahaan'] as String?,
+    );
+  }
 }

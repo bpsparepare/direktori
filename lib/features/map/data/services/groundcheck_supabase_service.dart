@@ -323,42 +323,8 @@ class GroundcheckSupabaseService {
         if (batch is! List || batch.isEmpty) break;
         for (final item in batch) {
           if (item is! Map<String, dynamic>) continue;
-          final lat = _parseDouble(item['latitude']);
-          final lon = _parseDouble(item['longitude']);
-          if (lat == null || lon == null) continue;
-          final idsbr = (item['idsbr'] ?? '').toString();
-          if (idsbr.isEmpty) continue;
-          final name = (item['nama_usaha'] ?? '').toString();
-          final alamat = (item['alamat_usaha'] ?? '').toString();
-          final kode = (item['kode_wilayah'] ?? '').toString();
-          final status = (item['status_perusahaan'] ?? '').toString();
-          final skala = (item['skala_usaha'] ?? '').toString();
-          final gcs = (item['gcs_result'] ?? '').toString();
-          final descParts = <String>[];
-          if (kode.isNotEmpty) {
-            descParts.add('Kode wilayah: $kode');
-          }
-          if (status.isNotEmpty) {
-            descParts.add('Status: $status');
-          }
-          if (skala.isNotEmpty) {
-            descParts.add('Skala: $skala');
-          }
-          if (gcs.isNotEmpty) {
-            descParts.add('GCS: $gcs');
-          }
-          final desc = descParts.join(' | ');
-          results.add(
-            Place(
-              id: 'gc:$idsbr',
-              name: name.isNotEmpty ? name : idsbr,
-              description: desc,
-              position: LatLng(lat, lon),
-              gcsResult: gcs,
-              address: alamat,
-              statusPerusahaan: status,
-            ),
-          );
+          final p = _mapToPlace(item);
+          if (p != null) results.add(p);
         }
         if (batch.length < batchSize) break;
         start += batchSize;
@@ -367,6 +333,85 @@ class GroundcheckSupabaseService {
     } catch (_) {
       return [];
     }
+  }
+
+  Future<List<Place>> fetchPlacesUpdatedSince(DateTime since) async {
+    try {
+      const int batchSize = 1000;
+      int start = 0;
+      final List<Place> results = [];
+      // Gunakan format ISO8601 dengan timezone offset jika perlu,
+      // tapi biasanya toIso8601String() sudah cukup jika Supabase fieldnya timestamptz
+      final sinceStr = since.toIso8601String();
+
+      while (true) {
+        final batch = await _client
+            .from(_tableName)
+            .select('''
+              idsbr,
+              nama_usaha,
+              alamat_usaha,
+              kode_wilayah,
+              status_perusahaan,
+              skala_usaha,
+              gcs_result,
+              latitude,
+              longitude
+              ''')
+            .gte('updated_at', sinceStr)
+            .order('idsbr', ascending: true)
+            .range(start, start + batchSize - 1);
+
+        if (batch is! List || batch.isEmpty) break;
+        for (final item in batch) {
+          if (item is! Map<String, dynamic>) continue;
+          final p = _mapToPlace(item);
+          if (p != null) results.add(p);
+        }
+        if (batch.length < batchSize) break;
+        start += batchSize;
+      }
+      return results;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Place? _mapToPlace(Map<String, dynamic> item) {
+    final lat = _parseDouble(item['latitude']);
+    final lon = _parseDouble(item['longitude']);
+    if (lat == null || lon == null) return null;
+    final idsbr = (item['idsbr'] ?? '').toString();
+    if (idsbr.isEmpty) return null;
+    final name = (item['nama_usaha'] ?? '').toString();
+    final alamat = (item['alamat_usaha'] ?? '').toString();
+    final kode = (item['kode_wilayah'] ?? '').toString();
+    final status = (item['status_perusahaan'] ?? '').toString();
+    final skala = (item['skala_usaha'] ?? '').toString();
+    final gcs = (item['gcs_result'] ?? '').toString();
+    final descParts = <String>[];
+    if (kode.isNotEmpty) {
+      descParts.add('Kode wilayah: $kode');
+    }
+    if (status.isNotEmpty) {
+      descParts.add('Status: $status');
+    }
+    if (skala.isNotEmpty) {
+      descParts.add('Skala: $skala');
+    }
+    if (gcs.isNotEmpty) {
+      descParts.add('GCS: $gcs');
+    }
+    final desc = descParts.join(' | ');
+    return Place(
+      id: 'gc:$idsbr',
+      name: name.isNotEmpty ? name : idsbr,
+      description: desc,
+      position: LatLng(lat, lon),
+      gcsResult: gcs,
+      address: alamat,
+      statusPerusahaan: status,
+    );
   }
 
   double? _parseDouble(dynamic v) {

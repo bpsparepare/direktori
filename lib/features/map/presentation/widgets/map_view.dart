@@ -929,31 +929,28 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
       }).toList();
     }
 
-    // If a polygon selection is active, return the filtered list directly
-    // to ensure all markers in the area are shown (100% visible).
-    if (widget.selectedPolygons.isNotEmpty || widget.polygon.isNotEmpty) {
+    // Special Case: Single Polygon (SLS) - Show 100% (No Capping)
+    if (widget.polygon.isNotEmpty && widget.selectedPolygons.isEmpty) {
       // Still respect selectedPlace if it exists
       final selectedId = widget.selectedPlace?.id;
       if (selectedId != null &&
           filteredByPolygon.every((p) => p.id != selectedId)) {
-        // If selected place is filtered out, add it back?
-        // Or maybe it's fine to filter it out if it's outside.
-        // Usually, if we select a place, we want to see it.
-        // But if the user selected a polygon, maybe they only want to see things in the polygon.
-        // Let's check if the selected place is in the polygon.
-        // If not, maybe we shouldn't show it, or we should show it as an exception.
-        // For now, let's just return the filtered list.
+        // If selected place is filtered out, we don't add it back for polygon filter
+        // because we strictly want to show what's inside.
       }
       return filteredByPolygon;
     }
 
-    // 2. Existing Capping Logic for No Selection
+    // 2. Capping Logic (For No Selection OR Multiple Polygons/Kelurahan)
+    // Use filteredByPolygon as the source so we respect the polygon boundary
+    final sourceList = filteredByPolygon;
     final selectedId = widget.selectedPlace?.id;
-    final int? cap = _capForZoom(input.length, _zoom);
-    if (cap == null || input.length <= cap) return input;
+    final int? cap = _capForZoom(sourceList.length, _zoom);
+    if (cap == null || sourceList.length <= cap) return sourceList;
+
     final List<Place> main = [];
     final List<Place> gc = [];
-    for (final p in input) {
+    for (final p in sourceList) {
       if (p.id.startsWith('gc:')) {
         gc.add(p);
       } else {
@@ -971,13 +968,15 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
       }
     }
     if (selectedId != null && result.every((p) => p.id != selectedId)) {
-      final sel = input.firstWhere(
-        (p) => p.id == selectedId,
-        orElse: () => result.first,
-      );
-      result.insert(0, sel);
-      if (result.length > cap) {
-        result.removeLast();
+      // Only try to find in sourceList (must be inside polygon if filtering is active)
+      try {
+        final sel = sourceList.firstWhere((p) => p.id == selectedId);
+        result.insert(0, sel);
+        if (result.length > cap) {
+          result.removeLast();
+        }
+      } catch (_) {
+        // Selected place is not in the filtered list (outside polygon), so ignore
       }
     }
     return result;

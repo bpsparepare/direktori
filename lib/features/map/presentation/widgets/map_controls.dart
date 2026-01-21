@@ -380,19 +380,53 @@ class _MapControlsState extends State<MapControls> {
                 ),
               ],
             ),
-            child: IconButton(
-              onPressed: () {
-                MapRepositoryImpl().invalidatePlacesCache();
-                context.read<MapBloc>().add(const PlacesRequested());
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Marker diperbarui'),
-                    duration: Duration(milliseconds: 800),
-                  ),
-                );
-              },
+            child: PopupMenuButton<String>(
               icon: const Icon(Icons.refresh, color: Colors.black87),
               tooltip: 'Refresh Marker',
+              onSelected: (value) {
+                if (value == 'all') {
+                  context
+                      .read<MapBloc>()
+                      .add(const PlacesRefreshRequested(onlyToday: false));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Memuat ulang semua marker...'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                } else if (value == 'today') {
+                  context
+                      .read<MapBloc>()
+                      .add(const PlacesRefreshRequested(onlyToday: true));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Mengambil perubahan hari ini...'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                }
+              },
+              itemBuilder:
+                  (BuildContext context) => <PopupMenuEntry<String>>[
+                    const PopupMenuItem<String>(
+                      value: 'all',
+                      child: ListTile(
+                        leading: Icon(Icons.cloud_download),
+                        title: Text('Download Semua Data'),
+                        subtitle: Text('Full load (bisa lama)'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'today',
+                      child: ListTile(
+                        leading: Icon(Icons.today),
+                        title: Text('Perubahan Hari Ini'),
+                        subtitle: Text('Hanya data yang berubah'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ],
             ),
           ),
           const SizedBox(height: 8),

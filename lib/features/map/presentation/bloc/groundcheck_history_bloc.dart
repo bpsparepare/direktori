@@ -12,6 +12,38 @@ class GroundcheckHistoryBloc
     : _service = service,
       super(GroundcheckHistoryInitial()) {
     on<LoadGroundcheckHistory>(_onLoadGroundcheckHistory);
+    on<LoadGroundcheckLeaderboard>(_onLoadGroundcheckLeaderboard);
+  }
+
+  Future<void> _onLoadGroundcheckLeaderboard(
+    LoadGroundcheckLeaderboard event,
+    Emitter<GroundcheckHistoryState> emit,
+  ) async {
+    try {
+      final leaderboard = await _service.fetchLeaderboard();
+
+      if (state is GroundcheckHistoryLoaded) {
+        emit(
+          (state as GroundcheckHistoryLoaded).copyWith(
+            leaderboard: leaderboard,
+          ),
+        );
+      } else {
+        emit(
+          GroundcheckHistoryLoaded(
+            records: const [],
+            totalCount: 0,
+            leaderboard: leaderboard,
+          ),
+        );
+      }
+    } catch (e) {
+      emit(
+        GroundcheckHistoryError(
+          message: 'Failed to load leaderboard: ${e.toString()}',
+        ),
+      );
+    }
   }
 
   Future<void> _onLoadGroundcheckHistory(

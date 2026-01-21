@@ -17,6 +17,7 @@ import 'features/map/data/repositories/map_repository_impl.dart';
 import 'features/map/domain/usecases/get_initial_map_config.dart';
 import 'features/map/domain/usecases/get_places.dart';
 import 'features/map/domain/usecases/get_places_in_bounds.dart';
+import 'features/map/domain/usecases/refresh_places.dart';
 import 'features/map/domain/usecases/get_first_polygon_meta_from_geojson.dart';
 import 'features/map/domain/usecases/get_all_polygons_meta_from_geojson.dart';
 import 'features/contribution/presentation/bloc/contribution_bloc.dart';
@@ -76,6 +77,7 @@ class MyApp extends StatelessWidget {
               MapBloc(
                   getInitialMapConfig: GetInitialMapConfig(mapRepository),
                   getPlaces: GetPlaces(mapRepository),
+                  refreshPlaces: RefreshPlaces(mapRepository),
                   getPlacesInBounds: GetPlacesInBounds(mapRepository),
                   getFirstPolygonMeta: GetFirstPolygonMetaFromGeoJson(
                     mapRepository,
@@ -86,7 +88,8 @@ class MyApp extends StatelessWidget {
                 )
                 ..add(const MapInitRequested())
                 ..add(const PlacesRequested())
-                ..add(const PolygonsListRequested()),
+                ..add(const PolygonsListRequested())
+                ..add(const PlacesRefreshRequested(onlyToday: true)),
         ),
         BlocProvider<ContributionBloc>(
           create: (context) => ContributionBloc(

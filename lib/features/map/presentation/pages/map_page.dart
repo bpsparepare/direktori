@@ -1898,62 +1898,6 @@ class MapPage extends StatelessWidget {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.folder_open, color: Colors.green),
-              title: const Text('Tambah Direktori'),
-              subtitle: const Text('Tambah direktori baru'),
-              onTap: () {
-                Navigator.pop(context);
-                parentContext.read<MapBloc>().add(
-                  const TemporaryMarkerRemoved(),
-                );
-
-                // Calculate region data before calling the method
-                String idSls = '';
-                String? namaSls;
-                String? kodePos;
-                String kdProv = '';
-                String kdKab = '';
-                String kdKec = '';
-                String kdDesa = '';
-                String kdSls = '';
-                String? alamatFromGeocode;
-
-                final polygons = parentContext
-                    .read<MapBloc>()
-                    .state
-                    .polygonsMeta;
-                for (final polygon in polygons) {
-                  if (_isPointInPolygon(point, polygon.points)) {
-                    idSls = polygon.idsls ?? '';
-                    namaSls = polygon.name;
-                    kodePos = polygon.kodePos;
-                    break;
-                  }
-                }
-                if (idSls.isNotEmpty && idSls.length >= 14) {
-                  kdProv = idSls.substring(0, 2);
-                  kdKab = idSls.substring(2, 4);
-                  kdKec = idSls.substring(4, 7);
-                  kdDesa = idSls.substring(7, 10);
-                  kdSls = idSls.substring(10, 14);
-                }
-
-                _showAddDirektoriForm(
-                  context,
-                  point,
-                  idSls,
-                  kdProv,
-                  kdKab,
-                  kdKec,
-                  kdDesa,
-                  kdSls,
-                  namaSls,
-                  kodePos,
-                  alamatFromGeocode,
-                );
-              },
-            ),
-            ListTile(
               leading: const Icon(
                 Icons.playlist_add_check,
                 color: Colors.purple,
@@ -5642,181 +5586,193 @@ class MapPage extends StatelessWidget {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      useSafeArea: true,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (dialogContext) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(dialogContext).viewInsets.bottom,
-          ),
-          child: StatefulBuilder(
-            builder: (ctx, setState) {
-              return Container(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.8,
-                ),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 12),
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[300],
-                          borderRadius: BorderRadius.circular(2),
+        return DraggableScrollableSheet(
+          initialChildSize: 0.5,
+          minChildSize: 0.3,
+          maxChildSize: 0.95,
+          builder: (context, scrollController) {
+            return StatefulBuilder(
+              builder: (ctx, setState) {
+                return Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(16),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Center(
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 12),
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[300],
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Lokasi Groundcheck berdekatan',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Lokasi Groundcheck berdekatan',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close),
-                            onPressed: () => Navigator.of(dialogContext).pop(),
-                          ),
-                        ],
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const Divider(height: 1),
-                    Flexible(
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: mutablePlaces.length,
-                        separatorBuilder: (_, __) => const Divider(height: 16),
-                        itemBuilder: (_, i) {
-                          final p = mutablePlaces[i];
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  _getPlaceIcon(p),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          p.name,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        if (p.address != null &&
-                                            p.address!.isNotEmpty)
+                      const Divider(height: 1),
+                      Expanded(
+                        child: ListView.separated(
+                          controller: scrollController,
+                          padding: const EdgeInsets.only(
+                            left: 16,
+                            right: 16,
+                            top: 16,
+                            bottom: 80,
+                          ),
+                          itemCount: mutablePlaces.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(height: 16),
+                          itemBuilder: (_, i) {
+                            final p = mutablePlaces[i];
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    _getPlaceIcon(p),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
                                           Text(
-                                            'Alamat: ${p.address!}',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.grey[600],
-                                            ),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        if (p.statusPerusahaan != null &&
-                                            p.statusPerusahaan!.isNotEmpty)
-                                          Text(
-                                            'Status: ${p.statusPerusahaan}',
+                                            p.name,
                                             style: const TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.blue,
+                                              fontWeight: FontWeight.bold,
                                             ),
                                           ),
-                                      ],
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.streetview,
-                                      color: Colors.blue,
-                                    ),
-                                    tooltip: 'Lihat Street View',
-                                    onPressed: () async {
-                                      final url = Uri.parse(
-                                        'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.position.latitude},${p.position.longitude}',
-                                      );
-                                      if (!await launchUrl(
-                                        url,
-                                        mode: LaunchMode.externalApplication,
-                                      )) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Tidak dapat membuka Street View',
+                                          if (p.address != null &&
+                                              p.address!.isNotEmpty)
+                                            Text(
+                                              'Alamat: ${p.address!}',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                          ),
+                                          if (p.statusPerusahaan != null &&
+                                              p.statusPerusahaan!.isNotEmpty)
+                                            Text(
+                                              'Status: ${p.statusPerusahaan}',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.blue,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.streetview,
+                                        color: Colors.blue,
+                                      ),
+                                      tooltip: 'Lihat Street View',
+                                      onPressed: () async {
+                                        final url = Uri.parse(
+                                          'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.position.latitude},${p.position.longitude}',
                                         );
-                                      }
-                                    },
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.edit,
-                                      color: Colors.orange,
-                                    ),
-                                    tooltip: 'Update status',
-                                    onPressed: () async {
-                                      final newCode =
-                                          await _showUpdateGroundcheckStatusDialog(
-                                            context,
-                                            p,
-                                          );
-                                      if (newCode != null) {
-                                        setState(() {
-                                          mutablePlaces[i] = Place(
-                                            id: p.id,
-                                            name: p.name,
-                                            description: p.description,
-                                            position: p.position,
-                                            urlGambar: p.urlGambar,
-                                            gcsResult: newCode,
-                                            address: p.address,
-                                            statusPerusahaan:
-                                                p.statusPerusahaan,
-                                          );
-                                        });
-                                        if (mutablePlaces.length == 1) {
-                                          Navigator.of(dialogContext).pop();
+                                        if (!await launchUrl(
+                                          url,
+                                          mode: LaunchMode.externalApplication,
+                                        )) {
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Tidak dapat membuka Street View',
+                                                ),
+                                              ),
+                                            );
+                                          }
                                         }
-                                      }
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ],
-                          );
-                        },
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.edit,
+                                        color: Colors.orange,
+                                      ),
+                                      tooltip: 'Update status',
+                                      onPressed: () async {
+                                        if (!context.mounted) return;
+                                        final newCode =
+                                            await _showUpdateGroundcheckStatusDialog(
+                                              context,
+                                              p,
+                                            );
+
+                                        if (!dialogContext.mounted) return;
+
+                                        if (newCode != null) {
+                                          setState(() {
+                                            mutablePlaces[i] = Place(
+                                              id: p.id,
+                                              name: p.name,
+                                              description: p.description,
+                                              position: p.position,
+                                              urlGambar: p.urlGambar,
+                                              gcsResult: newCode,
+                                              address: p.address,
+                                              statusPerusahaan:
+                                                  p.statusPerusahaan,
+                                            );
+                                          });
+                                          if (mutablePlaces.length == 1) {
+                                            Navigator.of(dialogContext).pop();
+                                          }
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
         );
       },
     );
@@ -5862,6 +5818,7 @@ class MapPage extends StatelessWidget {
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         return StatefulBuilder(

@@ -1,16 +1,18 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'map_event.dart';
-import 'map_state.dart';
+import '../../domain/usecases/get_all_polygons_meta_from_geojson.dart';
+import '../../domain/usecases/get_first_polygon_meta_from_geojson.dart';
 import '../../domain/usecases/get_initial_map_config.dart';
 import '../../domain/usecases/get_places.dart';
-import '../../domain/usecases/get_first_polygon_meta_from_geojson.dart';
-import '../../domain/usecases/get_all_polygons_meta_from_geojson.dart';
 import '../../domain/usecases/get_places_in_bounds.dart';
+import '../../domain/usecases/refresh_places.dart';
+import 'map_event.dart';
+import 'map_state.dart';
 
 class MapBloc extends Bloc<MapEvent, MapState> {
   final GetInitialMapConfig getInitialMapConfig;
   final GetPlaces getPlaces;
+  final RefreshPlaces refreshPlaces;
   final GetPlacesInBounds getPlacesInBounds;
   final GetFirstPolygonMetaFromGeoJson getFirstPolygonMeta;
   final GetAllPolygonsMetaFromGeoJson getAllPolygonsMeta;
@@ -18,12 +20,14 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   MapBloc({
     required this.getInitialMapConfig,
     required this.getPlaces,
+    required this.refreshPlaces,
     required this.getFirstPolygonMeta,
     required this.getAllPolygonsMeta,
     required this.getPlacesInBounds,
   }) : super(const MapState()) {
     on<MapInitRequested>(_onInit);
     on<PlacesRequested>(_onPlacesRequested);
+    on<PlacesRefreshRequested>(_onPlacesRefreshRequested);
     on<PlacesInBoundsRequested>(_onPlacesInBoundsRequested);
     on<PlaceSelected>(_onPlaceSelected);
     on<PlaceCleared>(_onPlaceCleared);
@@ -52,6 +56,18 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   ) async {
     try {
       final list = await getPlaces();
+      emit(state.copyWith(places: list));
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> _onPlacesRefreshRequested(
+    PlacesRefreshRequested event,
+    Emitter<MapState> emit,
+  ) async {
+    try {
+      final list = await refreshPlaces(onlyToday: event.onlyToday);
       emit(state.copyWith(places: list));
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
