@@ -5562,12 +5562,16 @@ class MapPage extends StatelessWidget {
         icon = Icons.cancel;
         break;
       case '3': // Tutup
-        color = Colors.brown;
+        color = Colors.pinkAccent;
         icon = Icons.block;
         break;
       case '4': // Ganda
         color = Colors.purple;
         icon = Icons.content_copy;
+        break;
+      case '5': // Usaha Baru
+        color = Colors.blue;
+        icon = Icons.add_location;
         break;
       default: // Belum Groundcheck (null/empty)
         color = Colors.orange;

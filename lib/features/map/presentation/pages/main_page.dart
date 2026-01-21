@@ -225,7 +225,7 @@ class _MainPageState extends State<MainPage> {
       case 0:
         return MapPage(mapController: _sharedMapController);
       case 1:
-        return SavedPage(mapController: _sharedMapController);
+        return DashboardPage(mapController: _sharedMapController);
       case 2:
         return const GroundcheckHistoryPage();
       case 3:
@@ -248,7 +248,7 @@ class _MainPageState extends State<MainPage> {
             child: IndexedStack(
               index: _selectedIndex == 0 ? 0 : _selectedIndex - 1,
               children: [
-                SavedPage(mapController: _sharedMapController),
+                DashboardPage(mapController: _sharedMapController),
                 const GroundcheckHistoryPage(),
                 GroundcheckPage(onGoToMap: _focusGroundcheckLocation),
               ],
@@ -365,8 +365,8 @@ class _MainPageState extends State<MainPage> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Jelajah'),
           BottomNavigationBarItem(
-            icon: Icon(Icons.bookmark),
-            label: 'Disimpan',
+            icon: Icon(Icons.dashboard),
+            label: 'Dashboard',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.add_circle_outline),

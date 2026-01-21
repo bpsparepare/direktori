@@ -38,6 +38,18 @@ class GroundcheckSupabaseService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> fetchDashboardStats() async {
+    try {
+      final response = await _client.from('view_dashboard_stats').select();
+      if (response is List) {
+        return List<Map<String, dynamic>>.from(response);
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
   Future<void> importFromAsset(String assetPath) async {
     try {
       final raw = await rootBundle.loadString(assetPath);
