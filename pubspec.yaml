@@ -73,6 +73,8 @@ dependencies:
   mime: ^1.0.6
   image: ^4.2.0
   msix: ^3.16.12
+  file_picker: ^10.3.8
+  csv: ^6.0.0
 
 dev_dependencies: 
   flutter_test:

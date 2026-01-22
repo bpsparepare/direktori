@@ -14,10 +14,18 @@ class BpsGcService {
   final http.Client _client;
   String? _csrfToken;
   String? _cookieHeader;
+  String _userAgent =
+      'Mozilla/5.0 (Linux; Android 16; ONEPLUS 15 Build/SKQ1.211202.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/143.0.7499.192 Mobile Safari/537.36';
   DateTime? _lastCsrfFetch;
   final Duration _csrfTtl = const Duration(minutes: 15);
 
   BpsGcService({http.Client? client}) : _client = client ?? http.Client();
+
+  void setUserAgent(String ua) {
+    if (ua.isNotEmpty) {
+      _userAgent = ua;
+    }
+  }
 
   void setCookiesFromHeader(String cookieString) {
     _cookieHeader = cookieString;
@@ -30,11 +38,14 @@ class BpsGcService {
     final response = await _client.get(
       url,
       headers: {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+        'User-Agent': _userAgent,
         'Accept': '*/*',
         'Accept-Language': 'en-US,en;q=0.9',
         'X-Requested-With': 'XMLHttpRequest',
+        'sec-ch-ua':
+            '"Android WebView";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+        'sec-ch-ua-mobile': '?1',
+        'sec-ch-ua-platform': '"Android"',
         'Cookie': _cookieHeader ?? '',
       },
     );
@@ -83,19 +94,42 @@ class BpsGcService {
         b.contains('welcome to matchapro');
   }
 
+  String? _manualGcToken;
+  String? _manualCsrfToken;
+
+  void setTokens(String gcToken, String csrfToken) {
+    _manualGcToken = gcToken;
+    _manualCsrfToken = csrfToken;
+    _csrfToken = csrfToken; // update the auto one too just in case
+  }
+
   Future<Map<String, dynamic>?> konfirmasiUser({
     required String perusahaanId,
     required String latitude,
     required String longitude,
     required String hasilGc,
-    required String gcToken,
+    required String
+    gcToken, // This argument is passed from caller, usually via provider/bloc
   }) async {
+    // Use manual tokens if available, otherwise use passed argument or forced
+    final effectiveGcToken = _manualGcToken ?? gcToken;
+    final effectiveCsrfToken =
+        _manualCsrfToken ?? _forcedToken; // Default to forced if no manual
+
     debugPrint(
       'BpsGcService.konfirmasiUser payload => perusahaanId=$perusahaanId, '
       'hasilGc=$hasilGc, lat="$latitude", lon="$longitude"',
     );
-    _cookieHeader = _forcedCookie;
-    await _ensureFreshCsrf();
+
+    // Ensure we have fresh CSRF if we don't have a manual one
+    if (_manualCsrfToken == null) {
+      _cookieHeader = _forcedCookie;
+      await _ensureFreshCsrf();
+    }
+
+    // If we have manual cookie, use it
+    // _cookieHeader is already set via setCookiesFromHeader
+
     final url = Uri.parse('$baseUrl/dirgc/konfirmasi-user');
 
     final body = {
@@ -103,17 +137,24 @@ class BpsGcService {
       'latitude': latitude,
       'longitude': longitude,
       'hasilgc': hasilGc,
-      'gc_token': _forcedGcToken,
-      '_token': _forcedToken,
+      'gc_token': effectiveGcToken.isNotEmpty
+          ? effectiveGcToken
+          : _forcedGcToken,
+      '_token': effectiveCsrfToken.isNotEmpty
+          ? effectiveCsrfToken
+          : (_csrfToken ?? _forcedToken),
     };
 
     final response = await _client.post(
       url,
       headers: {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+        'User-Agent': _userAgent, // Use Mobile UA
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         'X-Requested-With': 'XMLHttpRequest',
+        'sec-ch-ua':
+            '"Android WebView";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+        'sec-ch-ua-mobile': '?1',
+        'sec-ch-ua-platform': '"Android"',
         'Cookie': _cookieHeader ?? '',
       },
       body: body,
@@ -130,10 +171,13 @@ class BpsGcService {
       final retry = await _client.post(
         url,
         headers: {
-          'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+          'User-Agent': _userAgent,
           'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
           'X-Requested-With': 'XMLHttpRequest',
+          'sec-ch-ua':
+              '"Android WebView";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+          'sec-ch-ua-mobile': '?1',
+          'sec-ch-ua-platform': '"Android"',
           'Cookie': _cookieHeader ?? '',
         },
         body: {...body, '_token': _forcedToken},
@@ -195,10 +239,13 @@ class BpsGcService {
     final response = await _client.post(
       url,
       headers: {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+        'User-Agent': _userAgent,
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         'X-Requested-With': 'XMLHttpRequest',
+        'sec-ch-ua':
+            '"Android WebView";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+        'sec-ch-ua-mobile': '?1',
+        'sec-ch-ua-platform': '"Android"',
         'Cookie': _cookieHeader ?? '',
       },
       body: body,
@@ -245,11 +292,14 @@ class BpsGcService {
       final response = await _client.get(
         url,
         headers: {
-          'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+          'User-Agent': _userAgent,
           'Accept': '*/*',
           'Accept-Language': 'en-US,en;q=0.9',
           'X-Requested-With': 'XMLHttpRequest',
+          'sec-ch-ua':
+              '"Android WebView";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+          'sec-ch-ua-mobile': '?1',
+          'sec-ch-ua-platform': '"Android"',
           'Cookie': _cookieHeader ?? '',
         },
       );

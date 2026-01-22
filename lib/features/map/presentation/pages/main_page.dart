@@ -227,7 +227,7 @@ class _MainPageState extends State<MainPage> {
       case 1:
         return DashboardPage(mapController: _sharedMapController);
       case 2:
-        return const GroundcheckHistoryPage();
+        return const ContributionPage();
       case 3:
         return GroundcheckPage(onGoToMap: _focusGroundcheckLocation);
       default:
@@ -371,6 +371,10 @@ class _MainPageState extends State<MainPage> {
           BottomNavigationBarItem(
             icon: Icon(Icons.add_circle_outline),
             label: 'Kontribusi',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.fact_check_outlined),
+            label: 'Groundcheck',
           ),
         ],
       ),

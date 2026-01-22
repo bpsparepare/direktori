@@ -12,6 +12,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../data/services/bps_gc_service.dart';
 import '../../data/services/gc_credentials_service.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
+import '../widgets/bps_login_dialog.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../../data/repositories/map_repository_impl.dart';
@@ -391,6 +392,8 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   String? _error;
   String? _gcCookie;
   String? _gcToken;
+  String? _currentUser;
+  String? _userAgent;
   Timer? _keepAliveTimer;
 
   @override
@@ -1205,6 +1208,44 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     return true;
   }
 
+  void _showBpsLoginDialog() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => BpsLoginDialog(
+          onLoginSuccess:
+              (cookie, gcToken, csrfToken, userAgent, userName) async {
+                debugPrint('Login Success: $userName');
+                setState(() {
+                  _gcCookie = cookie;
+                  _gcToken = gcToken;
+                  _currentUser = userName.isNotEmpty
+                      ? userName
+                      : 'Pengguna Terautentikasi';
+                });
+
+                _gcService.setCookiesFromHeader(cookie);
+                _gcService.setTokens(gcToken, csrfToken);
+                _gcService.setUserAgent(userAgent);
+
+                await _saveStoredGcCredentials();
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Login berhasil! Token diperbarui. User: $_currentUser',
+                      ),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+        ),
+      ),
+    );
+  }
+
   Future<void> _onGcPressed(GroundcheckRecord record) async {
     await _showGcInputDialog(record);
   }
@@ -1364,12 +1405,54 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     );
   }
 
+  Widget _buildInfoRow(String label, String value, {bool isGood = true}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 12,
+                color: isGood ? Colors.black87 : Colors.red,
+              ),
+            ),
+          ),
+          Icon(
+            isGood ? Icons.check_circle_outline : Icons.error_outline,
+            size: 16,
+            color: isGood ? Colors.green : Colors.red,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Groundcheck'),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
         actions: [
+          TextButton.icon(
+            onPressed: _showBpsLoginDialog,
+            icon: const Icon(Icons.login, color: Colors.white),
+            label: const Text(
+              'Login BPS',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.cloud_upload),
             tooltip: 'Muat ulang dari Supabase',
@@ -1397,6 +1480,97 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
               )
             : Column(
                 children: [
+                  if (_currentUser != null)
+                    Card(
+                      color: Colors.green[50],
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: Colors.green.shade200),
+                      ),
+                      child: ExpansionTile(
+                        tilePadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        leading: const CircleAvatar(
+                          backgroundColor: Colors.green,
+                          child: Icon(Icons.person, color: Colors.white),
+                        ),
+                        title: const Text(
+                          'Login Berhasil',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        subtitle: Text(
+                          _currentUser!,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            alignment: Alignment.centerLeft,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Divider(),
+                                const Text(
+                                  'Detail Sesi (Siap untuk Konfirmasi)',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                _buildInfoRow(
+                                  'GC Token',
+                                  _gcToken != null && _gcToken!.length > 10
+                                      ? '${_gcToken!.substring(0, 10)}...${_gcToken!.substring(_gcToken!.length - 5)}'
+                                      : 'Tidak tersedia',
+                                  isGood: _gcToken != null,
+                                ),
+                                _buildInfoRow(
+                                  'Cookie',
+                                  _gcCookie != null ? 'Tersedia' : 'Kosong',
+                                  isGood: _gcCookie != null,
+                                ),
+                                _buildInfoRow(
+                                  'Mode',
+                                  _userAgent != null &&
+                                          _userAgent!.contains('Android')
+                                      ? 'Mobile (Android 16)'
+                                      : 'Desktop / Default',
+                                  isGood:
+                                      _userAgent != null &&
+                                      _userAgent!.contains('Android'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: ElevatedButton.icon(
+                        onPressed: _showBpsLoginDialog,
+                        icon: const Icon(Icons.login),
+                        label: const Text('Login ke BPS (Matchapro)'),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(48),
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
                   _buildFilterBar(),
                   const SizedBox(height: 12),
                   Expanded(
