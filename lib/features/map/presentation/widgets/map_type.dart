@@ -75,4 +75,21 @@ extension MapTypeExtension on MapType {
         return 19;
     }
   }
+
+  double get minZoom {
+    switch (this) {
+      case MapType.street:
+        return 3;
+      case MapType.satellite:
+        return 3;
+      case MapType.bingSatellite:
+        return 3;
+      case MapType.googleSatellite:
+        return 3;
+      case MapType.topographic:
+        return 3;
+      case MapType.light:
+        return 3;
+    }
+  }
 }

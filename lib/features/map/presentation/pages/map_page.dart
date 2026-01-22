@@ -2937,6 +2937,17 @@ class MapPage extends StatelessWidget {
 
                                     await service.updateRecord(record);
 
+                                    // Refresh map to show new/updated marker
+                                    try {
+                                      MapRepositoryImpl()
+                                          .invalidatePlacesCache();
+                                    } catch (_) {}
+                                    if (context.mounted) {
+                                      context.read<MapBloc>().add(
+                                        const PlacesRequested(),
+                                      );
+                                    }
+
                                     if (context.mounted) {
                                       Navigator.of(context).pop();
                                       ScaffoldMessenger.of(
@@ -5700,6 +5711,7 @@ class MapPage extends StatelessWidget {
                                         ],
                                       ),
                                     ),
+
                                     IconButton(
                                       icon: const Icon(
                                         Icons.streetview,
@@ -5728,42 +5740,142 @@ class MapPage extends StatelessWidget {
                                         }
                                       },
                                     ),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.edit,
-                                        color: Colors.orange,
-                                      ),
-                                      tooltip: 'Update status',
-                                      onPressed: () async {
-                                        if (!context.mounted) return;
-                                        final newCode =
-                                            await _showUpdateGroundcheckStatusDialog(
-                                              context,
-                                              p,
-                                            );
+                                    if (p.gcsResult == '5')
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          color: Colors.red,
+                                        ),
+                                        tooltip: 'Hapus Marker Tambahan',
+                                        onPressed: () async {
+                                          if (!context.mounted) return;
+                                          final confirmed = await showDialog<bool>(
+                                            context: context,
+                                            builder: (ctx) => AlertDialog(
+                                              title: const Text(
+                                                'Hapus Marker?',
+                                              ),
+                                              content: const Text(
+                                                'Marker tambahan ini akan dihapus permanen. Lanjutkan?',
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.of(
+                                                    ctx,
+                                                  ).pop(false),
+                                                  child: const Text('Batal'),
+                                                ),
+                                                TextButton(
+                                                  onPressed: () => Navigator.of(
+                                                    ctx,
+                                                  ).pop(true),
+                                                  style: TextButton.styleFrom(
+                                                    foregroundColor: Colors.red,
+                                                  ),
+                                                  child: const Text('Hapus'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
 
-                                        if (!dialogContext.mounted) return;
-
-                                        if (newCode != null) {
-                                          setState(() {
-                                            mutablePlaces[i] = Place(
-                                              id: p.id,
-                                              name: p.name,
-                                              description: p.description,
-                                              position: p.position,
-                                              urlGambar: p.urlGambar,
-                                              gcsResult: newCode,
-                                              address: p.address,
-                                              statusPerusahaan:
-                                                  p.statusPerusahaan,
+                                          if (confirmed == true &&
+                                              context.mounted) {
+                                            final repo = MapRepositoryImpl();
+                                            final idsbr = p.id.replaceFirst(
+                                              'gc:',
+                                              '',
                                             );
-                                          });
-                                          if (mutablePlaces.length == 1) {
-                                            Navigator.of(dialogContext).pop();
+                                            final success = await repo
+                                                .deleteOrCloseDirectoryById(
+                                                  idsbr,
+                                                );
+
+                                            if (success &&
+                                                dialogContext.mounted) {
+                                              setState(() {
+                                                mutablePlaces.removeAt(i);
+                                              });
+                                              // Force refresh map
+                                              context.read<MapBloc>().add(
+                                                const PlacesRefreshRequested(
+                                                  onlyToday: true,
+                                                ),
+                                              );
+                                              if (mutablePlaces.isEmpty) {
+                                                Navigator.of(
+                                                  dialogContext,
+                                                ).pop();
+                                              } else if (mutablePlaces.length ==
+                                                  1) {
+                                                Navigator.of(
+                                                  dialogContext,
+                                                ).pop();
+                                              }
+                                              if (context.mounted) {
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                      'Marker berhasil dihapus',
+                                                    ),
+                                                    backgroundColor:
+                                                        Colors.green,
+                                                  ),
+                                                );
+                                              }
+                                            } else if (context.mounted) {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Gagal menghapus marker',
+                                                  ),
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              );
+                                            }
                                           }
-                                        }
-                                      },
-                                    ),
+                                        },
+                                      )
+                                    else
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.edit,
+                                          color: Colors.orange,
+                                        ),
+                                        tooltip: 'Update status',
+                                        onPressed: () async {
+                                          if (!context.mounted) return;
+                                          final newCode =
+                                              await _showUpdateGroundcheckStatusDialog(
+                                                context,
+                                                p,
+                                              );
+
+                                          if (!dialogContext.mounted) return;
+
+                                          if (newCode != null) {
+                                            setState(() {
+                                              mutablePlaces[i] = Place(
+                                                id: p.id,
+                                                name: p.name,
+                                                description: p.description,
+                                                position: p.position,
+                                                urlGambar: p.urlGambar,
+                                                gcsResult: newCode,
+                                                address: p.address,
+                                                statusPerusahaan:
+                                                    p.statusPerusahaan,
+                                              );
+                                            });
+                                            if (mutablePlaces.length == 1) {
+                                              Navigator.of(dialogContext).pop();
+                                            }
+                                          }
+                                        },
+                                      ),
                                   ],
                                 ),
                               ],

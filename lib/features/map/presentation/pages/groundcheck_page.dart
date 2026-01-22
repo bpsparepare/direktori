@@ -72,6 +72,22 @@ class GroundcheckRecord {
       userId: json['user_id']?.toString(),
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'idsbr': idsbr,
+      'nama_usaha': namaUsaha,
+      'alamat_usaha': alamatUsaha,
+      'kode_wilayah': kodeWilayah,
+      'status_perusahaan': statusPerusahaan,
+      'skala_usaha': skalaUsaha,
+      'gcs_result': gcsResult,
+      'latitude': latitude,
+      'longitude': longitude,
+      'perusahaan_id': perusahaanId,
+      'user_id': userId,
+    };
+  }
 }
 
 class GroundcheckDataSource extends DataGridSource {
@@ -387,42 +403,54 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
 
   Future<void> _loadData() async {
     setState(() {
-      _isLoading = true;
+      if (_allRecords.isEmpty) _isLoading = true;
       _error = null;
     });
     try {
-      final records = await _supabaseService.fetchRecords();
+      // 1. Load from local cache immediately
+      final local = await _supabaseService.loadLocalRecords();
+      if (local.isNotEmpty && mounted) {
+        _processRecords(local);
+      }
 
-      _allRecords = records;
-      _statusOptions =
-          records
-              .map((e) => e.statusPerusahaan)
-              .where((v) => v.isNotEmpty)
-              .toSet()
-              .toList()
-            ..sort();
-      _gcsOptions =
-          records
-              .map((e) => e.gcsResult)
-              .where((v) => v.isNotEmpty)
-              .toSet()
-              .toList()
-            ..sort();
-      final filtered = _filteredRecords();
-      setState(() {
-        _dataSource = GroundcheckDataSource(
-          data: filtered,
-          onGcPressed: _onGcPressed,
-          onGoToMap: widget.onGoToMap,
-        );
-        _isLoading = false;
-      });
+      // 2. Sync with server (fetch only updates)
+      final records = await _supabaseService.syncRecords();
+      if (mounted) {
+        _processRecords(records);
+      }
     } catch (e) {
       setState(() {
         _error = e.toString();
         _isLoading = false;
       });
     }
+  }
+
+  void _processRecords(List<GroundcheckRecord> records) {
+    _allRecords = records;
+    _statusOptions =
+        records
+            .map((e) => e.statusPerusahaan)
+            .where((v) => v.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    _gcsOptions =
+        records
+            .map((e) => e.gcsResult)
+            .where((v) => v.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    final filtered = _filteredRecords();
+    setState(() {
+      _dataSource = GroundcheckDataSource(
+        data: filtered,
+        onGcPressed: _onGcPressed,
+        onGoToMap: widget.onGoToMap,
+      );
+      _isLoading = false;
+    });
   }
 
   Future<void> _reloadFromSupabase() async {
@@ -509,13 +537,17 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
         _keepAliveTimer = Timer.periodic(const Duration(minutes: 10), (
           _,
         ) async {
-          await _gcService.keepAlive();
-          final refreshedCookie = _gcService.cookieHeader;
-          if (refreshedCookie != null &&
-              refreshedCookie.isNotEmpty &&
-              refreshedCookie != _gcCookie) {
-            _gcCookie = refreshedCookie;
-            await _saveStoredGcCredentials();
+          try {
+            await _gcService.keepAlive();
+            final refreshedCookie = _gcService.cookieHeader;
+            if (refreshedCookie != null &&
+                refreshedCookie.isNotEmpty &&
+                refreshedCookie != _gcCookie) {
+              _gcCookie = refreshedCookie;
+              await _saveStoredGcCredentials();
+            }
+          } catch (_) {
+            // Ignore keepAlive errors
           }
         });
       }
@@ -1023,6 +1055,9 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       _allRecords[idx] = updated;
     }
     _refreshFilteredData();
+    // Simpan perubahan ke cache lokal agar tetap ada saat restart (optimistic update)
+    await _supabaseService.saveLocalRecords(_allRecords);
+
     await _supabaseService.updateRecord(updated);
     try {
       MapRepositoryImpl().invalidatePlacesCache();

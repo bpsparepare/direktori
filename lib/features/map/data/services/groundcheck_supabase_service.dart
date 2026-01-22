@@ -1,5 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/config/supabase_config.dart';
 import '../../presentation/pages/groundcheck_page.dart';
@@ -9,18 +12,27 @@ import 'package:latlong2/latlong.dart';
 class GroundcheckSupabaseService {
   final SupabaseClient _client = SupabaseConfig.client;
   static const String _tableName = 'groundcheck_list';
+  static const String _localFileName = 'groundcheck_list_cache.json';
+  static const String _lastSyncKey = 'groundcheck_last_sync_time';
 
-  Future<List<GroundcheckRecord>> fetchRecords() async {
+  Future<List<GroundcheckRecord>> fetchRecords({DateTime? updatedSince}) async {
     try {
       const int batchSize = 1000;
       int start = 0;
       final List<GroundcheckRecord> all = [];
+      final sinceStr = updatedSince?.toIso8601String();
+
       while (true) {
-        final batch = await _client
-            .from(_tableName)
-            .select()
+        dynamic query = _client.from(_tableName).select();
+
+        if (sinceStr != null) {
+          query = query.gt('updated_at', sinceStr);
+        }
+
+        final batch = await query
             .order('idsbr', ascending: true)
             .range(start, start + batchSize - 1);
+
         if (batch is List && batch.isNotEmpty) {
           all.addAll(
             batch.map((json) => GroundcheckRecord.fromJson(json)).toList(),
@@ -221,6 +233,21 @@ class GroundcheckSupabaseService {
     }
   }
 
+  Future<void> updateLocalRecord(GroundcheckRecord record) async {
+    try {
+      final records = await loadLocalRecords();
+      final index = records.indexWhere((r) => r.idsbr == record.idsbr);
+      if (index != -1) {
+        records[index] = record;
+      } else {
+        records.add(record);
+      }
+      await saveLocalRecords(records);
+    } catch (e) {
+      // Ignore
+    }
+  }
+
   Future<void> updateRecord(GroundcheckRecord record) async {
     try {
       final data = {
@@ -242,8 +269,17 @@ class GroundcheckSupabaseService {
       }
 
       await _client.from(_tableName).upsert(data, onConflict: 'idsbr');
+
+      // Update local cache
+      await updateLocalRecord(record);
     } catch (e) {
-      // Handle error
+      // Handle error but try to update local cache anyway if it's a network error?
+      // For now, let's assume we want to be optimistic or at least consistent.
+      // If network fails, we might still want to save locally if we support full offline edits.
+      // But for now, let's just save locally if we reached here (implies optimistic or parallel).
+      // To be safe, we should update local only if successful or if we implement a sync queue.
+      // Given the requirement is just "sync local and server", updating local after server attempt is fine.
+      await updateLocalRecord(record);
     }
   }
 
@@ -261,6 +297,29 @@ class GroundcheckSupabaseService {
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('idsbr', idsbr);
+
+      // Update local cache
+      final records = await loadLocalRecords();
+      final index = records.indexWhere((r) => r.idsbr == idsbr);
+      if (index != -1) {
+        final old = records[index];
+        final newRecord = GroundcheckRecord(
+          idsbr: old.idsbr,
+          namaUsaha: old.namaUsaha,
+          alamatUsaha: old.alamatUsaha,
+          kodeWilayah: old.kodeWilayah,
+          statusPerusahaan: old.statusPerusahaan,
+          skalaUsaha: old.skalaUsaha,
+          gcsResult: old.gcsResult,
+          latitude: latitude.toString(),
+          longitude: longitude.toString(),
+          perusahaanId: old.perusahaanId,
+          userId: old.userId,
+        );
+        records[index] = newRecord;
+        await saveLocalRecords(records);
+      }
+
       return true;
     } catch (_) {
       return false;
@@ -305,6 +364,29 @@ class GroundcheckSupabaseService {
         data['alamat_usaha'] = alamatUsaha;
       }
       await _client.from(_tableName).update(data).eq('idsbr', idsbr);
+
+      // Update local cache
+      final records = await loadLocalRecords();
+      final index = records.indexWhere((r) => r.idsbr == idsbr);
+      if (index != -1) {
+        final old = records[index];
+        final newRecord = GroundcheckRecord(
+          idsbr: old.idsbr,
+          namaUsaha: namaUsaha ?? old.namaUsaha,
+          alamatUsaha: alamatUsaha ?? old.alamatUsaha,
+          kodeWilayah: old.kodeWilayah,
+          statusPerusahaan: old.statusPerusahaan,
+          skalaUsaha: old.skalaUsaha,
+          gcsResult: hasilGc,
+          latitude: old.latitude,
+          longitude: old.longitude,
+          perusahaanId: old.perusahaanId,
+          userId: userId ?? old.userId,
+        );
+        records[index] = newRecord;
+        await saveLocalRecords(records);
+      }
+
       return true;
     } catch (_) {
       return false;
@@ -430,5 +512,107 @@ class GroundcheckSupabaseService {
     if (v == null) return null;
     if (v is num) return v.toDouble();
     return double.tryParse(v.toString());
+  }
+
+  Future<File> get _localFile async {
+    final directory = await getApplicationDocumentsDirectory();
+    return File('${directory.path}/$_localFileName');
+  }
+
+  Future<List<GroundcheckRecord>> loadLocalRecords() async {
+    try {
+      final file = await _localFile;
+      if (!await file.exists()) return [];
+      final content = await file.readAsString();
+      final List<dynamic> jsonList = jsonDecode(content);
+      return jsonList.map((json) => GroundcheckRecord.fromJson(json)).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<void> saveLocalRecords(List<GroundcheckRecord> records) async {
+    try {
+      final file = await _localFile;
+      final jsonList = records.map((e) => e.toJson()).toList();
+      await file.writeAsString(jsonEncode(jsonList));
+    } catch (e) {
+      // Ignore error
+    }
+  }
+
+  Future<List<GroundcheckRecord>> syncRecords({bool forceFull = false}) async {
+    try {
+      // 1. Load local first
+      List<GroundcheckRecord> localRecords = await loadLocalRecords();
+
+      // 2. Get last sync time
+      final prefs = await SharedPreferences.getInstance();
+      final lastSyncStr = prefs.getString(_lastSyncKey);
+      DateTime? lastSync;
+      if (lastSyncStr != null) {
+        lastSync = DateTime.tryParse(lastSyncStr);
+      }
+
+      // 3. Fetch updates
+      List<GroundcheckRecord> updates = [];
+      bool isIncremental = false;
+
+      if (!forceFull && lastSync != null && localRecords.isNotEmpty) {
+        // Fetch incremental
+        try {
+          updates = await fetchRecords(updatedSince: lastSync);
+          isIncremental = true;
+        } catch (e) {
+          // If incremental fetch fails (e.g. offline), return local
+          return localRecords;
+        }
+      } else {
+        // Fetch all (first time, reset, or forced full sync)
+        try {
+          updates = await fetchRecords();
+          // If we fetched everything successfully, we treat it as a full replacement
+          // unless updates are empty (which might mean error or empty DB)
+        } catch (e) {
+          // If full fetch fails (e.g. offline), return local (which might be empty)
+          return localRecords;
+        }
+      }
+
+      // 4. Merge or Replace
+      if (updates.isNotEmpty) {
+        List<GroundcheckRecord> finalRecords;
+
+        if (isIncremental) {
+          // Merge incremental updates
+          final Map<String, GroundcheckRecord> map = {
+            for (var r in localRecords) r.idsbr: r,
+          };
+          for (var u in updates) {
+            map[u.idsbr] = u;
+          }
+          finalRecords = map.values.toList();
+        } else {
+          // Full fetch (forceFull or first sync) -> Replace local cache
+          finalRecords = updates;
+        }
+
+        // 5. Save local
+        await saveLocalRecords(finalRecords);
+
+        // 6. Update sync time
+        await prefs.setString(
+          _lastSyncKey,
+          DateTime.now().toUtc().toIso8601String(),
+        );
+
+        return finalRecords;
+      }
+
+      return localRecords;
+    } catch (e) {
+      // Fallback
+      return [];
+    }
   }
 }

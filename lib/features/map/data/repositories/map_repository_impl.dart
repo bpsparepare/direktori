@@ -8,6 +8,7 @@ import '../../domain/entities/map_config.dart';
 import '../../domain/entities/place.dart';
 import '../../domain/repositories/map_repository.dart';
 import '../../domain/entities/polygon_data.dart';
+import '../../presentation/pages/groundcheck_page.dart';
 import '../models/direktori_model.dart';
 import '../../../../core/config/supabase_config.dart';
 import 'package:flutter/foundation.dart';
@@ -19,38 +20,24 @@ class MapRepositoryImpl implements MapRepository {
   static List<Place>? _allPlacesCache;
   static final Map<String, List<Place>> _boundsCache = {};
 
-  Future<File> get _localFile async {
-    final directory = await getApplicationDocumentsDirectory();
-    return File('${directory.path}/places_cache.json');
-  }
+  // Cache methods removed to use GroundcheckSupabaseService as single source of truth
 
   Future<List<Place>> _loadPlacesFromLocal() async {
     try {
-      final file = await _localFile;
-      if (!await file.exists()) return [];
-      final content = await file.readAsString();
-      final List<dynamic> jsonList = jsonDecode(content);
-      final places = jsonList.map((e) => Place.fromJson(e)).toList();
+      final service = GroundcheckSupabaseService();
+      final records = await service.loadLocalRecords();
+      final places = <Place>[];
+      for (final r in records) {
+        final p = _recordToPlace(r);
+        if (p != null) places.add(p);
+      }
       debugPrint(
-        'MapRepository: Loaded ${places.length} places from local storage',
+        'MapRepository: Loaded ${places.length} places from Groundcheck cache',
       );
       return places;
     } catch (e) {
       debugPrint('MapRepository: Error loading local places: $e');
       return [];
-    }
-  }
-
-  Future<void> _savePlacesToLocal(List<Place> places) async {
-    try {
-      final file = await _localFile;
-      final jsonList = places.map((e) => e.toJson()).toList();
-      await file.writeAsString(jsonEncode(jsonList));
-      debugPrint(
-        'MapRepository: Saved ${places.length} places to local storage',
-      );
-    } catch (e) {
-      debugPrint('MapRepository: Error saving local places: $e');
     }
   }
 
@@ -437,6 +424,25 @@ class MapRepositoryImpl implements MapRepository {
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('id', id);
+
+      // Update Groundcheck Service Cache
+      // Assuming ID is format "gc:IDSBR" or just "IDSBR" if from directly directory
+      // But GroundcheckRecord uses idsbr.
+      // If `id` passed here is uuid, we might have a mismatch if groundcheck_list uses idsbr as key.
+      // However, looking at _recordToPlace, id is 'gc:${r.idsbr}'.
+      // If this method is called with 'gc:123', we strip 'gc:'.
+      String realId = id;
+      if (id.startsWith('gc:')) {
+        realId = id.substring(3);
+      }
+
+      // Try to update groundcheck cache
+      await GroundcheckSupabaseService().updateCoordinates(
+        idsbr: realId,
+        latitude: lat,
+        longitude: lng,
+      );
+
       invalidatePlacesCache();
       return true;
     } catch (e) {
@@ -475,6 +481,22 @@ class MapRepositoryImpl implements MapRepository {
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('id', id);
+
+      // Update Groundcheck Service Cache
+      String realId = id;
+      if (id.startsWith('gc:')) {
+        realId = id.substring(3);
+      }
+
+      // Also update regional data in local cache if possible?
+      // updateCoordinates only updates lat/long.
+      // We might need a fuller update, but for now coordinates are most important for map.
+      await GroundcheckSupabaseService().updateCoordinates(
+        idsbr: realId,
+        latitude: lat,
+        longitude: lng,
+      );
+
       invalidatePlacesCache();
       return true;
     } catch (e) {
@@ -629,42 +651,59 @@ class MapRepositoryImpl implements MapRepository {
   Future<List<Place>> refreshPlaces({bool onlyToday = false}) async {
     try {
       final service = GroundcheckSupabaseService();
-      List<Place> updates = [];
 
-      if (onlyToday) {
-        final now = DateTime.now();
-        final startOfDay = DateTime(now.year, now.month, now.day);
-        // Convert to UTC as Supabase usually works with UTC
-        updates = await service.fetchPlacesUpdatedSince(startOfDay.toUtc());
-        debugPrint(
-          'MapRepository: Fetched ${updates.length} updates since ${startOfDay.toUtc()} (Local: $startOfDay)',
-        );
-      } else {
-        updates = await service.fetchPlaces();
-        debugPrint('MapRepository: Fetched ${updates.length} places (full)');
-      }
+      // Jika onlyToday=false, gunakan syncRecords (Incremental Sync yang baru)
+      // Logika syncRecords di service sudah menangani load local -> fetch updates -> merge -> save
+      // Jadi kita tinggal panggil itu.
+      // Namun, syncRecords mengembalikan List<GroundcheckRecord>, perlu dikonversi ke List<Place>.
+      // Dan syncRecords juga melakukan fetch semua data (incremental) jika onlyToday=false.
+      // Jika onlyToday=true, kita hanya ingin mengambil data yang berubah hari ini dan menggabungkannya dengan cache saat ini.
 
-      if (onlyToday) {
-        // Load current cache (memory or local)
-        List<Place> current = _allPlacesCache ?? await _loadPlacesFromLocal();
-        final Map<String, Place> map = {for (var p in current) p.id: p};
-        for (var p in updates) {
-          map[p.id] = p;
-        }
-        _allPlacesCache = map.values.toList();
-      } else {
-        _allPlacesCache = updates;
-      }
+      // Logika Baru:
+      // onlyToday=true -> "Perubahan Hari Ini" -> Incremental Sync (forceFull: false)
+      // onlyToday=false -> "Download Semua" -> Full Sync (forceFull: true)
 
-      if (_allPlacesCache != null) {
-        await _savePlacesToLocal(_allPlacesCache!);
+      List<GroundcheckRecord> records = await service.syncRecords(
+        forceFull: !onlyToday,
+      );
+
+      // Convert ke List<Place>
+      final places = <Place>[];
+      for (final r in records) {
+        final p = _recordToPlace(r);
+        if (p != null) places.add(p);
       }
+      _allPlacesCache = places;
       _boundsCache.clear();
       return _allPlacesCache ?? [];
     } catch (e) {
       debugPrint('MapRepository: Error refreshing places: $e');
       return _allPlacesCache ?? [];
     }
+  }
+
+  Place? _recordToPlace(GroundcheckRecord r) {
+    final lat = double.tryParse(r.latitude);
+    final lon = double.tryParse(r.longitude);
+    if (lat == null || lon == null) return null;
+
+    final descParts = <String>[];
+    if (r.kodeWilayah.isNotEmpty)
+      descParts.add('Kode wilayah: ${r.kodeWilayah}');
+    if (r.statusPerusahaan.isNotEmpty)
+      descParts.add('Status: ${r.statusPerusahaan}');
+    if (r.skalaUsaha.isNotEmpty) descParts.add('Skala: ${r.skalaUsaha}');
+    if (r.gcsResult.isNotEmpty) descParts.add('GCS: ${r.gcsResult}');
+
+    return Place(
+      id: 'gc:${r.idsbr}',
+      name: r.namaUsaha.isNotEmpty ? r.namaUsaha : r.idsbr,
+      description: descParts.join(' | '),
+      position: LatLng(lat, lon),
+      gcsResult: r.gcsResult,
+      address: r.alamatUsaha,
+      statusPerusahaan: r.statusPerusahaan,
+    );
   }
 
   @override
@@ -1093,26 +1132,51 @@ class MapRepositoryImpl implements MapRepository {
     }
   }
 
+  // Helper to check UUID format
+  bool _isUuid(String input) {
+    final RegExp uuidRegex = RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+    );
+    return uuidRegex.hasMatch(input);
+  }
+
   // New method: delete if id_sbr == 0 or empty, else mark closed (keberadaan_usaha = 4)
-  Future<bool> deleteOrCloseDirectoryById(String id) async {
+  @override
+  Future<bool> deleteOrCloseDirectoryById(String idOrIdSbr) async {
     try {
-      final response = await _supabaseClient
-          .from('direktori')
-          .select('id,id_sbr')
-          .eq('id', id)
-          .limit(1);
+      var query = _supabaseClient.from('direktori').select('id,id_sbr');
+
+      if (_isUuid(idOrIdSbr)) {
+        query = query.eq('id', idOrIdSbr);
+      } else {
+        query = query.eq('id_sbr', idOrIdSbr);
+      }
+
+      final response = await query.limit(1);
 
       if (response is List && response.isNotEmpty) {
         final row = response.first as Map<String, dynamic>;
+        final String realId = row['id'] as String; // The UUID
         final dynamic idSbrVal = row['id_sbr'];
-        final bool isPending =
+
+        // Cek apakah id_sbr kosong, 0, atau sama dengan ID input (kasus TEMP)
+        // Jika ID input adalah TEMP-..., maka id_sbrVal pasti sama.
+        // Kita anggap "pending" atau "temporary" jika id_sbr-nya terlihat tidak valid atau generated.
+        // Namun logic aslinya: delete jika id_sbr kosong/0.
+        // Untuk kasus TEMP, user ingin menghapus marker tambahan. Marker tambahan biasanya punya id_sbr = TEMP...
+        // Apakah marker tambahan harus dihapus permanen (DELETE) atau soft delete (TUTUP)?
+        // User bilang "Hapus Marker Tambahan", dan logic UI memanggil ini untuk gcsResult='5'.
+        // Jika gcsResult='5', itu biasanya data baru yang belum verified. Jadi DELETE fisik masuk akal.
+
+        final bool isTempOrPending =
             idSbrVal == null ||
             idSbrVal == '' ||
             idSbrVal == '0' ||
-            idSbrVal == 0;
+            idSbrVal == 0 ||
+            idSbrVal.toString().startsWith('TEMP-');
 
-        if (isPending) {
-          await _supabaseClient.from('direktori').delete().eq('id', id);
+        if (isTempOrPending) {
+          await _supabaseClient.from('direktori').delete().eq('id', realId);
         } else {
           await _supabaseClient
               .from('direktori')
@@ -1120,13 +1184,13 @@ class MapRepositoryImpl implements MapRepository {
                 'keberadaan_usaha': 4, // 4 = Tutup
                 'updated_at': DateTime.now().toIso8601String(),
               })
-              .eq('id', id);
+              .eq('id', realId);
         }
         invalidatePlacesCache();
         return true;
       }
 
-      debugPrint('MapRepository: No direktori found with id: $id');
+      debugPrint('MapRepository: No direktori found with id/idsbr: $idOrIdSbr');
       return false;
     } catch (e) {
       debugPrint('MapRepository: Error deleteOrCloseDirectoryById: $e');

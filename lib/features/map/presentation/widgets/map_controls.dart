@@ -10,6 +10,7 @@ import '../../data/services/bps_gc_service.dart';
 import 'compass_widget.dart';
 import '../../domain/entities/polygon_data.dart';
 import 'map_type.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MapControls extends StatefulWidget {
   final MapController mapController;
@@ -199,6 +200,101 @@ class _MapControlsState extends State<MapControls> {
     widget.onResetPosition?.call();
   }
 
+  Future<void> _handleFullDownload(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastRun = prefs.getInt('last_full_download_timestamp');
+    final now = DateTime.now().millisecondsSinceEpoch;
+    // Cooldown 30 menit
+    const cooldown = 30 * 60 * 1000;
+
+    if (lastRun != null && (now - lastRun) < cooldown) {
+      final remaining = Duration(milliseconds: cooldown - (now - lastRun));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Harap tunggu ${remaining.inMinutes + 1} menit untuk download full lagi.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!context.mounted) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Download Semua Data'),
+        content: const Text(
+          'Proses ini akan mengunduh ulang SELURUH data dari server.\n\n'
+          '• Membutuhkan waktu SANGAT LAMA\n'
+          '• Menghabiskan kuota data\n'
+          '• Aplikasi mungkin terasa berat saat proses\n\n'
+          'Disarankan menggunakan "Refresh Data Terbaru" jika hanya ingin update data harian.\n\n'
+          'Apakah Anda yakin ingin melanjutkan?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Lanjutkan'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && context.mounted) {
+      await prefs.setInt('last_full_download_timestamp', now);
+      context.read<MapBloc>().add(
+        const PlacesRefreshRequested(onlyToday: false),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Memulai download semua data...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  String _getLastSyncText(int? timestamp) {
+    if (timestamp == null) return 'Belum pernah update';
+    final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    final now = DateTime.now();
+    final diff = now.difference(date);
+
+    if (diff.inMinutes < 1) return 'Baru saja';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} menit yang lalu';
+    if (diff.inHours < 24) return '${diff.inHours} jam yang lalu';
+    return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<String> _getLastIncrementalSyncText() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Use the key defined in GroundcheckSupabaseService
+    final lastSyncStr = prefs.getString('groundcheck_last_sync_time');
+    if (lastSyncStr == null) return 'Belum pernah';
+
+    final date = DateTime.tryParse(lastSyncStr);
+    if (date == null) return 'Format waktu salah';
+
+    // Convert to local time for display
+    final localDate = date.toLocal();
+    final now = DateTime.now();
+    final diff = now.difference(localDate);
+
+    if (diff.inMinutes < 1) return 'Baru saja';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} menit yang lalu';
+    if (diff.inHours < 24) return '${diff.inHours} jam yang lalu';
+    return '${localDate.day}/${localDate.month} ${localDate.hour}:${localDate.minute.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Positioned(
@@ -385,48 +481,66 @@ class _MapControlsState extends State<MapControls> {
               tooltip: 'Refresh Marker',
               onSelected: (value) {
                 if (value == 'all') {
-                  context
-                      .read<MapBloc>()
-                      .add(const PlacesRefreshRequested(onlyToday: false));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Memuat ulang semua marker...'),
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
+                  _handleFullDownload(context);
                 } else if (value == 'today') {
-                  context
-                      .read<MapBloc>()
-                      .add(const PlacesRefreshRequested(onlyToday: true));
+                  context.read<MapBloc>().add(
+                    const PlacesRefreshRequested(onlyToday: true),
+                  );
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Mengambil perubahan hari ini...'),
+                      content: Text('Mengambil data terbaru...'),
                       duration: Duration(seconds: 1),
                     ),
                   );
                 }
               },
-              itemBuilder:
-                  (BuildContext context) => <PopupMenuEntry<String>>[
-                    const PopupMenuItem<String>(
-                      value: 'all',
-                      child: ListTile(
-                        leading: Icon(Icons.cloud_download),
-                        title: Text('Download Semua Data'),
-                        subtitle: Text('Full load (bisa lama)'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                    const PopupMenuItem<String>(
-                      value: 'today',
-                      child: ListTile(
-                        leading: Icon(Icons.today),
-                        title: Text('Perubahan Hari Ini'),
-                        subtitle: Text('Hanya data yang berubah'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ],
+              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                PopupMenuItem<String>(
+                  enabled: false,
+                  child: FutureBuilder<String>(
+                    future: _getLastIncrementalSyncText(),
+                    builder: (context, snapshot) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Terakhir Update:',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                          Text(
+                            snapshot.data ?? 'Memuat...',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem<String>(
+                  value: 'today',
+                  child: ListTile(
+                    leading: Icon(Icons.sync),
+                    title: Text('Refresh Data Terbaru'),
+                    subtitle: Text('Ambil data sejak sync terakhir'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'all',
+                  child: ListTile(
+                    leading: Icon(Icons.cloud_download),
+                    title: Text('Download Semua Data'),
+                    subtitle: Text('Full load (sangat lama)'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 8),

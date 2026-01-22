@@ -337,6 +337,8 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           options: MapOptions(
             initialCenter: widget.config.center,
             initialZoom: widget.config.zoom,
+            minZoom: _currentMapType.minZoom,
+            maxZoom: (_currentMapType.maxZoom + 2).toDouble(),
             initialRotation: _rotation,
             interactionOptions: const InteractionOptions(
               flags: InteractiveFlag.all,
@@ -379,6 +381,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               // Allow app to zoom beyond provider's native max zoom by stretching tiles
               maxZoom: (_currentMapType.maxZoom + 2).toDouble(),
               maxNativeZoom: _currentMapType.maxZoom,
+              minZoom: _currentMapType.minZoom,
               subdomains: _currentMapType.subdomains,
               additionalOptions: const {'crossOrigin': 'anonymous'},
               tileBuilder: (context, tileWidget, tile) {
