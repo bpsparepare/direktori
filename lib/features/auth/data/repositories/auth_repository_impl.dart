@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart'; // Add this for kIsWeb
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:developer' as developer;
@@ -10,8 +11,10 @@ class AuthRepositoryImpl implements AuthRepository {
   final SupabaseClient _supabaseClient = SupabaseConfig.client;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
-    // Gunakan Google Client ID dari environment
-    serverClientId: SupabaseConfig.googleClientId,
+    // Fix untuk Web: serverClientId TIDAK boleh ada di Web (harus null)
+    serverClientId: kIsWeb ? null : SupabaseConfig.googleClientId,
+    // Fix untuk Web: clientId HARUS ada di Web
+    clientId: kIsWeb ? SupabaseConfig.googleClientId : null,
   );
 
   @override

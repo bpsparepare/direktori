@@ -11,6 +11,7 @@ import 'features/auth/domain/usecases/sign_in_with_email_usecase.dart';
 import 'features/auth/domain/usecases/sign_in_with_google_usecase.dart';
 import 'features/auth/domain/usecases/sign_out_usecase.dart';
 import 'features/auth/presentation/widgets/auth_wrapper.dart';
+import 'core/widgets/version_check_wrapper.dart';
 import 'features/map/presentation/bloc/map_bloc.dart';
 import 'features/map/presentation/bloc/map_event.dart';
 import 'features/map/data/repositories/map_repository_impl.dart';
@@ -113,7 +114,7 @@ class MyApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
           useMaterial3: true,
         ),
-        home: const AuthWrapper(),
+        home: const VersionCheckWrapper(child: AuthWrapper()),
         debugShowCheckedModeBanner: false,
       ),
     );
