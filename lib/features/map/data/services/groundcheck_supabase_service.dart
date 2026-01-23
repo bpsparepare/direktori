@@ -91,6 +91,7 @@ class GroundcheckSupabaseService {
                 'perusahaan_id': (e['perusahaan_id'] ?? e['idsbr'] ?? '')
                     .toString(),
                 'updated_at': DateTime.now().toIso8601String(),
+                'isUploaded': e['isUploaded'] == true,
               },
             )
             .toList();
@@ -262,6 +263,7 @@ class GroundcheckSupabaseService {
         'longitude': record.longitude,
         'perusahaan_id': record.perusahaanId,
         'updated_at': DateTime.now().toIso8601String(),
+        'isUploaded': record.isUploaded,
       };
 
       if (record.userId != null) {
@@ -273,6 +275,7 @@ class GroundcheckSupabaseService {
       // Update local cache
       await updateLocalRecord(record);
     } catch (e) {
+      print('Error updateRecord: $e');
       // Handle error but try to update local cache anyway if it's a network error?
       // For now, let's assume we want to be optimistic or at least consistent.
       // If network fails, we might still want to save locally if we support full offline edits.
@@ -280,6 +283,53 @@ class GroundcheckSupabaseService {
       // To be safe, we should update local only if successful or if we implement a sync queue.
       // Given the requirement is just "sync local and server", updating local after server attempt is fine.
       await updateLocalRecord(record);
+    }
+  }
+
+  Future<bool> updateUploadStatus(String idsbr, bool isUploaded) async {
+    try {
+      final response = await _client
+          .from(_tableName)
+          .update({
+            'isUploaded': isUploaded,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('idsbr', idsbr)
+          .select();
+
+      if (response.isEmpty) {
+        print(
+          'Warning: Gagal upload status, data tidak ditemukan untuk idsbr: $idsbr',
+        );
+      } else {
+        print('Berhasil upload status untuk idsbr: $idsbr');
+      }
+
+      // Update local cache
+      final records = await loadLocalRecords();
+      final index = records.indexWhere((r) => r.idsbr == idsbr);
+      if (index != -1) {
+        final old = records[index];
+        records[index] = GroundcheckRecord(
+          idsbr: old.idsbr,
+          namaUsaha: old.namaUsaha,
+          alamatUsaha: old.alamatUsaha,
+          kodeWilayah: old.kodeWilayah,
+          statusPerusahaan: old.statusPerusahaan,
+          skalaUsaha: old.skalaUsaha,
+          gcsResult: old.gcsResult,
+          latitude: old.latitude,
+          longitude: old.longitude,
+          perusahaanId: old.perusahaanId,
+          userId: old.userId,
+          isUploaded: isUploaded,
+        );
+        await saveLocalRecords(records);
+      }
+      return true;
+    } catch (e) {
+      print('Gagal upload status: $e');
+      return false;
     }
   }
 
@@ -315,6 +365,7 @@ class GroundcheckSupabaseService {
           longitude: longitude.toString(),
           perusahaanId: old.perusahaanId,
           userId: old.userId,
+          isUploaded: old.isUploaded,
         );
         records[index] = newRecord;
         await saveLocalRecords(records);
@@ -382,6 +433,7 @@ class GroundcheckSupabaseService {
           longitude: old.longitude,
           perusahaanId: old.perusahaanId,
           userId: userId ?? old.userId,
+          isUploaded: old.isUploaded,
         );
         records[index] = newRecord;
         await saveLocalRecords(records);

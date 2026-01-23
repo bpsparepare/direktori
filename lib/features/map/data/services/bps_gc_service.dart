@@ -2,20 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:webview_flutter/webview_flutter.dart';
-// Import for macOS support
-import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 class BpsGcService {
   final String baseUrl = 'https://matchapro.web.bps.go.id';
 
   final http.Client _client;
 
-  // Controller tunggal yang dishare antara Login Dialog dan Service
-  // Ini menjamin sesi (Cookie) selalu sinkron karena menggunakan instance yang sama.
-  WebViewController? _sharedController;
+  // Headless WebView untuk background task
+  HeadlessInAppWebView? _headlessWebView;
   final Completer<void> _initCompleter = Completer<void>();
-  final Completer<void> _pageLoadCompleter = Completer<void>();
   bool _isWebViewInitialized = false;
 
   String? _csrfToken;
@@ -26,54 +22,37 @@ class BpsGcService {
 
   BpsGcService({http.Client? client}) : _client = client ?? http.Client();
 
-  /// Mengambil atau membuat WebViewController.
-  /// Dipanggil oleh UI (Login Dialog) agar menggunakan controller yang sama dengan Service.
-  Future<WebViewController> getController() async {
-    if (_sharedController != null) return _sharedController!;
-
-    await _initWebView();
-    return _sharedController!;
-  }
-
   Future<void> _initWebView() async {
-    if (_isWebViewInitialized && _sharedController != null) return;
+    if (_isWebViewInitialized && _headlessWebView != null) return;
 
     try {
-      late final PlatformWebViewControllerCreationParams params;
-      if (WebViewPlatform.instance is WebKitWebViewPlatform) {
-        params = WebKitWebViewControllerCreationParams(
-          allowsInlineMediaPlayback: true,
-          mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
-        );
-      } else {
-        params = const PlatformWebViewControllerCreationParams();
-      }
+      _headlessWebView = HeadlessInAppWebView(
+        initialUrlRequest: URLRequest(url: WebUri('$baseUrl/dirgc')),
+        initialSettings: InAppWebViewSettings(
+          isInspectable: kDebugMode,
+          preferredContentMode: UserPreferredContentMode.MOBILE,
+          userAgent: _userAgent,
+          useShouldOverrideUrlLoading: true,
+          mediaPlaybackRequiresUserGesture: false,
+        ),
+        onWebViewCreated: (controller) {
+          debugPrint('proses kirim: Background Headless WebView created.');
+        },
+        onLoadStop: (controller, url) {
+          debugPrint('proses kirim: Background Headless WebView loaded: $url');
+          if (!_initCompleter.isCompleted) {
+            _initCompleter.complete();
+          }
+        },
+        onConsoleMessage: (controller, consoleMessage) {
+          debugPrint(
+            'proses kirim: Headless Console: ${consoleMessage.message}',
+          );
+        },
+      );
 
-      final WebViewController controller =
-          WebViewController.fromPlatformCreationParams(params);
-
-      controller
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setUserAgent(_userAgent)
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onPageFinished: (String url) {
-              debugPrint('proses kirim: Background Page Loaded: $url');
-              if (!_pageLoadCompleter.isCompleted) {
-                _pageLoadCompleter.complete();
-              }
-            },
-            onWebResourceError: (error) {
-              debugPrint(
-                'proses kirim: Background Web Resource Error: ${error.description}',
-              );
-            },
-          ),
-        );
-
-      _sharedController = controller;
+      await _headlessWebView!.run();
       _isWebViewInitialized = true;
-      if (!_initCompleter.isCompleted) _initCompleter.complete();
       debugPrint('proses kirim: Background WebView initialized.');
     } catch (e) {
       debugPrint('proses kirim: Gagal init WebView: $e');
@@ -82,8 +61,7 @@ class BpsGcService {
   }
 
   // Getter untuk controller agar bisa dipasang di Widget tree (hidden)
-  WebViewController? get backgroundController =>
-      _isWebViewInitialized ? _sharedController : null;
+  // Tidak relevan lagi dengan HeadlessInAppWebView karena tidak perlu dipasang di tree
 
   /// Dipanggil setelah sukses login manual via WebView
   void setCredentials({
@@ -98,8 +76,10 @@ class BpsGcService {
     _userAgent = userAgent;
 
     // Update User Agent di WebView background juga
-    if (_isWebViewInitialized && _sharedController != null) {
-      _sharedController!.setUserAgent(userAgent);
+    if (_isWebViewInitialized && _headlessWebView != null) {
+      _headlessWebView!.webViewController?.setSettings(
+        settings: InAppWebViewSettings(userAgent: userAgent),
+      );
     }
 
     debugPrint(
@@ -128,8 +108,82 @@ class BpsGcService {
 
   /// Kirim data konfirmasi user via WebView JS Injection.
   /// Ini menghindari masalah HttpOnly Cookie dan Error 419.
-  /// Kirim data konfirmasi user via WebView JS Injection.
-  /// Ini menghindari masalah HttpOnly Cookie dan Error 419.
+  Future<Map<String, dynamic>?> logout() async {
+    try {
+      debugPrint('proses kirim: Memulai proses logout...');
+
+      // 1. Pastikan Controller Siap
+      if (_headlessWebView == null || !_isWebViewInitialized) {
+        debugPrint('proses kirim: Init WebView sementara untuk logout...');
+        await _initWebView();
+      }
+
+      final controller = _headlessWebView?.webViewController;
+
+      if (controller != null && _isWebViewInitialized) {
+        // 2. Load Base URL agar domain context benar
+        // Cookie sudah otomatis shared dengan InAppWebViewLoginDialog
+        debugPrint('proses kirim: Loading context domain...');
+        await controller.loadUrl(
+          urlRequest: URLRequest(url: WebUri('$baseUrl/dirgc')),
+        );
+
+        // Tunggu sebentar
+        await Future.delayed(const Duration(seconds: 3));
+
+        // Cek jika token ada
+        final token =
+            _csrfToken ??
+            ''; // Logout endpoint expects _token based on user info
+
+        debugPrint('proses kirim: Mengirim request logout via WebView JS...');
+
+        // Kita gunakan evaluateJavascript untuk membuat form post logout
+        final logoutScript =
+            '''
+          var form = document.createElement("form");
+          form.setAttribute("method", "POST");
+          form.setAttribute("action", "$baseUrl/logout");
+
+          var hiddenField = document.createElement("input");
+          hiddenField.setAttribute("type", "hidden");
+          hiddenField.setAttribute("name", "_token");
+          hiddenField.setAttribute("value", "$token");
+
+          form.appendChild(hiddenField);
+          document.body.appendChild(form);
+          form.submit();
+        ''';
+
+        await controller.evaluateJavascript(source: logoutScript);
+
+        // Tunggu sebentar agar request terproses
+        await Future.delayed(const Duration(seconds: 2));
+
+        // Reset local state
+        _cookieHeader = null;
+        _csrfToken = null;
+        _gcToken = null;
+
+        // Clear WebView cookies & Storage
+        await CookieManager.instance().deleteAllCookies();
+        await controller.clearCache();
+
+        // Load blank page
+        await controller.loadUrl(
+          urlRequest: URLRequest(url: WebUri('about:blank')),
+        );
+
+        return {'status': 'success', 'message': 'Logout berhasil'};
+      }
+
+      return {'status': 'failed', 'message': 'WebView gagal diinisialisasi'};
+    } catch (e) {
+      debugPrint('proses kirim: Logout Error: $e');
+      return {'status': 'error', 'message': e.toString()};
+    }
+  }
+
   Future<Map<String, dynamic>?> konfirmasiUser({
     required String perusahaanId,
     required String latitude,
@@ -144,13 +198,9 @@ class BpsGcService {
     }
 
     // 1. Prioritaskan HTTP Request Biasa (Tanpa WebView)
-    // Syarat: Cookie harus lengkap (mengandung laravel_session dan XSRF-TOKEN)
-    // Ini adalah cara yang paling mirip dengan Python dan lebih reliable jika cookie valid.
     final hasSession = _cookieHeader?.contains('laravel_session') ?? false;
     final hasXsrf = _cookieHeader?.contains('XSRF-TOKEN') ?? false;
 
-    // PERBAIKAN: Selalu gunakan HTTP Direct jika session ada,
-    // bahkan jika gc_token kosong (nanti kita coba fetch ulang token jika perlu, atau biarkan kosong)
     if (hasSession && hasXsrf) {
       debugPrint('proses kirim: Menggunakan HTTP Request Biasa (Direct)');
       return _konfirmasiUserViaHttp(
@@ -167,8 +217,6 @@ class BpsGcService {
     }
 
     // 2. Fallback: Kirim data konfirmasi user via WebView JS Injection.
-    // Ini menghindari masalah HttpOnly Cookie dan Error 419 jika cookie tidak terbaca di Dart.
-    // Tunggu inisialisasi WebView selesai
     try {
       await _initCompleter.future;
     } catch (e) {
@@ -176,38 +224,31 @@ class BpsGcService {
       return null;
     }
 
-    if (!_isWebViewInitialized) {
+    if (!_isWebViewInitialized || _headlessWebView == null) {
       debugPrint('proses kirim: Gagal. WebView belum siap.');
       return null;
     }
 
+    final controller = _headlessWebView!.webViewController!;
     final url = '$baseUrl/dirgc/konfirmasi-user';
 
     try {
       // Cek apakah kita sudah di domain yang benar
-      final currentUrl = await _sharedController!.currentUrl();
+      final currentUrl = await controller.getUrl();
       debugPrint('proses kirim: Current URL: $currentUrl');
 
       bool needLoad = true;
       if (currentUrl != null &&
-          currentUrl.contains('matchapro.web.bps.go.id')) {
-        // Sudah di domain yang benar. Cek apakah readyState complete.
-        try {
-          final state = await _sharedController!.runJavaScriptReturningResult(
-            "document.readyState",
-          );
-          if (state.toString().contains('complete')) {
-            debugPrint(
-              'proses kirim: Sudah di domain yang benar dan ready. Skip reload.',
-            );
-            needLoad = false;
-          }
-        } catch (_) {}
+          currentUrl.toString().contains('matchapro.web.bps.go.id')) {
+        // Sudah di domain yang benar
+        needLoad = false;
       }
 
       if (needLoad) {
         debugPrint('proses kirim: Reloading base URL untuk setup origin...');
-        await _sharedController!.loadRequest(Uri.parse('$baseUrl/dirgc'));
+        await controller.loadUrl(
+          urlRequest: URLRequest(url: WebUri('$baseUrl/dirgc')),
+        );
 
         // Tunggu hingga halaman benar-benar siap
         bool ready = false;
@@ -215,46 +256,44 @@ class BpsGcService {
         while (!ready && retry < 20) {
           await Future.delayed(const Duration(milliseconds: 500));
           try {
-            final state = await _sharedController!.runJavaScriptReturningResult(
-              "document.readyState",
-            );
-            debugPrint('proses kirim: Page State: $state');
-            if (state.toString().contains('complete')) {
-              ready = true;
-            }
+            // Cek progress
+            final progress = await controller.getProgress();
+            if (progress == 100) ready = true;
           } catch (_) {}
           retry++;
         }
 
         if (!ready) {
           debugPrint('proses kirim: Timeout waiting for page load.');
-          return null;
+          // Try proceeding anyway
         }
       }
 
       // DEBUG: Cek cookie yang terlihat oleh JS
-      final visibleCookie = await _sharedController!
-          .runJavaScriptReturningResult("document.cookie");
+      final visibleCookie = await controller.evaluateJavascript(
+        source: "document.cookie",
+      );
       debugPrint('proses kirim: Background JS Cookie Visible: $visibleCookie');
 
       debugPrint('proses kirim: Injecting JS fetch...');
 
-      // SOLUSI 1: Gunakan JavaScriptChannel untuk komunikasi 2-arah
-      // Setup channel untuk menerima hasil
+      // Setup channel untuk menerima hasil menggunakan addJavaScriptHandler
       String? fetchResult;
       final completer = Completer<void>();
 
-      _sharedController!.addJavaScriptChannel(
-        'FlutterChannel',
-        onMessageReceived: (JavaScriptMessage message) {
-          fetchResult = message.message;
-          if (!completer.isCompleted) {
-            completer.complete();
+      controller.addJavaScriptHandler(
+        handlerName: 'FlutterChannel',
+        callback: (args) {
+          if (args.isNotEmpty) {
+            fetchResult = args[0].toString();
+            if (!completer.isCompleted) {
+              completer.complete();
+            }
           }
         },
       );
 
-      // JavaScript yang kompatibel dengan semua platform
+      // JavaScript
       final jsScript =
           '''
         (function() {
@@ -283,10 +322,10 @@ class BpsGcService {
                 });
             })
             .then(function(result) {
-                FlutterChannel.postMessage(JSON.stringify(result));
+                window.flutter_inappwebview.callHandler('FlutterChannel', JSON.stringify(result));
             })
             .catch(function(error) {
-                FlutterChannel.postMessage(JSON.stringify({
+                window.flutter_inappwebview.callHandler('FlutterChannel', JSON.stringify({
                     status: 0,
                     body: error.toString()
                 }));
@@ -294,10 +333,10 @@ class BpsGcService {
         })();
       ''';
 
-      // Jalankan script (tidak menunggu return value)
-      await _sharedController!.runJavaScript(jsScript);
+      // Jalankan script
+      await controller.evaluateJavascript(source: jsScript);
 
-      // Tunggu hasil dari channel (dengan timeout)
+      // Tunggu hasil
       await completer.future.timeout(
         const Duration(seconds: 30),
         onTimeout: () {
@@ -306,7 +345,7 @@ class BpsGcService {
       );
 
       // Cleanup channel
-      _sharedController!.removeJavaScriptChannel('FlutterChannel');
+      controller.removeJavaScriptHandler(handlerName: 'FlutterChannel');
 
       if (fetchResult == null) {
         debugPrint('proses kirim: No result from fetch');
@@ -335,10 +374,6 @@ class BpsGcService {
       }
     } catch (e) {
       debugPrint('proses kirim: Error Exception: $e');
-      // Cleanup channel jika error
-      try {
-        _sharedController!.removeJavaScriptChannel('FlutterChannel');
-      } catch (_) {}
       return null;
     }
   }
@@ -347,19 +382,14 @@ class BpsGcService {
   void _mergeSetCookie(Map<String, String> headers) {}
 
   /// Metode untuk mendapatkan cookie header string dari Shared Controller
-  /// Berguna untuk debugging atau jika kita ingin menggunakan http client standar nanti.
-  /// Catatan: Ini hanya mengembalikan cookie yang visible oleh JS (non-HttpOnly).
   Future<String> getVisibleCookie() async {
-    if (_sharedController == null || !_isWebViewInitialized) return '';
+    if (_headlessWebView == null || !_isWebViewInitialized) return '';
     try {
-      final result = await _sharedController!.runJavaScriptReturningResult(
-        'document.cookie',
+      final controller = _headlessWebView!.webViewController!;
+      final result = await controller.evaluateJavascript(
+        source: 'document.cookie',
       );
-      String cookie = result.toString();
-      if (cookie.startsWith('"') && cookie.endsWith('"')) {
-        cookie = jsonDecode(cookie);
-      }
-      return cookie;
+      return result.toString();
     } catch (e) {
       return '';
     }

@@ -34,8 +34,9 @@ class _InAppWebViewLoginDialogState extends State<InAppWebViewLoginDialog> {
     allowsInlineMediaPlayback: true,
     iframeAllow: "camera; microphone",
     iframeAllowFullscreen: true,
+    preferredContentMode: UserPreferredContentMode.MOBILE,
     userAgent:
-        "Mozilla/5.0 (Linux; Android 10; SM-G960F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Mobile Safari/537.36",
+        "Mozilla/5.0 (Linux; Android 16; ONEPLUS 15 Build/SKQ1.211202.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/143.0.7499.192 Mobile Safari/537.36",
   );
 
   @override
@@ -122,8 +123,10 @@ class _InAppWebViewLoginDialogState extends State<InAppWebViewLoginDialog> {
               }
               
               // Try getting username
-              let userEl = document.querySelector('.dropdown-user .username') || 
-                           document.querySelector('.user-panel .info p');
+              let userEl = document.querySelector('.user-panel .info p') || 
+                           document.querySelector('.dropdown-user .username') ||
+                           document.querySelector('.user-menu span.hidden-xs') ||
+                           document.querySelector('.navbar-nav .user-menu a span');
               if (userEl) user_name = userEl.innerText.trim();
               
               return {

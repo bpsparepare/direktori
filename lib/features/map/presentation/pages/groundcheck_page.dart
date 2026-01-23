@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_datagrid/datagrid.dart';
@@ -6,10 +7,10 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/services/bps_gc_service.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
-import '../widgets/bps_login_dialog.dart';
 import '../widgets/python_login_dialog.dart';
 import '../widgets/inappwebview_login_dialog.dart';
 import '../bloc/map_bloc.dart';
@@ -30,6 +31,7 @@ class GroundcheckRecord {
   final String longitude;
   final String perusahaanId;
   final String? userId;
+  final bool isUploaded;
 
   GroundcheckRecord({
     required this.idsbr,
@@ -43,6 +45,7 @@ class GroundcheckRecord {
     required this.longitude,
     required this.perusahaanId,
     this.userId,
+    this.isUploaded = false,
   });
 
   factory GroundcheckRecord.fromJson(Map<String, dynamic> json) {
@@ -62,6 +65,7 @@ class GroundcheckRecord {
       longitude: lon,
       perusahaanId: perusahaan,
       userId: json['user_id']?.toString(),
+      isUploaded: json['isUploaded'] == true,
     );
   }
 
@@ -78,6 +82,7 @@ class GroundcheckRecord {
       'longitude': longitude,
       'perusahaan_id': perusahaanId,
       'user_id': userId,
+      'isUploaded': isUploaded,
     };
   }
 }
@@ -99,11 +104,23 @@ class GroundcheckDataSource extends DataGridSource {
   @override
   List<DataGridRow> get rows => _rows;
 
+  GroundcheckRecord? getRecord(DataGridRow row) => _rowToRecord[row];
+
   @override
   DataGridRowAdapter buildRow(DataGridRow row) {
     final record = _rowToRecord[row];
     return DataGridRowAdapter(
       cells: row.getCells().map((cell) {
+        if (cell.columnName == 'isUploaded') {
+          final isUploaded = cell.value as bool? ?? false;
+          return Center(
+            child: Icon(
+              isUploaded ? Icons.cloud_done : Icons.cloud_off,
+              color: isUploaded ? Colors.green : Colors.grey,
+              size: 20,
+            ),
+          );
+        }
         if (cell.columnName == 'gcs_result') {
           final raw = (cell.value ?? '').toString().trim();
           final lower = raw.toLowerCase();
@@ -292,16 +309,17 @@ class GroundcheckDataSource extends DataGridSource {
                       ),
                     ),
                   ),
-                ElevatedButton(
-                  onPressed: () => onGcPressed?.call(record),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+                if (record.gcsResult.isNotEmpty && !record.isUploaded)
+                  ElevatedButton(
+                    onPressed: () => onGcPressed?.call(record),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
+                    child: const Text('GC', style: TextStyle(fontSize: 12)),
                   ),
-                  child: const Text('GC', style: TextStyle(fontSize: 12)),
-                ),
               ],
             ),
           );
@@ -343,10 +361,8 @@ class GroundcheckDataSource extends DataGridSource {
             columnName: 'status_perusahaan',
             value: e.statusPerusahaan,
           ),
-          DataGridCell<String>(columnName: 'skala_usaha', value: e.skalaUsaha),
+          DataGridCell<bool>(columnName: 'isUploaded', value: e.isUploaded),
           DataGridCell<String>(columnName: 'gcs_result', value: e.gcsResult),
-          DataGridCell<String>(columnName: 'latitude', value: e.latitude),
-          DataGridCell<String>(columnName: 'longitude', value: e.longitude),
           DataGridCell<String>(columnName: 'gc_action', value: e.perusahaanId),
         ],
       );
@@ -367,6 +383,7 @@ class GroundcheckPage extends StatefulWidget {
 
 class _GroundcheckPageState extends State<GroundcheckPage> {
   final ScrollController _scrollController = ScrollController();
+  final DataGridController _dataGridController = DataGridController();
   final BpsGcService _gcService = BpsGcService();
   final GroundcheckSupabaseService _supabaseService =
       GroundcheckSupabaseService();
@@ -377,12 +394,14 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   String _searchQuery = '';
   String? _statusFilter;
   String? _gcsFilter;
+  bool? _isUploadedFilter;
   bool _isLoading = true;
   String? _error;
   String? _gcCookie;
   String? _gcToken;
   String? _currentUser;
   String? _userAgent;
+  String? _csrfToken;
 
   @override
   void initState() {
@@ -464,14 +483,87 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
 
   Future<void> _loadStoredGcCredentials() async {
     debugPrint('proses kirim: Menunggu login/input manual untuk kredensial.');
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _gcToken = prefs.getString('gc_token');
+      _gcCookie = prefs.getString('gc_cookie');
+    });
   }
 
-  Future<void> _saveStoredGcCredentials() async {}
+  Future<void> _saveStoredGcCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_gcToken != null) await prefs.setString('gc_token', _gcToken!);
+    if (_gcCookie != null) await prefs.setString('gc_cookie', _gcCookie!);
+  }
+
+  Future<void> _handleLogout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Konfirmasi Logout'),
+        content: const Text('Apakah Anda yakin ingin keluar akun BPS?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Keluar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await _gcService.logout();
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('gc_token');
+      await prefs.remove('gc_cookie');
+
+      setState(() {
+        _gcToken = null;
+        _gcCookie = null;
+        _currentUser = null;
+        _csrfToken = null;
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Logout berhasil.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Logout gagal: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   Future<void> _showGcInputDialog(GroundcheckRecord record) async {
     final hasilOptions = <Map<String, String>>[
       {'code': '', 'label': '-- Pilih --'},
-      {'code': '0', 'label': '0. Tidak Ditemukan'},
+      {'code': '99', 'label': '0. Tidak Ditemukan'},
       {'code': '1', 'label': '1. Ditemukan'},
       {'code': '3', 'label': '3. Tutup'},
       {'code': '4', 'label': '4. Ganda'},
@@ -525,7 +617,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                           final label = o['label']!;
                           MaterialColor base = Colors.grey;
                           switch (code) {
-                            case '0':
+                            case '99':
                               base = Colors.red;
                               break;
                             case '1':
@@ -892,6 +984,15 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                           _gcToken = newToken;
                           await _saveStoredGcCredentials();
                         }
+                        // Update Token jika ada di response
+                        if (resp != null && resp['new_gc_token'] != null) {
+                          final newToken = resp['new_gc_token'].toString();
+                          if (newToken.isNotEmpty && newToken != _gcToken) {
+                            _gcToken = newToken;
+                            await _saveStoredGcCredentials();
+                          }
+                        }
+
                         final currentCookie = _gcService.cookieHeader;
                         if (currentCookie != null &&
                             currentCookie.isNotEmpty &&
@@ -904,6 +1005,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                           selectedHasil,
                           laFinal,
                           loFinal,
+                          isUploaded: true,
                         );
                         setStateSB(() {
                           isSubmitting = false;
@@ -1013,8 +1115,9 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     GroundcheckRecord record,
     String hasilGc,
     double? lat,
-    double? lon,
-  ) async {
+    double? lon, {
+    bool isUploaded = false,
+  }) async {
     final updated = GroundcheckRecord(
       idsbr: record.idsbr,
       namaUsaha: record.namaUsaha,
@@ -1027,6 +1130,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       longitude: lon != null ? lon.toString() : record.longitude,
       perusahaanId: record.perusahaanId,
       userId: record.userId,
+      isUploaded: isUploaded,
     );
     final idx = _allRecords.indexWhere((r) => r.idsbr == record.idsbr);
     if (idx != -1) {
@@ -1037,6 +1141,13 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     await _supabaseService.saveLocalRecords(_allRecords);
 
     await _supabaseService.updateRecord(updated);
+
+    // Khusus update status upload (jika true) menggunakan fungsi terpisah
+    if (isUploaded) {
+      debugPrint('Mengupdate status upload untuk ${record.idsbr}...');
+      await _supabaseService.updateUploadStatus(record.idsbr, true);
+    }
+
     try {
       MapRepositoryImpl().invalidatePlacesCache();
       if (mounted) {
@@ -1252,8 +1363,162 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     }
   }
 
+  Future<void> _showGcConfirmationDialog(GroundcheckRecord record) async {
+    final lat = double.tryParse(record.latitude);
+    final lon = double.tryParse(record.longitude);
+    final hasCoord = lat != null && lon != null && lat != 0.0 && lon != 0.0;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Konfirmasi Kirim GC'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: [
+                const Text('Apakah Anda yakin ingin mengirim data ini?'),
+                const SizedBox(height: 12),
+                _buildInfoRow('Nama Usaha', record.namaUsaha),
+                _buildInfoRow('Hasil GC', record.gcsResult),
+                _buildInfoRow('Latitude', record.latitude),
+                _buildInfoRow('Longitude', record.longitude),
+                if (!hasCoord)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      'Peringatan: Koordinat 0/Kosong',
+                      style: TextStyle(color: Colors.orange, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Kirim'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm == true) {
+      final ok = await _ensureGcConfig();
+      if (!ok) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Login BPS diperlukan untuk mengirim data.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Mengirim data...'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+
+      try {
+        final laFinal = lat ?? 0.0;
+        final loFinal = lon ?? 0.0;
+
+        final resp = await _gcService.konfirmasiUser(
+          perusahaanId: record.perusahaanId,
+          latitude: laFinal.toString(),
+          longitude: loFinal.toString(),
+          hasilGc: record.gcsResult,
+        );
+
+        bool isSuccess = false;
+        if (resp != null) {
+          final status = resp['status']?.toString().toLowerCase();
+          final msg = resp['message']?.toString().toLowerCase() ?? '';
+          if (status == 'success' ||
+              msg.contains('berhasil') ||
+              msg.contains('success')) {
+            isSuccess = true;
+          } else if (status == 'error' &&
+              msg.contains('sudah diground check')) {
+            // Handle kasus: "Usaha ini sudah diground check oleh user lain"
+            // Server mengembalikan data status hasil GC yang sudah ada.
+            final data = resp['data'];
+            if (data is Map) {
+              final serverResult = data['status_hasil_gc']?.toString();
+              if (serverResult != null && serverResult.isNotEmpty) {
+                // Update lokal dengan data server dan tandai isUploaded = true
+                await _applyGcInput(
+                  record,
+                  serverResult, // Update gcsResult dengan data server
+                  laFinal,
+                  loFinal,
+                  isUploaded: true,
+                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Info: Data sudah di-GC user lain ($serverResult). Lokal diperbarui.',
+                      ),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                }
+                return; // Keluar, anggap selesai
+              }
+            }
+          }
+        }
+
+        if (isSuccess) {
+          await _applyGcInput(
+            record,
+            record.gcsResult,
+            laFinal,
+            loFinal,
+            isUploaded: true,
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Berhasil terkirim!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Gagal: ${resp?['message'] ?? 'Unknown'}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _onGcPressed(GroundcheckRecord record) async {
-    await _showGcInputDialog(record);
+    await _showGcConfirmationDialog(record);
   }
 
   List<GroundcheckRecord> _filteredRecords() {
@@ -1279,6 +1544,9 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
           r.gcsResult != _gcsFilter) {
         return false;
       }
+      if (_isUploadedFilter != null && r.isUploaded != _isUploadedFilter) {
+        return false;
+      }
       return true;
     }).toList();
   }
@@ -1289,6 +1557,268 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     }
     final filtered = _filteredRecords();
     _dataSource!.updateData(filtered);
+  }
+
+  Future<void> _handleBulkGc() async {
+    final selected = _dataGridController.selectedRows;
+    if (selected.isEmpty) return;
+
+    // Filter record yang punya hasil GC (gcsResult tidak kosong) DAN belum di-upload
+    final validRecords = <GroundcheckRecord>[];
+    int skippedCount = 0;
+    int skippedUploadedCount = 0;
+
+    if (_dataSource != null) {
+      for (final row in selected) {
+        final record = _dataSource!.getRecord(row);
+        if (record != null) {
+          if (record.isUploaded) {
+            skippedUploadedCount++;
+          } else if (record.gcsResult.isNotEmpty) {
+            validRecords.add(record);
+          } else {
+            skippedCount++;
+          }
+        }
+      }
+    }
+
+    if (validRecords.isEmpty) {
+      if (mounted) {
+        String msg = 'Tidak ada data valid untuk dikirim.';
+        if (skippedUploadedCount > 0 && skippedCount == 0) {
+          msg = 'Semua data terpilih sudah terupload.';
+        } else if (skippedCount > 0 && skippedUploadedCount == 0) {
+          msg = 'Data terpilih belum memiliki Hasil GC.';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.orange),
+        );
+      }
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text('Bulk GC: ${validRecords.length} Data Siap'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: [
+                Text(
+                  'Akan mengirim ${validRecords.length} data menggunakan hasil GC yang tersimpan di masing-masing record.',
+                ),
+                if (skippedCount > 0 || skippedUploadedCount > 0)
+                  const SizedBox(height: 12),
+                if (skippedUploadedCount > 0)
+                  Text(
+                    '$skippedUploadedCount data dilewati karena SUDAH terupload.',
+                    style: const TextStyle(color: Colors.blue, fontSize: 12),
+                  ),
+                if (skippedCount > 0)
+                  Text(
+                    '$skippedCount data dilewati karena BELUM memiliki Hasil GC.',
+                    style: const TextStyle(color: Colors.orange, fontSize: 12),
+                  ),
+                const SizedBox(height: 12),
+                const Text('Lanjutkan?'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Kirim'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm == true) {
+      // Pastikan konfigurasi/kredensial siap
+      final ok = await _ensureGcConfig();
+      if (!ok) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Login BPS diperlukan untuk mengirim data.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      int successCount = 0;
+      int failCount = 0;
+      final total = validRecords.length;
+      final random = Random();
+
+      // Setup Progress Dialog Variables
+      final progressNotifier = ValueNotifier<int>(0);
+      final statusNotifier = ValueNotifier<String>('Menyiapkan...');
+
+      if (mounted) {
+        // Show Progress Dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) {
+            return WillPopScope(
+              onWillPop: () async => false,
+              child: AlertDialog(
+                title: const Text('Mengirim Data'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ValueListenableBuilder<int>(
+                      valueListenable: progressNotifier,
+                      builder: (context, val, child) {
+                        return LinearProgressIndicator(
+                          value: total > 0 ? val / total : 0,
+                          backgroundColor: Colors.grey[200],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    ValueListenableBuilder<String>(
+                      valueListenable: statusNotifier,
+                      builder: (context, val, child) {
+                        return Text(
+                          val,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    ValueListenableBuilder<int>(
+                      valueListenable: progressNotifier,
+                      builder: (context, val, child) {
+                        return Text(
+                          '$val dari $total data',
+                          style: const TextStyle(color: Colors.grey),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      }
+
+      for (int i = 0; i < total; i++) {
+        final record = validRecords[i];
+
+        // Update UI Progress
+        progressNotifier.value = i + 1;
+        statusNotifier.value = 'Mengirim ${record.idsbr}...';
+
+        try {
+          // Gunakan koordinat yang ada di record jika valid, atau fallback ke 0
+          final lat = double.tryParse(record.latitude) ?? 0.0;
+          final lon = double.tryParse(record.longitude) ?? 0.0;
+
+          final resp = await _gcService.konfirmasiUser(
+            perusahaanId: record.perusahaanId,
+            latitude: lat.toString(),
+            longitude: lon.toString(),
+            hasilGc: record.gcsResult,
+          );
+
+          // Cek respons sukses (bisa berupa status: success atau indikator lain dari HTML response)
+          // Implementasi konfirmasiUser mengembalikan map status
+          bool isSuccess = false;
+          if (resp != null) {
+            final status = resp['status']?.toString().toLowerCase();
+            final msg = resp['message']?.toString().toLowerCase() ?? '';
+            if (status == 'success' ||
+                msg.contains('berhasil') ||
+                msg.contains('success')) {
+              isSuccess = true;
+            } else if (status == 'error' &&
+                msg.contains('sudah diground check')) {
+              // Handle kasus: "Usaha ini sudah diground check oleh user lain"
+              // Server mengembalikan data status hasil GC yang sudah ada.
+              // Kita update lokal dengan data server dan tandai isUploaded = true.
+              final data = resp['data'];
+              if (data is Map) {
+                final serverResult = data['status_hasil_gc']?.toString();
+                if (serverResult != null && serverResult.isNotEmpty) {
+                  // Anggap sukses secara lokal (sinkronisasi state server)
+                  await _applyGcInput(
+                    record,
+                    serverResult, // Update gcsResult dengan data server
+                    lat,
+                    lon,
+                    isUploaded: true, // Tandai sudah terupload
+                  );
+                  successCount++;
+
+                  // Jeda sebelum lanjut ke data berikutnya
+                  if (i < total - 1) {
+                    statusNotifier.value = 'Menunggu antrean berikutnya...';
+                    final delay = 2000 + random.nextInt(2001); // 2-4 detik
+                    await Future.delayed(Duration(milliseconds: delay));
+                  }
+
+                  continue; // Lanjut ke record berikutnya
+                }
+              }
+            }
+          }
+
+          if (isSuccess) {
+            await _applyGcInput(
+              record,
+              record.gcsResult,
+              lat,
+              lon,
+              isUploaded: true,
+            );
+            successCount++;
+          } else {
+            failCount++;
+            debugPrint('Bulk GC Gagal untuk ${record.idsbr}: $resp');
+          }
+        } catch (e) {
+          failCount++;
+          debugPrint('Bulk GC Exception untuk ${record.idsbr}: $e');
+        }
+
+        // Jeda sebelum lanjut ke data berikutnya (jika bukan data terakhir)
+        if (i < total - 1) {
+          statusNotifier.value = 'Menunggu antrean berikutnya...';
+          final delay = 2000 + random.nextInt(2001); // 2-4 detik
+          await Future.delayed(Duration(milliseconds: delay));
+        }
+      }
+
+      // Tutup Progress Dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      _dataGridController.selectedRows.clear();
+      setState(() {});
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Selesai. Sukses: $successCount, Gagal: $failCount'),
+            backgroundColor: failCount > 0 ? Colors.orange : Colors.green,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildFilterBar() {
@@ -1363,6 +1893,34 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                     _gcsFilter = value != null && value.isNotEmpty
                         ? value
                         : null;
+                  });
+                  _refreshFilteredData();
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DropdownButtonFormField<bool?>(
+                value: _isUploadedFilter,
+                decoration: const InputDecoration(
+                  labelText: 'Status Upload',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem<bool?>(value: null, child: Text('Semua')),
+                  DropdownMenuItem<bool?>(
+                    value: true,
+                    child: Text('Sudah Upload'),
+                  ),
+                  DropdownMenuItem<bool?>(
+                    value: false,
+                    child: Text('Belum Upload'),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _isUploadedFilter = value;
                   });
                   _refreshFilteredData();
                 },
@@ -1451,6 +2009,15 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [
+          if (_dataGridController.selectedRows.isNotEmpty)
+            TextButton.icon(
+              onPressed: _handleBulkGc,
+              icon: const Icon(Icons.send, color: Colors.white),
+              label: Text(
+                'Kirim GC (${_dataGridController.selectedRows.length})',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
           TextButton.icon(
             onPressed: _showBpsLoginDialog,
             icon: const Icon(Icons.login, color: Colors.white),
@@ -1557,6 +2124,28 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                                       _userAgent != null &&
                                       _userAgent!.contains('Android'),
                                 ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: _handleLogout,
+                                    icon: const Icon(
+                                      Icons.logout,
+                                      size: 18,
+                                      color: Colors.red,
+                                    ),
+                                    label: const Text(
+                                      'Keluar / Logout',
+                                      style: TextStyle(color: Colors.red),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      side: const BorderSide(color: Colors.red),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -1597,6 +2186,11 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                         borderRadius: BorderRadius.circular(12),
                         child: SfDataGrid(
                           source: _dataSource!,
+                          controller: _dataGridController,
+                          selectionMode: SelectionMode.multiple,
+                          showCheckboxColumn: true,
+                          onSelectionChanged: (added, removed) =>
+                              setState(() {}),
                           verticalScrollController: _scrollController,
                           rowHeight: 56,
                           headerGridLinesVisibility:
@@ -1696,15 +2290,16 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                               ),
                             ),
                             GridColumn(
-                              columnName: 'skala_usaha',
+                              columnName: 'isUploaded',
+                              width: 80,
                               label: Container(
-                                alignment: Alignment.centerLeft,
+                                alignment: Alignment.center,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
                                 ),
                                 color: Colors.blue[50],
                                 child: const Text(
-                                  'Skala Usaha',
+                                  'Up?',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 13,
@@ -1723,42 +2318,6 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                                 color: Colors.blue[50],
                                 child: const Text(
                                   'GCS Result',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            GridColumn(
-                              columnName: 'latitude',
-                              label: Container(
-                                alignment: Alignment.centerLeft,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                color: Colors.blue[50],
-                                child: const Text(
-                                  'Latitude',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            GridColumn(
-                              columnName: 'longitude',
-                              label: Container(
-                                alignment: Alignment.centerLeft,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                color: Colors.blue[50],
-                                child: const Text(
-                                  'Longitude',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 13,

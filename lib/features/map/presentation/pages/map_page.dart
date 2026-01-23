@@ -2462,7 +2462,7 @@ class MapPage extends StatelessWidget {
       final lower = gcsResult.toLowerCase();
       if (lower.isEmpty || lower == '-- pilih --') {
         return Colors.grey;
-      } else if (lower == '0' || lower.contains('tidak ditemukan')) {
+      } else if (lower == '99' || lower.contains('tidak ditemukan')) {
         return Colors.red;
       } else if (lower == '1' || lower.contains('ditemukan')) {
         return Colors.green;

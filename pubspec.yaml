@@ -73,9 +73,7 @@ dependencies:
   image: ^4.2.0
   msix: ^3.16.12
   file_picker: ^10.3.8
-  csv: ^6.0.0
-  webview_flutter_wkwebview: ^3.23.5
-  webview_cookie_manager: ^2.0.6
+  csv: ^6.0.0 
   flutter_inappwebview: ^6.1.5
 
 dev_dependencies: 
