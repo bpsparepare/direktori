@@ -65,7 +65,6 @@ dependencies:
   syncfusion_flutter_xlsio: ^31.2.16
   open_file: ^3.3.2
   webview_flutter: ^4.8.0
-  webview_windows: ^0.4.0
  
   # Image upload dependencies
   image_picker: ^1.1.2
@@ -75,6 +74,9 @@ dependencies:
   msix: ^3.16.12
   file_picker: ^10.3.8
   csv: ^6.0.0
+  webview_flutter_wkwebview: ^3.23.5
+  webview_cookie_manager: ^2.0.6
+  flutter_inappwebview: ^6.1.5
 
 dev_dependencies: 
   flutter_test:

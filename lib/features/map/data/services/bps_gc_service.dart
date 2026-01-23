@@ -1,346 +1,426 @@
+import 'dart:async';
 import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:webview_flutter/webview_flutter.dart';
+// Import for macOS support
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
 class BpsGcService {
   final String baseUrl = 'https://matchapro.web.bps.go.id';
-  static const String _forcedToken = 'X8Gt3z8rWjMXOB0UW3A1ZbQ0Xmu8x9Fln2nLrz39';
-  static const String _forcedGcToken =
-      'X8Gt3z8rWjMXOB0UW3A1ZbQ0Xmu8x9Fln2nLrz39';
-  static const String _forcedCookie =
-      r'f5avraaaaaaaaaaaaaaaa_session_=BOJKEELEIHAHDJCBDECFOIIEEHLGCAMHODNEBGBEGNBAPMDKMLNAAPLGGGPBIBKPDKIDHACNILHEANBPAHHAHKENOOIPBHGMGPHFEKOIAFJCDGEIGKHFCOGKBOEFMFNB; BIGipServeriapps_webhost_mars_443.app~iapps_webhost_mars_443_pool=1418199050.20480.0000; f5avraaaaaaaaaaaaaaaa_session_=DODNABAGIJDCGFIJBPAOPFBPBLHOHHFCCOPJKDGCMJECOMLABKKMHKLJFCHNJMPLOICDCBDEFHCGHMACEGAAOMJHGOIIIFIGPFFEOBJELFDAKKFBCJIPFELKCMNMEODP; TS0151fc2b=0167a1c8619d6b5ba81debf7890eb2ec195cf167b2c1f7ede486e8f058336a773e61be0ce584235df837d4efda2cfa9106c3c86646; XSRF-TOKEN=eyJpdiI6InRRT0pnM1cvZzUxK28zQmk0R1NGTGc9PSIsInZhbHVlIjoiRElNU1dBZTV2emtkVFR3bmxET0hLSG1hN0h6cC9YU0I1Nk1hWkljSkZ4ejlrK1FqLytQZWNOOHZHMGM3WnRTdUZFRzdaV1hya3kzYnFvV1NjVDV4bHlLV3QxQ1F6TUI1Z3ZRWVdPWUdwL3E3WG54dWtQRUFtNVNEMk4rYTVDby8iLCJtYWMiOiJmYzg3ZjQ4ZGU0NTg3Zjg5ZDBmNWJhMjViNjE5ZTljNjdkMGZhMDliNjY3ZDdmZDg1YzBiZDkxNGI1YWNmOGNkIiwidGFnIjoiIn0%3D; laravel_session=eyJpdiI6IlY5bTlIWE5ONHFxT3QwY0E3aWdUU3c9PSIsInZhbHVlIjoiU3hPcWoySitnZ243OTV2RFdMSXovTnpkeWRIbHh6ZXp2MW5lS0xxVnRMRGRsemQwdVM0Ymo1b3l1OUdpUW9SbzVsdlU2aEZNbWtrQkltQ1lRMFJqcWhOY0xQcG9mQUlQN2g5RitJbGdYTi9tOG5PbHI3OHRDTTJncS9wMHZSZEUiLCJtYWMiOiIxNjE4NDY3YWNmNGM5MzVkZmZiNGJlOTQ0M2ZmMDFiY2E5ZGZhOGJlMWU2NjY5YzBkMTQ1NmNiZmUwOGUzNDc2IiwidGFnIjoiIn0%3D; TS1a53eee7027=0815dd1fcdab20006704c345a5d4485c31415c00dcb08fc4253319549874210863506028590a1a5308237cb7c6113000476e34dbb307fbfae0ac5dc88565f28b19e450fc8257984d6249c809412536ee2d1c319414c7519c54dbbf99b84ff45c';
 
   final http.Client _client;
+
+  // Controller tunggal yang dishare antara Login Dialog dan Service
+  // Ini menjamin sesi (Cookie) selalu sinkron karena menggunakan instance yang sama.
+  WebViewController? _sharedController;
+  final Completer<void> _initCompleter = Completer<void>();
+  final Completer<void> _pageLoadCompleter = Completer<void>();
+  bool _isWebViewInitialized = false;
+
   String? _csrfToken;
+  String? _gcToken;
   String? _cookieHeader;
   String _userAgent =
       'Mozilla/5.0 (Linux; Android 16; ONEPLUS 15 Build/SKQ1.211202.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/143.0.7499.192 Mobile Safari/537.36';
-  DateTime? _lastCsrfFetch;
-  final Duration _csrfTtl = const Duration(minutes: 15);
 
   BpsGcService({http.Client? client}) : _client = client ?? http.Client();
 
-  void setUserAgent(String ua) {
-    if (ua.isNotEmpty) {
-      _userAgent = ua;
+  /// Mengambil atau membuat WebViewController.
+  /// Dipanggil oleh UI (Login Dialog) agar menggunakan controller yang sama dengan Service.
+  Future<WebViewController> getController() async {
+    if (_sharedController != null) return _sharedController!;
+
+    await _initWebView();
+    return _sharedController!;
+  }
+
+  Future<void> _initWebView() async {
+    if (_isWebViewInitialized && _sharedController != null) return;
+
+    try {
+      late final PlatformWebViewControllerCreationParams params;
+      if (WebViewPlatform.instance is WebKitWebViewPlatform) {
+        params = WebKitWebViewControllerCreationParams(
+          allowsInlineMediaPlayback: true,
+          mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+        );
+      } else {
+        params = const PlatformWebViewControllerCreationParams();
+      }
+
+      final WebViewController controller =
+          WebViewController.fromPlatformCreationParams(params);
+
+      controller
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setUserAgent(_userAgent)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onPageFinished: (String url) {
+              debugPrint('proses kirim: Background Page Loaded: $url');
+              if (!_pageLoadCompleter.isCompleted) {
+                _pageLoadCompleter.complete();
+              }
+            },
+            onWebResourceError: (error) {
+              debugPrint(
+                'proses kirim: Background Web Resource Error: ${error.description}',
+              );
+            },
+          ),
+        );
+
+      _sharedController = controller;
+      _isWebViewInitialized = true;
+      if (!_initCompleter.isCompleted) _initCompleter.complete();
+      debugPrint('proses kirim: Background WebView initialized.');
+    } catch (e) {
+      debugPrint('proses kirim: Gagal init WebView: $e');
+      if (!_initCompleter.isCompleted) _initCompleter.completeError(e);
     }
   }
 
-  void setCookiesFromHeader(String cookieString) {
-    _cookieHeader = cookieString;
+  // Getter untuk controller agar bisa dipasang di Widget tree (hidden)
+  WebViewController? get backgroundController =>
+      _isWebViewInitialized ? _sharedController : null;
+
+  /// Dipanggil setelah sukses login manual via WebView
+  void setCredentials({
+    required String cookie,
+    required String csrfToken,
+    required String gcToken,
+    required String userAgent,
+  }) {
+    _cookieHeader = cookie;
+    _csrfToken = csrfToken;
+    _gcToken = gcToken;
+    _userAgent = userAgent;
+
+    // Update User Agent di WebView background juga
+    if (_isWebViewInitialized && _sharedController != null) {
+      _sharedController!.setUserAgent(userAgent);
+    }
+
+    debugPrint(
+      'proses kirim: Credentials tersimpan. CSRF: $_csrfToken, GC: $_gcToken',
+    );
   }
 
+  /// Cek apakah kita punya credentials yang cukup untuk kirim data
+  bool get hasCredentials {
+    // Kriteria 1: Punya Token lengkap (GC Token + CSRF Token)
+    final hasTokens =
+        (_csrfToken?.isNotEmpty ?? false) && (_gcToken?.isNotEmpty ?? false);
+
+    // Kriteria 2: Punya Strong Cookie (Laravel Session + XSRF Token)
+    // Ini cukup untuk melakukan request, bahkan jika gc_token belum ter-parse.
+    final hasStrongCookie =
+        _cookieHeader != null &&
+        _cookieHeader!.contains('laravel_session') &&
+        _cookieHeader!.contains('XSRF-TOKEN');
+
+    return hasTokens || hasStrongCookie;
+  }
+
+  String? get currentGcToken => _gcToken;
   String? get cookieHeader => _cookieHeader;
 
-  Future<void> autoGetCsrfToken() async {
-    final url = Uri.parse('$baseUrl/dirgc');
-    final response = await _client.get(
-      url,
-      headers: {
-        'User-Agent': _userAgent,
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'X-Requested-With': 'XMLHttpRequest',
-        'sec-ch-ua':
-            '"Android WebView";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
-        'sec-ch-ua-mobile': '?1',
-        'sec-ch-ua-platform': '"Android"',
-        'Cookie': _cookieHeader ?? '',
-      },
-    );
-
-    _mergeSetCookie(response.headers);
-
-    final body = response.body;
-    final metaRegex = RegExp(
-      r'<meta name="csrf-token" content="([^"]+)"',
-      caseSensitive: false,
-    );
-    final inputRegex = RegExp(
-      r'<input[^>]+name="_token"[^>]+value="([^"]+)"',
-      caseSensitive: false,
-    );
-
-    String? token;
-    final m1 = metaRegex.firstMatch(body);
-    if (m1 != null) {
-      token = m1.group(1);
-    } else {
-      final m2 = inputRegex.firstMatch(body);
-      if (m2 != null) {
-        token = m2.group(1);
-      }
-    }
-
-    _csrfToken = token;
-    _lastCsrfFetch = DateTime.now();
-  }
-
-  Future<void> _ensureFreshCsrf() async {
-    if (_cookieHeader == null || _cookieHeader!.isEmpty) return;
-    final now = DateTime.now();
-    if (_csrfToken == null ||
-        _lastCsrfFetch == null ||
-        now.difference(_lastCsrfFetch!) > _csrfTtl) {
-      await autoGetCsrfToken();
-    }
-  }
-
-  bool _looksLikeLoginPage(String body) {
-    final b = body.toLowerCase();
-    return b.contains('please sign-in') ||
-        b.contains('sign in with sso bps') ||
-        b.contains('welcome to matchapro');
-  }
-
-  String? _manualGcToken;
-  String? _manualCsrfToken;
-
-  void setTokens(String gcToken, String csrfToken) {
-    _manualGcToken = gcToken;
-    _manualCsrfToken = csrfToken;
-    _csrfToken = csrfToken; // update the auto one too just in case
-  }
-
+  /// Kirim data konfirmasi user via WebView JS Injection.
+  /// Ini menghindari masalah HttpOnly Cookie dan Error 419.
+  /// Kirim data konfirmasi user via WebView JS Injection.
+  /// Ini menghindari masalah HttpOnly Cookie dan Error 419.
   Future<Map<String, dynamic>?> konfirmasiUser({
     required String perusahaanId,
     required String latitude,
     required String longitude,
     required String hasilGc,
-    required String
-    gcToken, // This argument is passed from caller, usually via provider/bloc
   }) async {
-    // Use manual tokens if available, otherwise use passed argument or forced
-    final effectiveGcToken = _manualGcToken ?? gcToken;
-    final effectiveCsrfToken =
-        _manualCsrfToken ?? _forcedToken; // Default to forced if no manual
+    debugPrint('proses kirim: --- Mulai Pengiriman Data ---');
 
-    debugPrint(
-      'BpsGcService.konfirmasiUser payload => perusahaanId=$perusahaanId, '
-      'hasilGc=$hasilGc, lat="$latitude", lon="$longitude"',
-    );
-
-    // Ensure we have fresh CSRF if we don't have a manual one
-    if (_manualCsrfToken == null) {
-      _cookieHeader = _forcedCookie;
-      await _ensureFreshCsrf();
+    if (!hasCredentials) {
+      debugPrint('proses kirim: Gagal. Belum login / credentials kosong.');
+      return null;
     }
 
-    // If we have manual cookie, use it
-    // _cookieHeader is already set via setCookiesFromHeader
+    // 1. Prioritaskan HTTP Request Biasa (Tanpa WebView)
+    // Syarat: Cookie harus lengkap (mengandung laravel_session dan XSRF-TOKEN)
+    // Ini adalah cara yang paling mirip dengan Python dan lebih reliable jika cookie valid.
+    final hasSession = _cookieHeader?.contains('laravel_session') ?? false;
+    final hasXsrf = _cookieHeader?.contains('XSRF-TOKEN') ?? false;
 
+    // PERBAIKAN: Selalu gunakan HTTP Direct jika session ada,
+    // bahkan jika gc_token kosong (nanti kita coba fetch ulang token jika perlu, atau biarkan kosong)
+    if (hasSession && hasXsrf) {
+      debugPrint('proses kirim: Menggunakan HTTP Request Biasa (Direct)');
+      return _konfirmasiUserViaHttp(
+        perusahaanId: perusahaanId,
+        latitude: latitude,
+        longitude: longitude,
+        hasilGc: hasilGc,
+      );
+    } else {
+      debugPrint('proses kirim: Cookie tidak lengkap untuk HTTP Biasa.');
+      debugPrint(
+        'proses kirim: Fallback ke WebView Injection (Mengandalkan Cookie Internal WebView).',
+      );
+    }
+
+    // 2. Fallback: Kirim data konfirmasi user via WebView JS Injection.
+    // Ini menghindari masalah HttpOnly Cookie dan Error 419 jika cookie tidak terbaca di Dart.
+    // Tunggu inisialisasi WebView selesai
+    try {
+      await _initCompleter.future;
+    } catch (e) {
+      debugPrint('proses kirim: Gagal menunggu WebView init: $e');
+      return null;
+    }
+
+    if (!_isWebViewInitialized) {
+      debugPrint('proses kirim: Gagal. WebView belum siap.');
+      return null;
+    }
+
+    final url = '$baseUrl/dirgc/konfirmasi-user';
+
+    try {
+      // Cek apakah kita sudah di domain yang benar
+      final currentUrl = await _sharedController!.currentUrl();
+      debugPrint('proses kirim: Current URL: $currentUrl');
+
+      bool needLoad = true;
+      if (currentUrl != null &&
+          currentUrl.contains('matchapro.web.bps.go.id')) {
+        // Sudah di domain yang benar. Cek apakah readyState complete.
+        try {
+          final state = await _sharedController!.runJavaScriptReturningResult(
+            "document.readyState",
+          );
+          if (state.toString().contains('complete')) {
+            debugPrint(
+              'proses kirim: Sudah di domain yang benar dan ready. Skip reload.',
+            );
+            needLoad = false;
+          }
+        } catch (_) {}
+      }
+
+      if (needLoad) {
+        debugPrint('proses kirim: Reloading base URL untuk setup origin...');
+        await _sharedController!.loadRequest(Uri.parse('$baseUrl/dirgc'));
+
+        // Tunggu hingga halaman benar-benar siap
+        bool ready = false;
+        int retry = 0;
+        while (!ready && retry < 20) {
+          await Future.delayed(const Duration(milliseconds: 500));
+          try {
+            final state = await _sharedController!.runJavaScriptReturningResult(
+              "document.readyState",
+            );
+            debugPrint('proses kirim: Page State: $state');
+            if (state.toString().contains('complete')) {
+              ready = true;
+            }
+          } catch (_) {}
+          retry++;
+        }
+
+        if (!ready) {
+          debugPrint('proses kirim: Timeout waiting for page load.');
+          return null;
+        }
+      }
+
+      // DEBUG: Cek cookie yang terlihat oleh JS
+      final visibleCookie = await _sharedController!
+          .runJavaScriptReturningResult("document.cookie");
+      debugPrint('proses kirim: Background JS Cookie Visible: $visibleCookie');
+
+      debugPrint('proses kirim: Injecting JS fetch...');
+
+      // SOLUSI 1: Gunakan JavaScriptChannel untuk komunikasi 2-arah
+      // Setup channel untuk menerima hasil
+      String? fetchResult;
+      final completer = Completer<void>();
+
+      _sharedController!.addJavaScriptChannel(
+        'FlutterChannel',
+        onMessageReceived: (JavaScriptMessage message) {
+          fetchResult = message.message;
+          if (!completer.isCompleted) {
+            completer.complete();
+          }
+        },
+      );
+
+      // JavaScript yang kompatibel dengan semua platform
+      final jsScript =
+          '''
+        (function() {
+            var formData = new FormData();
+            formData.append('perusahaan_id', '$perusahaanId');
+            formData.append('latitude', '$latitude');
+            formData.append('longitude', '$longitude');
+            formData.append('hasilgc', '$hasilGc');
+            formData.append('gc_token', '$_gcToken');
+            formData.append('_token', '$_csrfToken');
+
+            fetch('$url', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json, text/javascript, */*; q=0.01'
+                },
+                body: formData
+            })
+            .then(function(response) {
+                return response.text().then(function(text) {
+                    return {
+                        status: response.status,
+                        body: text
+                    };
+                });
+            })
+            .then(function(result) {
+                FlutterChannel.postMessage(JSON.stringify(result));
+            })
+            .catch(function(error) {
+                FlutterChannel.postMessage(JSON.stringify({
+                    status: 0,
+                    body: error.toString()
+                }));
+            });
+        })();
+      ''';
+
+      // Jalankan script (tidak menunggu return value)
+      await _sharedController!.runJavaScript(jsScript);
+
+      // Tunggu hasil dari channel (dengan timeout)
+      await completer.future.timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          debugPrint('proses kirim: Timeout waiting for fetch result');
+        },
+      );
+
+      // Cleanup channel
+      _sharedController!.removeJavaScriptChannel('FlutterChannel');
+
+      if (fetchResult == null) {
+        debugPrint('proses kirim: No result from fetch');
+        return null;
+      }
+
+      debugPrint('proses kirim: Fetch Result: $fetchResult');
+
+      final map = jsonDecode(fetchResult!);
+      final status = map['status'];
+      final bodyStr = map['body'];
+
+      if (status == 200) {
+        try {
+          return jsonDecode(bodyStr) as Map<String, dynamic>;
+        } catch (e) {
+          debugPrint('proses kirim: Gagal decode response JSON: $bodyStr');
+          return null;
+        }
+      } else if (status == 419) {
+        debugPrint('proses kirim: Gagal 419 (CSRF Token Mismatch) via JS.');
+        return null;
+      } else {
+        debugPrint('proses kirim: Gagal ($status). Body: $bodyStr');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('proses kirim: Error Exception: $e');
+      // Cleanup channel jika error
+      try {
+        _sharedController!.removeJavaScriptChannel('FlutterChannel');
+      } catch (_) {}
+      return null;
+    }
+  }
+
+  // Metode helper cookie lama dihapus/diabaikan
+  void _mergeSetCookie(Map<String, String> headers) {}
+
+  /// Metode untuk mendapatkan cookie header string dari Shared Controller
+  /// Berguna untuk debugging atau jika kita ingin menggunakan http client standar nanti.
+  /// Catatan: Ini hanya mengembalikan cookie yang visible oleh JS (non-HttpOnly).
+  Future<String> getVisibleCookie() async {
+    if (_sharedController == null || !_isWebViewInitialized) return '';
+    try {
+      final result = await _sharedController!.runJavaScriptReturningResult(
+        'document.cookie',
+      );
+      String cookie = result.toString();
+      if (cookie.startsWith('"') && cookie.endsWith('"')) {
+        cookie = jsonDecode(cookie);
+      }
+      return cookie;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  Future<Map<String, dynamic>?> _konfirmasiUserViaHttp({
+    required String perusahaanId,
+    required String latitude,
+    required String longitude,
+    required String hasilGc,
+  }) async {
     final url = Uri.parse('$baseUrl/dirgc/konfirmasi-user');
+
+    // Pastikan headers lengkap meniru browser
+    final headers = {
+      'Cookie': _cookieHeader!,
+      'User-Agent': _userAgent,
+      'Accept': 'application/json, text/javascript, */*; q=0.01',
+      'X-Requested-With': 'XMLHttpRequest',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'Origin': baseUrl,
+      'Referer': '$baseUrl/dirgc',
+      // Penting: X-CSRF-TOKEN
+      'X-CSRF-TOKEN': _csrfToken ?? '',
+    };
 
     final body = {
       'perusahaan_id': perusahaanId,
       'latitude': latitude,
       'longitude': longitude,
       'hasilgc': hasilGc,
-      'gc_token': effectiveGcToken.isNotEmpty
-          ? effectiveGcToken
-          : _forcedGcToken,
-      '_token': effectiveCsrfToken.isNotEmpty
-          ? effectiveCsrfToken
-          : (_csrfToken ?? _forcedToken),
+      'gc_token': _gcToken ?? '',
+      '_token': _csrfToken ?? '',
     };
 
-    final response = await _client.post(
-      url,
-      headers: {
-        'User-Agent': _userAgent, // Use Mobile UA
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-        'sec-ch-ua':
-            '"Android WebView";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
-        'sec-ch-ua-mobile': '?1',
-        'sec-ch-ua-platform': '"Android"',
-        'Cookie': _cookieHeader ?? '',
-      },
-      body: body,
-    );
-
-    _mergeSetCookie(response.headers);
-
-    if (response.statusCode != 200) {
-      debugPrint(
-        'BpsGcService.konfirmasiUser status=${response.statusCode}, '
-        'body=${response.body}',
-      );
-      await autoGetCsrfToken();
-      final retry = await _client.post(
-        url,
-        headers: {
-          'User-Agent': _userAgent,
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          'X-Requested-With': 'XMLHttpRequest',
-          'sec-ch-ua':
-              '"Android WebView";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
-          'sec-ch-ua-mobile': '?1',
-          'sec-ch-ua-platform': '"Android"',
-          'Cookie': _cookieHeader ?? '',
-        },
-        body: {...body, '_token': _forcedToken},
-      );
-      _mergeSetCookie(retry.headers);
-      if (retry.statusCode != 200) return null;
-      final rb = retry.body;
-      if (_looksLikeLoginPage(rb)) return null;
-      return jsonDecode(rb) as Map<String, dynamic>;
-    }
-
-    final respBody = response.body;
-    if (_looksLikeLoginPage(respBody)) {
-      return null;
-    }
-
-    return jsonDecode(respBody) as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>?> debugFetchGcCard({
-    int start = 0,
-    int length = 10,
-    String namaUsaha = '',
-    String alamatUsaha = '',
-    String provinsi = '132',
-    String kabupaten = '2582',
-    String kecamatan = '',
-    String desa = '',
-    String statusFilter = 'semua',
-    String sumberData = '',
-    String skalaUsaha = '',
-    String idsbr = '',
-    String historyProfiling = '',
-    String fLatlong = '',
-    String fGc = '',
-  }) async {
-    _cookieHeader = _forcedCookie;
-    final url = Uri.parse('$baseUrl/direktori-usaha/data-gc-card');
-    final body = {
-      '_token': _forcedToken,
-      'start': start.toString(),
-      'length': length.toString(),
-      'nama_usaha': namaUsaha,
-      'alamat_usaha': alamatUsaha,
-      'provinsi': provinsi,
-      'kabupaten': kabupaten,
-      'kecamatan': kecamatan,
-      'desa': desa,
-      'status_filter': statusFilter,
-      'rtotal': '0',
-      'sumber_data': sumberData,
-      'skala_usaha': skalaUsaha,
-      'idsbr': idsbr,
-      'history_profiling': historyProfiling,
-      'f_latlong': fLatlong,
-      'f_gc': fGc,
-    };
-    debugPrint('BpsGcService.debugFetchGcCard body => ${jsonEncode(body)}');
-    final response = await _client.post(
-      url,
-      headers: {
-        'User-Agent': _userAgent,
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-        'sec-ch-ua':
-            '"Android WebView";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
-        'sec-ch-ua-mobile': '?1',
-        'sec-ch-ua-platform': '"Android"',
-        'Cookie': _cookieHeader ?? '',
-      },
-      body: body,
-    );
-    debugPrint('BpsGcService.debugFetchGcCard status=${response.statusCode}');
-    if (response.statusCode != 200) {
-      debugPrint('BpsGcService.debugFetchGcCard body=${response.body}');
-      return null;
-    }
-    return jsonDecode(response.body) as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>?> konfirmasiUserWithRetry({
-    required String perusahaanId,
-    required String latitude,
-    required String longitude,
-    required String hasilGc,
-    required String gcToken,
-    int maxRetries = 2,
-  }) async {
-    for (var i = 0; i < maxRetries; i++) {
-      final resp = await konfirmasiUser(
-        perusahaanId: perusahaanId,
-        latitude: latitude,
-        longitude: longitude,
-        hasilGc: hasilGc,
-        gcToken: gcToken,
-      );
-      if (resp != null) return resp;
-      await autoGetCsrfToken();
-      await Future.delayed(Duration(milliseconds: 400 * (i + 1)));
-    }
-    return null;
-  }
-
-  Future<void> keepAlive() async {
-    if (_cookieHeader == null || _cookieHeader!.isEmpty) return;
-    await autoGetCsrfToken();
-  }
-
-  Future<bool> isSessionValid() async {
     try {
-      final url = Uri.parse('$baseUrl/dirgc');
-      final response = await _client.get(
-        url,
-        headers: {
-          'User-Agent': _userAgent,
-          'Accept': '*/*',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'X-Requested-With': 'XMLHttpRequest',
-          'sec-ch-ua':
-              '"Android WebView";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
-          'sec-ch-ua-mobile': '?1',
-          'sec-ch-ua-platform': '"Android"',
-          'Cookie': _cookieHeader ?? '',
-        },
-      );
-      _mergeSetCookie(response.headers);
-      return !_looksLikeLoginPage(response.body);
-    } catch (_) {
-      return false;
-    }
-  }
+      final response = await _client.post(url, headers: headers, body: body);
+      debugPrint('proses kirim: HTTP Status: ${response.statusCode}');
+      debugPrint('proses kirim: HTTP Body: ${response.body}');
 
-  void _mergeSetCookie(Map<String, String> headers) {
-    final setCookie = headers.entries
-        .firstWhere(
-          (e) => e.key.toLowerCase() == 'set-cookie',
-          orElse: () => const MapEntry('', ''),
-        )
-        .value;
-    if (setCookie.isEmpty) return;
-    final regex = RegExp(r'(^|,)\s*([^=;,\s]+)=([^;]+)');
-    final matches = regex.allMatches(setCookie);
-    final Map<String, String> jar = {};
-    if (_cookieHeader != null && _cookieHeader!.isNotEmpty) {
-      for (final part in _cookieHeader!.split(';')) {
-        final p = part.trim();
-        if (p.isEmpty) continue;
-        final idx = p.indexOf('=');
-        if (idx > 0) {
-          final name = p.substring(0, idx).trim();
-          final val = p.substring(idx + 1).trim();
-          if (name.isNotEmpty) jar[name] = val;
+      if (response.statusCode == 200) {
+        try {
+          return jsonDecode(response.body) as Map<String, dynamic>;
+        } catch (e) {
+          debugPrint(
+            'proses kirim: Gagal decode response JSON: ${response.body}',
+          );
+          return null;
         }
+      } else if (response.statusCode == 419) {
+        debugPrint('proses kirim: Gagal 419 (CSRF Token Mismatch) via HTTP.');
+        return null;
+      } else {
+        debugPrint(
+          'proses kirim: Gagal (${response.statusCode}). Body: ${response.body}',
+        );
+        return null;
       }
+    } catch (e) {
+      debugPrint('proses kirim: Error Exception HTTP: $e');
+      return null;
     }
-    for (final m in matches) {
-      final name = m.group(2)?.trim();
-      final val = m.group(3)?.trim();
-      if (name != null && name.isNotEmpty && val != null && val.isNotEmpty) {
-        jar[name] = val;
-      }
-    }
-    final merged = jar.entries.map((e) => '${e.key}=${e.value}').join('; ');
-    _cookieHeader = merged;
   }
 }

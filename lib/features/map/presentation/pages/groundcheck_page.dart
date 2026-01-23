@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -6,26 +5,18 @@ import 'package:syncfusion_flutter_datagrid/datagrid.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart' as dotenv;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../data/services/bps_gc_service.dart';
-import '../../data/services/gc_credentials_service.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
 import '../widgets/bps_login_dialog.dart';
+import '../widgets/python_login_dialog.dart';
+import '../widgets/inappwebview_login_dialog.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../../data/repositories/map_repository_impl.dart';
 
-// Optional bootstrap via --dart-define (keamanan: tidak commit rahasia ke repo)
-const String kInitialGcCookie = String.fromEnvironment(
-  'GC_COOKIE',
-  defaultValue: '',
-);
-const String kInitialGcToken = String.fromEnvironment(
-  'GC_TOKEN',
-  defaultValue: '',
-);
+// Optional bootstrap via --dart-define (removed)
 
 class GroundcheckRecord {
   final String idsbr;
@@ -377,7 +368,6 @@ class GroundcheckPage extends StatefulWidget {
 class _GroundcheckPageState extends State<GroundcheckPage> {
   final ScrollController _scrollController = ScrollController();
   final BpsGcService _gcService = BpsGcService();
-  final GcCredentialsService _gcCredsService = GcCredentialsService();
   final GroundcheckSupabaseService _supabaseService =
       GroundcheckSupabaseService();
   GroundcheckDataSource? _dataSource;
@@ -388,13 +378,11 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   String? _statusFilter;
   String? _gcsFilter;
   bool _isLoading = true;
-  bool _isConfirming = false;
   String? _error;
   String? _gcCookie;
   String? _gcToken;
   String? _currentUser;
   String? _userAgent;
-  Timer? _keepAliveTimer;
 
   @override
   void initState() {
@@ -471,100 +459,14 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   @override
   void dispose() {
     _scrollController.dispose();
-    _keepAliveTimer?.cancel();
     super.dispose();
   }
 
   Future<void> _loadStoredGcCredentials() async {
-    try {
-      // 1. Coba load dari Supabase Global
-      final remote = await _gcCredsService.loadGlobal();
-      if (remote != null) {
-        final rc = remote['gc_cookie']?.trim() ?? '';
-        final rt = remote['gc_token']?.trim() ?? '';
-        if (rc.isNotEmpty) _gcCookie = rc;
-        if (rt.isNotEmpty) _gcToken = rt;
-      }
-
-      // 2. Fallback .env
-      if (_gcCookie == null || _gcCookie!.isEmpty) {
-        final envCookie = dotenv.dotenv.env['GC_COOKIE'];
-        if (envCookie?.trim().isNotEmpty ?? false) {
-          _gcCookie = envCookie!.trim();
-        }
-      }
-      if (_gcToken == null || _gcToken!.isEmpty) {
-        final envToken = dotenv.dotenv.env['GC_TOKEN'];
-        if (envToken?.trim().isNotEmpty ?? false) {
-          _gcToken = envToken!.trim();
-        }
-      }
-
-      // 3. Fallback dart-define
-      if ((_gcCookie == null || _gcCookie!.isEmpty) &&
-          kInitialGcCookie.isNotEmpty) {
-        _gcCookie = kInitialGcCookie;
-      }
-      if ((_gcToken == null || _gcToken!.isEmpty) &&
-          kInitialGcToken.isNotEmpty) {
-        _gcToken = kInitialGcToken;
-      }
-
-      // 4. Default Placeholder (sesuai request user)
-      if (_gcCookie == null || _gcCookie!.isEmpty) {
-        _gcCookie = 'PASTE_COOKIE_HEADER';
-      }
-      if (_gcToken == null || _gcToken!.isEmpty) {
-        _gcToken = 'PASTE_TOKEN';
-      }
-
-      // 5. Simpan/Sync kembali ke Supabase agar terisi (jika kosong di DB)
-      // Upsert akan membuat row baru jika belum ada, atau update jika sudah ada
-      await _gcCredsService.upsertGlobal(
-        gcCookie: _gcCookie,
-        gcToken: _gcToken,
-      );
-
-      // 6. Set ke Service
-      if (_gcCookie != null && _gcCookie!.isNotEmpty) {
-        _gcService.setCookiesFromHeader(_gcCookie!);
-        await _gcService.autoGetCsrfToken();
-        final updatedCookie = _gcService.cookieHeader;
-        if (updatedCookie != null &&
-            updatedCookie.isNotEmpty &&
-            updatedCookie != _gcCookie) {
-          _gcCookie = updatedCookie;
-          await _saveStoredGcCredentials();
-        }
-        _keepAliveTimer?.cancel();
-        _keepAliveTimer = Timer.periodic(const Duration(minutes: 10), (
-          _,
-        ) async {
-          try {
-            await _gcService.keepAlive();
-            final refreshedCookie = _gcService.cookieHeader;
-            if (refreshedCookie != null &&
-                refreshedCookie.isNotEmpty &&
-                refreshedCookie != _gcCookie) {
-              _gcCookie = refreshedCookie;
-              await _saveStoredGcCredentials();
-            }
-          } catch (_) {
-            // Ignore keepAlive errors
-          }
-        });
-      }
-    } catch (_) {}
+    debugPrint('proses kirim: Menunggu login/input manual untuk kredensial.');
   }
 
-  Future<void> _saveStoredGcCredentials() async {
-    try {
-      await _gcCredsService.upsertGlobal(
-        gcCookie: _gcCookie,
-        gcToken: _gcToken,
-      );
-    } catch (_) {}
-  }
+  Future<void> _saveStoredGcCredentials() async {}
 
   Future<void> _showGcInputDialog(GroundcheckRecord record) async {
     final hasilOptions = <Map<String, String>>[
@@ -849,13 +751,23 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                 else
                   FilledButton.icon(
                     onPressed: () async {
+                      debugPrint(
+                        'proses kirim: Tombol "Tandai Usaha Sudah Dicek" ditekan.',
+                      );
                       final laInput = double.tryParse(
                         latController.text.trim(),
                       );
                       final loInput = double.tryParse(
                         lonController.text.trim(),
                       );
+                      debugPrint(
+                        'proses kirim: Input Awal -> LatInput: $laInput, LonInput: $loInput, Hasil: $selectedHasil',
+                      );
+
                       if (selectedHasil.isEmpty) {
+                        debugPrint(
+                          'proses kirim: Gagal - Hasil GC belum dipilih',
+                        );
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Pilih hasil GC terlebih dahulu'),
@@ -868,8 +780,19 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                           laInput ?? double.tryParse(record.latitude);
                       final loFinal =
                           loInput ?? double.tryParse(record.longitude);
+
+                      debugPrint(
+                        'proses kirim: Koordinat Final -> Lat: $laFinal, Lon: $loFinal',
+                      );
+
+                      debugPrint('proses kirim: Memanggil _ensureGcConfig...');
                       final ok = await _ensureGcConfig();
+                      debugPrint('proses kirim: _ensureGcConfig result: $ok');
+
                       if (!ok) {
+                        debugPrint(
+                          'proses kirim: Gagal - Konfigurasi GC tidak valid/lengkap.',
+                        );
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
@@ -884,31 +807,61 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                         isSubmitting = true;
                       });
                       try {
+                        debugPrint('proses kirim: Mempersiapkan payload...');
+                        final requestPayload = {
+                          'perusahaan_id': record.perusahaanId,
+                          'latitude': laFinal != null ? laFinal.toString() : '',
+                          'longitude': loFinal != null
+                              ? loFinal.toString()
+                              : '',
+                          'hasilgc': selectedHasil,
+                          'gc_token': _gcToken ?? '',
+                          'gc_cookie':
+                              _gcService.cookieHeader ?? (_gcCookie ?? ''),
+                          'timestamp': DateTime.now().toIso8601String(),
+                        };
                         debugPrint(
-                          'GC request => perusahaanId=${record.perusahaanId}, hasilGc=$selectedHasil, lat=${laFinal ?? '-'}, lon=${loFinal ?? '-'}',
+                          'proses kirim: Payload Request => ${jsonEncode(requestPayload)}',
                         );
-                        final resp = await _gcService.konfirmasiUserWithRetry(
+                        debugPrint(
+                          'proses kirim: Cookie Header (sebelum kirim) => ${_gcService.cookieHeader ?? "KOSONG"}',
+                        );
+                        debugPrint(
+                          'proses kirim: GC Token (sebelum kirim) => ${_gcToken ?? "KOSONG"}',
+                        );
+                        final resp = await _gcService.konfirmasiUser(
                           perusahaanId: record.perusahaanId,
                           latitude: laFinal != null ? laFinal.toString() : '',
                           longitude: loFinal != null ? loFinal.toString() : '',
                           hasilGc: selectedHasil,
-                          gcToken: _gcToken ?? '',
                         );
                         if (resp == null || resp['status'] != 'success') {
                           if (resp != null) {
-                            final pretty = const JsonEncoder.withIndent(
-                              '  ',
-                            ).convert(_sanitizeResponse(resp));
-                            debugPrint('GC response (failed) =>\n$pretty');
-                            await _showResponseDialog(_sanitizeResponse(resp));
+                            debugPrint(
+                              'proses kirim: Response Status: ${resp['status']}, Message: ${resp['message'] ?? ""}',
+                            );
                           } else {
-                            debugPrint('GC response => null (no response)');
-                            await _showResponseDialog({
-                              'status': 'error',
-                              'message':
-                                  'Tidak ada respons atau sesi kadaluarsa',
-                            });
+                            debugPrint(
+                              'proses kirim: Response null atau gagal autentikasi.',
+                            );
                           }
+                          final debugInfo = <String, dynamic>{
+                            'request': requestPayload,
+                            'response': resp != null
+                                ? _sanitizeResponse(resp)
+                                : 'null (No Response / Auth Failed)',
+                            'status': 'failed',
+                          };
+
+                          final pretty = const JsonEncoder.withIndent(
+                            '  ',
+                          ).convert(debugInfo);
+                          debugPrint(
+                            'proses kirim: Response GAGAL =>\n$pretty',
+                          );
+
+                          await _showResponseDialog(debugInfo);
+
                           setStateSB(() {
                             isSubmitting = false;
                           });
@@ -920,10 +873,20 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                           );
                           return;
                         }
+
+                        final debugInfo = <String, dynamic>{
+                          'request': requestPayload,
+                          'response': _sanitizeResponse(resp),
+                          'status': 'success',
+                        };
                         final pretty = const JsonEncoder.withIndent(
                           '  ',
-                        ).convert(_sanitizeResponse(resp));
-                        debugPrint('GC response (success) =>\n$pretty');
+                        ).convert(debugInfo);
+                        debugPrint('proses kirim: Response SUKSES =>\n$pretty');
+                        debugPrint(
+                          'proses kirim: Response Status: ${resp['status']}, Message: ${resp['message'] ?? ""}',
+                        );
+
                         final newToken = resp['new_gc_token'] as String?;
                         if (newToken != null && newToken.isNotEmpty) {
                           _gcToken = newToken;
@@ -954,10 +917,22 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                             backgroundColor: Colors.green,
                           ),
                         );
-                      } catch (e) {
+                      } catch (e, stack) {
                         setStateSB(() {
                           isSubmitting = false;
                         });
+                        final errorInfo = {
+                          'error': e.toString(),
+                          'stack_trace': stack
+                              .toString()
+                              .split('\n')
+                              .take(5)
+                              .toList(),
+                          'timestamp': DateTime.now().toIso8601String(),
+                        };
+                        debugPrint('proses kirim: EXCEPTION => $e');
+                        await _showResponseDialog(errorInfo);
+
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text('Terjadi kesalahan: ${e.toString()}'),
@@ -1071,103 +1046,54 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   }
 
   Future<bool> _ensureGcConfig({bool forceShow = false}) async {
-    // Jika kredensial sudah ada, pastikan sesi valid tanpa prompt (kecuali dipaksa)
-    if (!forceShow &&
+    debugPrint('proses kirim: _ensureGcConfig dipanggil. forceShow=$forceShow');
+    debugPrint(
+      'proses kirim: State Awal -> Cookie: ${_gcCookie ?? "KOSONG"}, Token: ${_gcToken ?? "KOSONG"}',
+    );
+
+    // Cek jika cookie cukup kuat (Laravel Session + XSRF)
+    final hasStrongCookie =
         _gcCookie != null &&
-        _gcCookie!.isNotEmpty &&
-        _gcToken != null &&
-        _gcToken!.isNotEmpty) {
-      try {
-        await _gcService.autoGetCsrfToken();
-        final valid = await _gcService.isSessionValid();
-        if (valid) return true;
-        // Sesi kadaluarsa: beri info lalu buka dialog
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Sesi GC kadaluarsa. Mohon perbarui Cookie/Token.'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-      } catch (_) {}
+        _gcCookie!.contains('laravel_session') &&
+        _gcCookie!.contains('XSRF-TOKEN');
+
+    // Jika kredensial sudah ada, langsung anggap valid (sesuai permintaan user: tidak perlu cek validnya)
+    // PERBAIKAN: Jika punya Strong Cookie (Laravel Session), kita izinkan lewat meskipun gc_token kosong
+    if (!forceShow &&
+        ((_gcCookie != null &&
+                _gcCookie!.isNotEmpty &&
+                _gcToken != null &&
+                _gcToken!.isNotEmpty) ||
+            hasStrongCookie)) {
+      debugPrint(
+        'proses kirim: Kredensial tersedia (Token/Strong Cookie), melanjutkan tanpa cek validitas (bypass).',
+      );
+      return true;
     }
 
-    // Bootstrap dari dart-define jika belum ada
-    if ((_gcCookie == null || _gcCookie!.isEmpty) &&
-        kInitialGcCookie.isNotEmpty) {
-      _gcCookie = kInitialGcCookie;
-      _gcService.setCookiesFromHeader(kInitialGcCookie);
-    }
-    if ((_gcToken == null || _gcToken!.isEmpty) && kInitialGcToken.isNotEmpty) {
-      _gcToken = kInitialGcToken;
-    }
-    // Fallback dari .env jika dart-define kosong
-    final envCookie = dotenv.dotenv.env['GC_COOKIE'];
-    if ((_gcCookie == null || _gcCookie!.isEmpty) &&
-        (envCookie?.trim().isNotEmpty ?? false)) {
-      _gcCookie = envCookie!.trim();
-      _gcService.setCookiesFromHeader(_gcCookie!);
-    }
-    final envToken = dotenv.dotenv.env['GC_TOKEN'];
-    if ((_gcToken == null || _gcToken!.isEmpty) &&
-        (envToken?.trim().isNotEmpty ?? false)) {
-      _gcToken = envToken!.trim();
-    }
-    // Fallback Supabase per-user
-    if ((_gcCookie == null || _gcCookie!.isEmpty) ||
-        (_gcToken == null || _gcToken!.isEmpty)) {
-      final remote = await _gcCredsService.loadGlobal();
-      if (remote != null) {
-        final rc = remote['gc_cookie']?.trim() ?? '';
-        final rt = remote['gc_token']?.trim() ?? '';
-        if (rc.isNotEmpty && (_gcCookie == null || _gcCookie!.isEmpty)) {
-          _gcCookie = rc;
-          _gcService.setCookiesFromHeader(rc);
-        }
-        if (rt.isNotEmpty && (_gcToken == null || _gcToken!.isEmpty)) {
-          _gcToken = rt;
-        }
-      }
-    }
+    debugPrint(
+      'proses kirim: State Akhir (Pre-Check) -> Cookie: ${_gcCookie ?? "KOSONG"}, Token: ${_gcToken ?? "KOSONG"}',
+    );
+
     if (_gcCookie != null && _gcCookie!.isNotEmpty) {
-      try {
-        await _gcService.autoGetCsrfToken();
-        final valid = await _gcService.isSessionValid();
-        if (valid && _gcToken != null && _gcToken!.isNotEmpty) {
-          await _saveStoredGcCredentials();
-          return true;
-        }
-      } catch (_) {}
+      // Logic auto-refresh dihapus. User diminta login jika token tidak valid.
+      debugPrint(
+        'proses kirim: Cookie ada, tapi token mungkin tidak valid/lengkap.',
+      );
     }
 
-    final cookieController = TextEditingController(text: _gcCookie ?? '');
-    final tokenController = TextEditingController(text: _gcToken ?? '');
+    debugPrint(
+      'proses kirim: Konfigurasi belum lengkap atau tidak valid. Tanyakan login.',
+    );
 
-    final result = await showDialog<bool>(
+    final shouldLogin = await showDialog<bool>(
       context: context,
       useRootNavigator: true,
       builder: (ctx) {
         return AlertDialog(
-          title: const Text('Konfigurasi Groundcheck'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: cookieController,
-                decoration: const InputDecoration(
-                  labelText: 'Cookie',
-                  hintText: 'Paste header Cookie dari browser',
-                ),
-                minLines: 1,
-                maxLines: 3,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: tokenController,
-                decoration: const InputDecoration(labelText: 'GC Token'),
-              ),
-            ],
+          title: const Text('Login Diperlukan'),
+          content: const Text(
+            'Sesi belum tersedia atau sudah kadaluarsa. Silakan login BPS.',
           ),
           actions: [
             TextButton(
@@ -1176,74 +1102,154 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Simpan'),
+              child: const Text('Login'),
             ),
           ],
         );
       },
     );
 
-    if (result != true) {
-      return false;
+    if (shouldLogin == true && mounted) {
+      _showBpsLoginDialog();
     }
-
-    final cookie = cookieController.text.trim();
-    final token = tokenController.text.trim();
-
-    if (cookie.isEmpty || token.isEmpty) {
-      return false;
-    }
-
-    _gcCookie = cookie;
-    _gcToken = token;
-    _gcService.setCookiesFromHeader(cookie);
-    await _gcService.autoGetCsrfToken();
-    await _saveStoredGcCredentials();
-    _keepAliveTimer?.cancel();
-    _keepAliveTimer = Timer.periodic(const Duration(minutes: 10), (_) async {
-      await _gcService.keepAlive();
-    });
-    // Simpan juga ke Supabase
-    await _gcCredsService.upsertGlobal(gcCookie: _gcCookie, gcToken: _gcToken);
-    return true;
+    return false;
   }
 
-  void _showBpsLoginDialog() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (context) => BpsLoginDialog(
-          onLoginSuccess:
-              (cookie, gcToken, csrfToken, userAgent, userName) async {
-                debugPrint('Login Success: $userName');
-                setState(() {
-                  _gcCookie = cookie;
-                  _gcToken = gcToken;
-                  _currentUser = userName.isNotEmpty
-                      ? userName
-                      : 'Pengguna Terautentikasi';
-                });
+  Future<void> _handleLoginSuccess(
+    String cookie,
+    String gcToken,
+    String csrfToken,
+    String userAgent,
+    String userName,
+  ) async {
+    debugPrint('Login Success: $userName');
+    debugPrint('proses kirim: Login Cookie Visible (JS): $cookie');
 
-                _gcService.setCookiesFromHeader(cookie);
-                _gcService.setTokens(gcToken, csrfToken);
-                _gcService.setUserAgent(userAgent);
+    // Analisis Cookie untuk Feedback User
+    final hasSession = cookie.contains('laravel_session');
+    final hasXsrf = cookie.contains('XSRF-TOKEN');
 
-                await _saveStoredGcCredentials();
+    String statusMsg = 'Login berhasil! User: $userName';
+    Color snackBarColor = Colors.green;
 
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Login berhasil! Token diperbarui. User: $_currentUser',
-                      ),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              },
+    if (hasSession && hasXsrf) {
+      debugPrint(
+        'proses kirim: [INFO] Sesi Lengkap. Siap kirim via HTTP Direct.',
+      );
+      statusMsg += '\n[OK] Mode Cepat (HTTP Direct) Aktif';
+    } else {
+      debugPrint(
+        'proses kirim: [INFO] Sesi Terbatas (HttpOnly hidden). Fallback ke WebView.',
+      );
+      statusMsg += '\n[Info] Mode Kompatibilitas (WebView) Aktif';
+      snackBarColor = Colors.orange[800]!;
+    }
+
+    setState(() {
+      _gcCookie = cookie;
+      _gcToken = gcToken;
+      _currentUser = userName.isNotEmpty ? userName : 'Pengguna Terautentikasi';
+    });
+
+    _gcService.setCredentials(
+      cookie: cookie,
+      csrfToken: csrfToken,
+      gcToken: gcToken,
+      userAgent: userAgent,
+    );
+
+    await _saveStoredGcCredentials();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(statusMsg),
+          backgroundColor: snackBarColor,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showBpsLoginDialog() async {
+    if (!mounted) return;
+
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Pilih Metode Login'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.web),
+              title: const Text('Login via WebView'),
+              subtitle: const Text(
+                'Metode standar. Jika gagal kirim (419), gunakan metode Python.',
+              ),
+              onTap: () => Navigator.pop(ctx, 'webview'),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.terminal),
+              title: const Text('Login via Python Script'),
+              subtitle: const Text(
+                'Jalankan script python & input hasil JSON. (Paling Stabil)',
+              ),
+              onTap: () => Navigator.pop(ctx, 'python'),
+            ),
+          ],
         ),
       ),
     );
+
+    if (choice == null || !mounted) return;
+
+    if (choice == 'python') {
+      await showDialog(
+        context: context,
+        builder: (ctx) => PythonLoginDialog(
+          onLoginSuccess: (data) async {
+            final cookie = data['cookie_header'] ?? '';
+            final gcToken = data['gc_token'] ?? '';
+            final csrfToken = data['csrf_token'] ?? '';
+            final userAgent = data['user_agent'] ?? '';
+            final userName = data['user_name'] ?? 'Python User';
+
+            await _handleLoginSuccess(
+              cookie,
+              gcToken,
+              csrfToken,
+              userAgent,
+              userName,
+            );
+          },
+        ),
+      );
+      return;
+    }
+
+    if (choice == 'webview') {
+      // Gunakan InAppWebView yang lebih powerful (bisa ambil HttpOnly cookies)
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (context) => InAppWebViewLoginDialog(
+            onLoginSuccess:
+                (cookie, gcToken, csrfToken, userAgent, userName) async {
+                  await _handleLoginSuccess(
+                    cookie,
+                    gcToken,
+                    csrfToken,
+                    userAgent,
+                    userName,
+                  );
+                },
+          ),
+        ),
+      );
+      return;
+    }
   }
 
   Future<void> _onGcPressed(GroundcheckRecord record) async {

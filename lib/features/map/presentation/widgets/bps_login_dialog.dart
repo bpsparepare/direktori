@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:webview_windows/webview_windows.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+// Import for macOS support
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
+import 'package:webview_cookie_manager/webview_cookie_manager.dart';
 
 const _spoofedUA =
     'Mozilla/5.0 (Linux; Android 16; ONEPLUS 15 Build/SKQ1.211202.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/143.0.7499.192 Mobile Safari/537.36';
@@ -15,15 +18,20 @@ class BpsLoginDialog extends StatefulWidget {
     String userName,
   )
   onLoginSuccess;
+  final WebViewController? controller;
 
-  const BpsLoginDialog({super.key, required this.onLoginSuccess});
+  const BpsLoginDialog({
+    super.key,
+    required this.onLoginSuccess,
+    this.controller,
+  });
 
   @override
   State<BpsLoginDialog> createState() => _BpsLoginDialogState();
 }
 
 class _BpsLoginDialogState extends State<BpsLoginDialog> {
-  final _controller = WebviewController();
+  late final WebViewController _controller;
   bool _isInitialized = false;
   String _status = 'Initializing...';
 
@@ -34,57 +42,104 @@ class _BpsLoginDialogState extends State<BpsLoginDialog> {
   }
 
   Future<void> _initWebview() async {
-    try {
-      await _controller.initialize();
-      await _controller.setBackgroundColor(Colors.white);
-      await _controller.setPopupWindowPolicy(WebviewPopupWindowPolicy.deny);
+    // Jika controller sudah diberikan dari luar (BpsGcService), gunakan itu.
+    if (widget.controller != null) {
+      _controller = widget.controller!;
+      _controller.setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (String url) {
+            if (mounted) {
+              setState(() {
+                _status = 'Loading: $url';
+              });
+            }
+          },
+          onPageFinished: (String url) {
+            if (mounted) {
+              setState(() {
+                _status = 'Please Login...';
+              });
+            }
+            _checkPageContent();
+          },
+          onWebResourceError: (WebResourceError error) {
+            debugPrint('Web resource error: ${error.description}');
+          },
+        ),
+      );
 
-      // Use the specific Android UA string that mimics login.py to ensure consistency
-      await _controller.setUserAgent(_spoofedUA);
-
-      // Inject script to override navigator properties (mock mobile environment)
-      try {
-        // Note: webview_windows might not support addScriptToExecuteOnDocumentCreated in all versions.
-        // If this fails, we rely on UserAgent only.
-        // Assuming the method exists or using executeScript as a fallback (though less effective for init).
-        // Using dynamic dispatch or just trying standard API if available.
-        // Since I cannot verify the package version, I will try to use the method if I can't find it I'll just use executeScript immediately after load (less safe).
-        // Actually, let's just check if we can call it. If not, catch error.
-        // But for safety, I'll assume it might not be there and handle it.
-        // However, standard WebView2 wrapper usually has it.
-        await _controller.addScriptToExecuteOnDocumentCreated(r"""
-          Object.defineProperty(navigator, 'platform', {
-              get: function() { return 'Linux armv8l'; }
-          });
-          Object.defineProperty(navigator, 'maxTouchPoints', {
-              get: function() { return 5; }
-          });
-        """);
-      } catch (e) {
-        debugPrint('Script injection error (might not be supported): $e');
-      }
-
-      // Listen to navigation
-      _controller.url.listen((url) {
-        if (mounted) {
-          setState(() {
-            _status = 'Loading: $url';
-          });
-        }
-      });
-
-      _controller.loadingState.listen((state) async {
-        if (state == LoadingState.navigationCompleted) {
-          _checkPageContent();
-        }
-      });
-
-      await _controller.loadUrl('https://matchapro.web.bps.go.id/dirgc');
+      await _controller.loadRequest(
+        Uri.parse('https://matchapro.web.bps.go.id/dirgc'),
+      );
 
       if (mounted) {
         setState(() {
           _isInitialized = true;
-          _status = 'Please Login...';
+        });
+      }
+      return;
+    }
+
+    try {
+      // Platform-specific params
+      late final PlatformWebViewControllerCreationParams params;
+      if (WebViewPlatform.instance is WebKitWebViewPlatform) {
+        params = WebKitWebViewControllerCreationParams(
+          allowsInlineMediaPlayback: true,
+          mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+        );
+      } else {
+        params = const PlatformWebViewControllerCreationParams();
+      }
+
+      final WebViewController controller =
+          WebViewController.fromPlatformCreationParams(params);
+
+      controller
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setUserAgent(_spoofedUA)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onPageStarted: (String url) {
+              if (mounted) {
+                setState(() {
+                  _status = 'Loading: $url';
+                });
+              }
+            },
+            onPageFinished: (String url) {
+              if (mounted) {
+                setState(() {
+                  _status = 'Please Login...';
+                });
+              }
+              _checkPageContent();
+            },
+            onWebResourceError: (WebResourceError error) {
+              debugPrint('Web resource error: ${error.description}');
+            },
+          ),
+        );
+
+      // Add script to override navigator properties if possible
+      // Note: addJavaScriptChannel is for communication, not injection at start.
+      // webview_flutter 4.x doesn't have addScriptToExecuteOnDocumentCreated easily accessible across all platforms in the same way,
+      // but we can try running it after load or using platform specific features if needed.
+      // For now, we'll rely on UA and run script after page load if needed.
+
+      if (controller.platform is WebKitWebViewController) {
+        (controller.platform as WebKitWebViewController)
+            .setAllowsBackForwardNavigationGestures(true);
+      }
+
+      _controller = controller;
+      await _controller.loadRequest(
+        Uri.parse('https://matchapro.web.bps.go.id/dirgc'),
+      );
+
+      if (mounted) {
+        setState(() {
+          _isInitialized = true;
         });
       }
     } catch (e) {
@@ -106,7 +161,7 @@ class _BpsLoginDialogState extends State<BpsLoginDialog> {
     return Scaffold(
       appBar: AppBar(title: Text(_status)),
       body: _isInitialized
-          ? Webview(_controller)
+          ? WebViewWidget(controller: _controller)
           : const Center(child: CircularProgressIndicator()),
       floatingActionButton: FloatingActionButton(
         onPressed: _manualCheck,
@@ -169,27 +224,78 @@ class _BpsLoginDialogState extends State<BpsLoginDialog> {
             })();
         ''';
 
-      final result = await _controller.executeScript(script);
+      final result = await _controller.runJavaScriptReturningResult(script);
 
-      if (result != null && result is String) {
-        final map = jsonDecode(result);
-        final cookieHeader = map['cookie']?.toString() ?? '';
+      String jsonString = '';
+      if (result is String) {
+        // webview_flutter might return the JSON string wrapped in quotes, e.g. "{\"cookie\":...}"
+        // We need to unquote it if it's double encoded.
+        // However, usually it returns the result of evaluation.
+        // If it's a JSON string, it might be literally just the string.
+        // Let's check if it starts and ends with quotes
+        jsonString = result;
+        if (jsonString.startsWith('"') && jsonString.endsWith('"')) {
+          jsonString = jsonDecode(jsonString); // Unescape the string
+        }
+      }
+
+      // Hapus logika pengambilan cookie via Manager yang error
+      // Kita akan mengandalkan Cookie Global WebView (Android/iOS)
+      // dan pengiriman data via WebView Injection, bukan http.Client Dart.
+
+      String managerCookieHeader = '';
+      try {
+        final cookieManager = WebviewCookieManager();
+        final gotCookies = await cookieManager.getCookies(
+          'https://matchapro.web.bps.go.id/dirgc',
+        );
+        if (gotCookies.isNotEmpty) {
+          managerCookieHeader = gotCookies
+              .map((c) => '${c.name}=${c.value}')
+              .join('; ');
+          debugPrint(
+            'proses kirim: Cookie Manager Found ${gotCookies.length} cookies',
+          );
+          for (var c in gotCookies) {
+            debugPrint(' - ${c.name}: ${c.value} (HttpOnly: ${c.httpOnly})');
+          }
+        }
+      } catch (e) {
+        debugPrint('proses kirim: Gagal ambil cookie via Manager: $e');
+      }
+
+      if (jsonString.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _status = 'Login Terdeteksi. Mengambil Sesi...';
+          });
+        }
+        final map = jsonDecode(jsonString);
+        // ignore: unused_local_variable
+        final jsCookie = map['cookie']?.toString() ?? '';
         final gc = map['gc_token']?.toString() ?? '';
         final csrf = map['csrf_token']?.toString() ?? '';
         final uaFromJs = map['ua']?.toString() ?? '';
         final name = map['user_name']?.toString() ?? '';
+        debugPrint('proses kirim: Login JS Cookie: $jsCookie');
+        debugPrint('proses kirim: Login JS gc_token: $gc');
+        debugPrint('proses kirim: Login JS csrf_token: $csrf');
+        debugPrint('proses kirim: Login JS user: $name');
+
+        // Gunakan cookie dari CookieManager karena lebih lengkap (ada HttpOnly)
+        // Gabungkan jika perlu, tapi biasanya CookieManager sudah mencakup semua yang penting.
+        final finalCookie = managerCookieHeader.isNotEmpty
+            ? managerCookieHeader
+            : jsCookie;
 
         // If JS returns the default UA (because setUserAgent failed or delayed), use our spoofed one
         final finalUA = uaFromJs.contains('Android') ? uaFromJs : _spoofedUA;
 
         if (gc.isNotEmpty && csrf.isNotEmpty) {
-          widget.onLoginSuccess(cookieHeader, gc, csrf, finalUA, name);
+          widget.onLoginSuccess(finalCookie, gc, csrf, finalUA, name);
           if (mounted) Navigator.pop(context);
         } else {
-          // Only show snackbar if triggered manually to avoid spamming
-          // But since _checkPageContent calls this, we might spam.
-          // So let's suppress automatic spam or just log.
-          debugPrint('Tokens not found yet.');
+          debugPrint('proses kirim: Login JS token belum ditemukan.');
         }
       }
     } catch (e) {

@@ -103,7 +103,61 @@ def login_with_sso(username, password, otp_code=None):
         # Cek apakah login berhasil
         current_url = page.url
         if "matchapro.web.bps.go.id" in current_url and "login" not in current_url:
-            print("Login berhasil!")
+            # Login berhasil, extract data untuk Flutter
+            import json
+            
+            # 1. Get Cookies
+            cookies = context.cookies()
+            cookie_dict = {c['name']: c['value'] for c in cookies}
+            cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
+            
+            # 2. Get Tokens via JS
+            tokens = page.evaluate('''() => {
+                let gc_token = '';
+                let csrf_token = '';
+                let user_name = '';
+                
+                try {
+                    // Try regex first
+                    let match = document.body.innerHTML.match(/let\s+gcSubmitToken\s*=\s*(['"])([^'"]+)\1/);
+                    if (match) gc_token = match[2];
+                } catch(e) {}
+                
+                if (!gc_token) {
+                    let el = document.querySelector('input[name="gc_token"]');
+                    if (el) gc_token = el.value;
+                }
+                
+                let meta = document.querySelector('meta[name="csrf-token"]');
+                if (meta) csrf_token = meta.content;
+                if (!csrf_token) {
+                    let el = document.querySelector('input[name="_token"]');
+                    if (el) csrf_token = el.value;
+                }
+                
+                // Try getting username
+                let userEl = document.querySelector('.dropdown-user .username') || 
+                             document.querySelector('.user-panel .info p');
+                if (userEl) user_name = userEl.innerText.trim();
+                
+                return {gc_token, csrf_token, user_name};
+            }''')
+            
+            result = {
+                "status": "success",
+                "cookie_header": cookie_str,
+                "cookies": cookie_dict,
+                "gc_token": tokens.get('gc_token', ''),
+                "csrf_token": tokens.get('csrf_token', ''),
+                "user_name": tokens.get('user_name', 'Python User'),
+                "user_agent": user_agents
+            }
+            
+            # Print JSON specific marker for Flutter to parse
+            print("\n---JSON_START---")
+            print(json.dumps(result))
+            print("---JSON_END---\n")
+            
             return page, browser  # Mengembalikan halaman dan browser untuk menjaga sesi
         else:
             print("Login gagal. Periksa kredensial.")
