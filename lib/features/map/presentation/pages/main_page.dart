@@ -261,6 +261,8 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isLargeScreen = MediaQuery.of(context).size.width > 600;
+
     return Scaffold(
       body: Stack(
         children: [
@@ -274,9 +276,9 @@ class _MainPageState extends State<MainPage> {
               children: [
                 DashboardPage(mapController: _sharedMapController),
                 const GroundcheckHistoryPage(), // This seems unused in tabs but part of stack
-                _isMitra
-                    ? const SizedBox.shrink() // Hide GC page for mitra
-                    : GroundcheckPage(onGoToMap: _focusGroundcheckLocation),
+                (!_isMitra && isLargeScreen)
+                    ? GroundcheckPage(onGoToMap: _focusGroundcheckLocation)
+                    : const SizedBox.shrink(), // Hide GC page for mitra or small screen
               ],
             ),
           ),
@@ -405,7 +407,7 @@ class _MainPageState extends State<MainPage> {
             icon: Icon(Icons.add_circle_outline),
             label: 'Kontribusi',
           ),
-          if (!_isMitra)
+          if (!_isMitra && isLargeScreen)
             const BottomNavigationBarItem(
               icon: Icon(Icons.fact_check_outlined),
               label: 'Groundcheck',

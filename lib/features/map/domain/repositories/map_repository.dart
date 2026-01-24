@@ -54,8 +54,8 @@ abstract class MapRepository {
   Future<String?> insertDirectoryAndGetId(DirektoriModel directory);
   Future<bool> updateDirectory(DirektoriModel directory);
   Future<DirektoriModel?> getDirectoryById(String id);
-  // New method to support delete-or-close behavior per id_sbr
-  Future<bool> deleteOrCloseDirectoryById(String id);
+  // New method to support delete-or-close behavior per idsbr
+  Future<bool> deleteOrCloseDirectoryById(String idsbr);
   // Get KBLI title by code
   Future<String?> getKbliJudul(String kodeKbli);
   Future<bool> markDirectoryAsDuplicate(String id, String parentIdSbr);

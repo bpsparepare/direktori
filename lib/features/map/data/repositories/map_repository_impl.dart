@@ -1116,78 +1116,19 @@ class MapRepositoryImpl implements MapRepository {
     return uuidRegex.hasMatch(input);
   }
 
-  // New method: delete if id_sbr == 0 or empty, else mark closed (keberadaan_usaha = 4)
+  // New method: delete if idsbr == 0 or empty/TEMP, else mark closed (gcs_result = 4)
   @override
-  Future<bool> deleteOrCloseDirectoryById(String idOrIdSbr) async {
+  Future<bool> deleteOrCloseDirectoryById(String idsbr) async {
     try {
-      var query = _supabaseClient.from('direktori').select('id,id_sbr');
+      // Gunakan GroundcheckSupabaseService untuk memastikan konsistensi data lokal & remote
+      final service = GroundcheckSupabaseService();
+      final result = await service.deleteOrCloseRecord(idsbr);
 
-      if (_isUuid(idOrIdSbr)) {
-        query = query.eq('id', idOrIdSbr);
-      } else {
-        query = query.eq('id_sbr', idOrIdSbr);
-      }
-
-      final response = await query.limit(1);
-
-      if (response is List && response.isNotEmpty) {
-        final row = response.first as Map<String, dynamic>;
-        final String realId = row['id'] as String; // The UUID
-        final dynamic idSbrVal = row['id_sbr'];
-
-        // Cek apakah id_sbr kosong, 0, atau sama dengan ID input (kasus TEMP)
-        // Jika ID input adalah TEMP-..., maka id_sbrVal pasti sama.
-        // Kita anggap "pending" atau "temporary" jika id_sbr-nya terlihat tidak valid atau generated.
-        // Namun logic aslinya: delete jika id_sbr kosong/0.
-        // Untuk kasus TEMP, user ingin menghapus marker tambahan. Marker tambahan biasanya punya id_sbr = TEMP...
-        // Apakah marker tambahan harus dihapus permanen (DELETE) atau soft delete (TUTUP)?
-        // User bilang "Hapus Marker Tambahan", dan logic UI memanggil ini untuk gcsResult='5'.
-        // Jika gcsResult='5', itu biasanya data baru yang belum verified. Jadi DELETE fisik masuk akal.
-
-        final bool isTempOrPending =
-            idSbrVal == null ||
-            idSbrVal == '' ||
-            idSbrVal == '0' ||
-            idSbrVal == 0 ||
-            idSbrVal.toString().startsWith('TEMP-');
-
-        if (isTempOrPending) {
-          await _supabaseClient.from('direktori').delete().eq('id', realId);
-        } else {
-          await _supabaseClient
-              .from('direktori')
-              .update({
-                'keberadaan_usaha': 4, // 4 = Tutup
-                'updated_at': DateTime.now().toIso8601String(),
-              })
-              .eq('id', realId);
-        }
-        invalidatePlacesCache();
-        return true;
-      }
-
-      debugPrint('MapRepository: No direktori found with id/idsbr: $idOrIdSbr');
-      return false;
+      // Invalidate map cache agar marker di peta terupdate
+      invalidatePlacesCache();
+      return result;
     } catch (e) {
       debugPrint('MapRepository: Error deleteOrCloseDirectoryById: $e');
-      return false;
-    }
-  }
-
-  // Update only keberadaan_usaha field for a directory
-  Future<bool> updateDirectoryStatus(String id, int status) async {
-    try {
-      await _supabaseClient
-          .from('direktori')
-          .update({
-            'keberadaan_usaha': status,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', id);
-      invalidatePlacesCache();
-      return true;
-    } catch (e) {
-      debugPrint('MapRepository: Error updateDirectoryStatus: $e');
       return false;
     }
   }

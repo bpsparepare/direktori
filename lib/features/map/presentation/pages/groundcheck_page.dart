@@ -32,6 +32,7 @@ class GroundcheckRecord {
   final String perusahaanId;
   final String? userId;
   final bool isUploaded;
+  final bool isRevisi;
 
   GroundcheckRecord({
     required this.idsbr,
@@ -46,6 +47,7 @@ class GroundcheckRecord {
     required this.perusahaanId,
     this.userId,
     this.isUploaded = false,
+    this.isRevisi = false,
   });
 
   factory GroundcheckRecord.fromJson(Map<String, dynamic> json) {
@@ -66,6 +68,7 @@ class GroundcheckRecord {
       perusahaanId: perusahaan,
       userId: json['user_id']?.toString(),
       isUploaded: json['isUploaded'] == true,
+      isRevisi: json['is_revisi'] == true || json['isRevisi'] == true,
     );
   }
 
@@ -83,7 +86,40 @@ class GroundcheckRecord {
       'perusahaan_id': perusahaanId,
       'user_id': userId,
       'isUploaded': isUploaded,
+      'isRevisi': isRevisi,
     };
+  }
+
+  GroundcheckRecord copyWith({
+    String? idsbr,
+    String? namaUsaha,
+    String? alamatUsaha,
+    String? kodeWilayah,
+    String? statusPerusahaan,
+    String? skalaUsaha,
+    String? gcsResult,
+    String? latitude,
+    String? longitude,
+    String? perusahaanId,
+    String? userId,
+    bool? isUploaded,
+    bool? isRevisi,
+  }) {
+    return GroundcheckRecord(
+      idsbr: idsbr ?? this.idsbr,
+      namaUsaha: namaUsaha ?? this.namaUsaha,
+      alamatUsaha: alamatUsaha ?? this.alamatUsaha,
+      kodeWilayah: kodeWilayah ?? this.kodeWilayah,
+      statusPerusahaan: statusPerusahaan ?? this.statusPerusahaan,
+      skalaUsaha: skalaUsaha ?? this.skalaUsaha,
+      gcsResult: gcsResult ?? this.gcsResult,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      perusahaanId: perusahaanId ?? this.perusahaanId,
+      userId: userId ?? this.userId,
+      isUploaded: isUploaded ?? this.isUploaded,
+      isRevisi: isRevisi ?? this.isRevisi,
+    );
   }
 }
 
@@ -113,6 +149,17 @@ class GroundcheckDataSource extends DataGridSource {
       cells: row.getCells().map((cell) {
         if (cell.columnName == 'isUploaded') {
           final isUploaded = cell.value as bool? ?? false;
+          final isRevisi = record?.isRevisi ?? false;
+
+          if (isRevisi) {
+            return const Center(
+              child: Tooltip(
+                message: 'Perlu Kirim Ulang (Revisi)',
+                child: Icon(Icons.sync_problem, color: Colors.orange, size: 20),
+              ),
+            );
+          }
+
           return Center(
             child: Icon(
               isUploaded ? Icons.cloud_done : Icons.cloud_off,
@@ -1737,6 +1784,9 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       for (final row in selected) {
         final record = _dataSource?.getRecord(row);
         if (record != null) {
+          // Cek apakah perlu status revisi (jika sudah diupload sebelumnya)
+          final bool shouldBeRevisi = record.isUploaded || record.isRevisi;
+
           final updated = GroundcheckRecord(
             idsbr: record.idsbr,
             namaUsaha: record.namaUsaha,
@@ -1750,6 +1800,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
             perusahaanId: record.perusahaanId,
             userId: record.userId,
             isUploaded: false, // Reset status upload karena data berubah
+            isRevisi: shouldBeRevisi,
           );
 
           // Update local list
@@ -2428,9 +2479,10 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: _dataGridController.selectedRows.isNotEmpty
           ? Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 FloatingActionButton.extended(
                   heroTag: 'fab_edit',

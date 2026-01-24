@@ -633,10 +633,12 @@ class _DirektoriDataGridState extends State<DirektoriDataGrid> {
           _batchDuplicateParent.trim(),
         );
       } else {
-        ok = await MapRepositoryImpl().updateDirectoryStatus(
-          id,
-          _batchSelectedStatus!,
-        );
+        // ok = await MapRepositoryImpl().updateDirectoryStatus(
+        //   id,
+        //   _batchSelectedStatus!,
+        // );
+        // Deprecated: Tabel direktori sudah tidak digunakan.
+        ok = false;
         final cleared = await MapRepositoryImpl().clearDirectoryDuplicateParent(
           id,
         );
@@ -1939,11 +1941,9 @@ class _DirektoriDataGridSource extends DataGridSource {
                             okStatus = await MapRepositoryImpl()
                                 .markDirectoryAsDuplicate(id, parent ?? '');
                           } else {
-                            okStatus = await MapRepositoryImpl()
-                                .updateDirectoryStatus(
-                                  id,
-                                  _editedStatusById[id]!,
-                                );
+                            // Fitur update status direktori dinonaktifkan karena tabel direktori tidak lagi digunakan
+                            // dan digantikan oleh groundcheck_list
+                            okStatus = false;
                           }
                           if (okStatus) {
                             _setStatusForId(id, _editedStatusById[id]!);

@@ -167,6 +167,7 @@ class GroundcheckSupabaseService {
             perusahaanId: (json['perusahaan_id'] ?? '')
                 .toString(), // Missing in view
             userId: json['user_id']?.toString(),
+            isRevisi: json['is_revisi'] == true,
           );
         }).toList();
       }
@@ -291,6 +292,12 @@ class GroundcheckSupabaseService {
         'isUploaded': record.isUploaded,
       };
 
+      // Logic is_revisi: Jika data sudah diupload (isUploaded=true) dan ada update,
+      // maka tandai sebagai revisi. Atau jika memang sudah status revisi.
+      if (record.isUploaded || record.isRevisi) {
+        data['is_revisi'] = true;
+      }
+
       if (updateTimestamp) {
         data['updated_at'] = DateTime.now().toIso8601String();
       }
@@ -302,7 +309,11 @@ class GroundcheckSupabaseService {
       await _client.from(_tableName).upsert(data, onConflict: 'idsbr');
 
       // Update local cache
-      await updateLocalRecord(record);
+      // Pastikan status isRevisi tersimpan di lokal jika berubah
+      final recordToSave = (record.isUploaded && !record.isRevisi)
+          ? record.copyWith(isRevisi: true)
+          : record;
+      await updateLocalRecord(recordToSave);
     } catch (e) {
       print('Error updateRecord: $e');
       // Handle error but try to update local cache anyway if it's a network error?
@@ -365,33 +376,35 @@ class GroundcheckSupabaseService {
     required double longitude,
   }) async {
     try {
-      await _client
-          .from(_tableName)
-          .update({
-            'latitude': latitude.toString(),
-            'longitude': longitude.toString(),
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('idsbr', idsbr);
+      // Prepare update data
+      final updateData = <String, dynamic>{
+        'latitude': latitude.toString(),
+        'longitude': longitude.toString(),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
 
-      // Update local cache
+      // Check local cache for isUploaded status
       final records = await loadLocalRecords();
       final index = records.indexWhere((r) => r.idsbr == idsbr);
+      bool shouldSetRevisi = false;
+
       if (index != -1) {
         final old = records[index];
-        final newRecord = GroundcheckRecord(
-          idsbr: old.idsbr,
-          namaUsaha: old.namaUsaha,
-          alamatUsaha: old.alamatUsaha,
-          kodeWilayah: old.kodeWilayah,
-          statusPerusahaan: old.statusPerusahaan,
-          skalaUsaha: old.skalaUsaha,
-          gcsResult: old.gcsResult,
+        if (old.isUploaded || old.isRevisi) {
+          updateData['is_revisi'] = true;
+          shouldSetRevisi = true;
+        }
+      }
+
+      await _client.from(_tableName).update(updateData).eq('idsbr', idsbr);
+
+      // Update local cache
+      if (index != -1) {
+        final old = records[index];
+        final newRecord = old.copyWith(
           latitude: latitude.toString(),
           longitude: longitude.toString(),
-          perusahaanId: old.perusahaanId,
-          userId: old.userId,
-          isUploaded: old.isUploaded,
+          isRevisi: shouldSetRevisi ? true : old.isRevisi,
         );
         records[index] = newRecord;
         await saveLocalRecords(records);
@@ -429,25 +442,19 @@ class GroundcheckSupabaseService {
       // 1. Update Local Cache First
       final records = await loadLocalRecords();
       final index = records.indexWhere((r) => r.idsbr == idsbr);
+      bool shouldSetRevisi = false;
 
       if (index != -1) {
         if (isTemp) {
           records.removeAt(index);
         } else {
           final old = records[index];
-          records[index] = GroundcheckRecord(
-            idsbr: old.idsbr,
-            namaUsaha: old.namaUsaha,
-            alamatUsaha: old.alamatUsaha,
-            kodeWilayah: old.kodeWilayah,
-            statusPerusahaan: old.statusPerusahaan,
-            skalaUsaha: old.skalaUsaha,
+          if (old.isUploaded || old.isRevisi) {
+            shouldSetRevisi = true;
+          }
+          records[index] = old.copyWith(
             gcsResult: '3', // Tutup
-            latitude: old.latitude,
-            longitude: old.longitude,
-            perusahaanId: old.perusahaanId,
-            userId: old.userId,
-            isUploaded: old.isUploaded,
+            isRevisi: shouldSetRevisi ? true : old.isRevisi,
           );
         }
         await saveLocalRecords(records);
@@ -457,13 +464,14 @@ class GroundcheckSupabaseService {
       if (isTemp) {
         await _client.from(_tableName).delete().eq('idsbr', idsbr);
       } else {
-        await _client
-            .from(_tableName)
-            .update({
-              'gcs_result': '3', // Tutup
-              'updated_at': DateTime.now().toIso8601String(),
-            })
-            .eq('idsbr', idsbr);
+        final updateData = <String, dynamic>{
+          'gcs_result': '3', // Tutup
+          'updated_at': DateTime.now().toIso8601String(),
+        };
+        if (shouldSetRevisi) {
+          updateData['is_revisi'] = true;
+        }
+        await _client.from(_tableName).update(updateData).eq('idsbr', idsbr);
       }
 
       return true;
@@ -484,10 +492,25 @@ class GroundcheckSupabaseService {
     String? alamatUsaha,
   }) async {
     try {
-      final data = {
+      // Check local for isUploaded status
+      final records = await loadLocalRecords();
+      final index = records.indexWhere((r) => r.idsbr == idsbr);
+      bool shouldSetRevisi = false;
+      if (index != -1) {
+        final old = records[index];
+        if (old.isUploaded || old.isRevisi) {
+          shouldSetRevisi = true;
+        }
+      }
+
+      final data = <String, dynamic>{
         'gcs_result': hasilGc,
         'updated_at': DateTime.now().toIso8601String(),
       };
+      if (shouldSetRevisi) {
+        data['is_revisi'] = true;
+      }
+
       if (userId != null) {
         data['user_id'] = userId;
       }
@@ -500,23 +523,14 @@ class GroundcheckSupabaseService {
       await _client.from(_tableName).update(data).eq('idsbr', idsbr);
 
       // Update local cache
-      final records = await loadLocalRecords();
-      final index = records.indexWhere((r) => r.idsbr == idsbr);
       if (index != -1) {
         final old = records[index];
-        final newRecord = GroundcheckRecord(
-          idsbr: old.idsbr,
+        final newRecord = old.copyWith(
           namaUsaha: namaUsaha ?? old.namaUsaha,
           alamatUsaha: alamatUsaha ?? old.alamatUsaha,
-          kodeWilayah: old.kodeWilayah,
-          statusPerusahaan: old.statusPerusahaan,
-          skalaUsaha: old.skalaUsaha,
           gcsResult: hasilGc,
-          latitude: old.latitude,
-          longitude: old.longitude,
-          perusahaanId: old.perusahaanId,
           userId: userId ?? old.userId,
-          isUploaded: old.isUploaded,
+          isRevisi: shouldSetRevisi ? true : old.isRevisi,
         );
         records[index] = newRecord;
         await saveLocalRecords(records);
