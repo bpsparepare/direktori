@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/version_check_service.dart';
 import '../utils/browser_utils.dart';
@@ -82,11 +83,48 @@ class _VersionCheckWrapperState extends State<VersionCheckWrapper>
                 } else {
                   if (info.downloadUrl != null) {
                     final uri = Uri.parse(info.downloadUrl!);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(
+                    try {
+                      // Coba buka di aplikasi eksternal (Browser/Google Drive App)
+                      if (!await launchUrl(
                         uri,
                         mode: LaunchMode.externalApplication,
+                      )) {
+                        throw 'Could not launch $uri';
+                      }
+                    } catch (e) {
+                      debugPrint(
+                        'Gagal membuka external, mencoba mode in-app: $e',
                       );
+                      try {
+                        // Fallback: Coba buka dengan mode default (bisa WebView)
+                        if (!await launchUrl(
+                          uri,
+                          mode: LaunchMode.platformDefault,
+                        )) {
+                          throw 'Could not launch fallback $uri';
+                        }
+                      } catch (e2) {
+                        debugPrint('Gagal membuka link update: $e2');
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text(
+                                'Gagal membuka link. Link disalin ke clipboard.',
+                              ),
+                              action: SnackBarAction(
+                                label: 'Salin Manual',
+                                onPressed: () {
+                                  // Clipboard handling
+                                },
+                              ),
+                            ),
+                          );
+                          // Salin ke clipboard otomatis
+                          await Clipboard.setData(
+                            ClipboardData(text: info.downloadUrl!),
+                          );
+                        }
+                      }
                     }
                   }
                 }
