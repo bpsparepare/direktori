@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_dragmarker/flutter_map_dragmarker.dart';
 import 'package:latlong2/latlong.dart';
 import '../../domain/entities/map_config.dart';
+import '../../../../core/utils/map_utils.dart';
 import '../../domain/entities/place.dart';
 import '../../domain/entities/polygon_data.dart';
 import 'map_controls.dart';
@@ -508,7 +509,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                               icon = Icons.block;
                               break;
                             case '4': // Ganda
-                              baseColor = Colors.purple;
+                              baseColor = Colors.deepPurpleAccent;
                               icon = Icons.content_copy;
                               break;
                             case '5': // Usaha Baru
@@ -898,22 +899,6 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     );
   }
 
-  bool _isPointInPolygon(LatLng point, List<LatLng> polygon) {
-    bool c = false;
-    for (int i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-      if (((polygon[i].latitude > point.latitude) !=
-              (polygon[j].latitude > point.latitude)) &&
-          (point.longitude <
-              (polygon[j].longitude - polygon[i].longitude) *
-                      (point.latitude - polygon[i].latitude) /
-                      (polygon[j].latitude - polygon[i].latitude) +
-                  polygon[i].longitude)) {
-        c = !c;
-      }
-    }
-    return c;
-  }
-
   List<Place> _placesForRender(List<Place> input) {
     // 1. Filter by Polygon (Single or Multiple)
     List<Place> filteredByPolygon = input;
@@ -922,13 +907,13 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
       // Filter for Multiple Polygons (Kelurahan)
       filteredByPolygon = input.where((p) {
         return widget.selectedPolygons.any((poly) {
-          return _isPointInPolygon(p.position, poly.points);
+          return MapUtils.isPointInPolygon(p.position, poly.points);
         });
       }).toList();
     } else if (widget.polygon.isNotEmpty) {
       // Filter for Single Polygon (SLS)
       filteredByPolygon = input.where((p) {
-        return _isPointInPolygon(p.position, widget.polygon);
+        return MapUtils.isPointInPolygon(p.position, widget.polygon);
       }).toList();
     }
 

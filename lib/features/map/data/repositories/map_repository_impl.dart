@@ -19,6 +19,7 @@ class MapRepositoryImpl implements MapRepository {
   final SupabaseClient _supabaseClient = SupabaseConfig.client;
   static List<Place>? _allPlacesCache;
   static final Map<String, List<Place>> _boundsCache = {};
+  static Future<List<Place>>? _placesLoadingFuture;
 
   // Cache methods removed to use GroundcheckSupabaseService as single source of truth
 
@@ -31,9 +32,6 @@ class MapRepositoryImpl implements MapRepository {
         final p = _recordToPlace(r);
         if (p != null) places.add(p);
       }
-      debugPrint(
-        'MapRepository: Loaded ${places.length} places from Groundcheck cache',
-      );
       return places;
     } catch (e) {
       debugPrint('MapRepository: Error loading local places: $e');
@@ -58,7 +56,7 @@ class MapRepositoryImpl implements MapRepository {
     // Pusat peta di Parepare
     return const MapConfig(
       center: LatLng(-4.0328772052560335, 119.63160510345742),
-      zoom: 13,
+      zoom: 15,
       // Default offset untuk Esri satellite maps
       // Nilai disesuaikan berdasarkan hasil debug: X: -4.6, Y: 15
       defaultOffsetX: -32,
@@ -630,19 +628,33 @@ class MapRepositoryImpl implements MapRepository {
     try {
       if (_allPlacesCache != null) return _allPlacesCache!;
 
-      final local = await _loadPlacesFromLocal();
-      if (local.isNotEmpty) {
-        _allPlacesCache = local;
-        debugPrint(
-          'MapRepository: Loaded ${local.length} places from local cache',
-        );
-        return local;
+      // Prevent concurrent loading
+      if (_placesLoadingFuture != null) {
+        return _placesLoadingFuture!;
       }
 
-      // If no local cache, do full refresh
-      return refreshPlaces(onlyToday: false);
+      _placesLoadingFuture = (() async {
+        final local = await _loadPlacesFromLocal();
+        if (local.isNotEmpty) {
+          _allPlacesCache = local;
+          debugPrint(
+            'MapRepository: Loaded ${local.length} places from local cache',
+          );
+          return local;
+        }
+
+        // If no local cache, do full refresh
+        final refreshed = await refreshPlaces(onlyToday: false);
+        _allPlacesCache = refreshed;
+        return refreshed;
+      })();
+
+      final result = await _placesLoadingFuture!;
+      _placesLoadingFuture = null; // Reset future
+      return result;
     } catch (e) {
       debugPrint('MapRepository: Error fetching groundcheck places: $e');
+      _placesLoadingFuture = null;
       return [];
     }
   }
@@ -715,12 +727,7 @@ class MapRepositoryImpl implements MapRepository {
   ) async {
     try {
       if (_allPlacesCache == null) {
-        final local = await _loadPlacesFromLocal();
-        if (local.isNotEmpty) {
-          _allPlacesCache = local;
-        } else {
-          await refreshPlaces(onlyToday: false);
-        }
+        await getPlaces();
       }
 
       final key = _boundsKey(south, north, west, east);
@@ -970,11 +977,79 @@ class MapRepositoryImpl implements MapRepository {
     );
   }
 
+  static final Map<String, List<PolygonData>> _polygonCache = {};
+  static List<PolygonData>? _cachedMetadata;
+  static Map<String, List<LatLng>>? _cachedGeometries;
+
+  @override
+  Future<List<LatLng>> getPolygonPoints(String idsls) async {
+    if (_cachedGeometries == null) {
+      try {
+        debugPrint('GeoJSON(points): loading optimized geometries...');
+        final jsonStr = await rootBundle.loadString(
+          'assets/geojson/final_sls_optimized.json',
+        );
+        _cachedGeometries = await compute(_parseOptimizedGeoJson, jsonStr);
+        debugPrint(
+          'GeoJSON(points): loaded geometries for ${_cachedGeometries!.length} polygons',
+        );
+      } catch (e) {
+        debugPrint('GeoJSON(points): load failed: $e');
+        return [];
+      }
+    }
+    return _cachedGeometries![idsls] ?? [];
+  }
+
   @override
   Future<List<PolygonData>> getAllPolygonsMetaFromGeoJson(
     String assetPath,
   ) async {
     final String cleanPath = assetPath.trim().replaceAll(RegExp(r'^"|\"$'), '');
+
+    // Use metadata file if requesting the standard SLS file
+    // NOTE: Disabled optimization because we need polygon points for "Identify SLS" feature
+    // in MapPage (isPointInPolygon check). Loading metadata only results in empty points.
+    /*
+    if (cleanPath.contains('final_sls.geojson')) {
+      if (_cachedMetadata != null) {
+        debugPrint('GeoJSON(list): returning cached metadata');
+        return _cachedMetadata!;
+      }
+
+      try {
+        debugPrint('GeoJSON(list): loading metadata from json...');
+        final jsonStr = await rootBundle.loadString(
+          'assets/json/sls_metadata.json',
+        );
+        final List<dynamic> list = json.decode(jsonStr);
+        _cachedMetadata = list.map((e) {
+          final map = e as Map<String, dynamic>;
+          return PolygonData(
+            points: const <LatLng>[], // Empty points initially
+            name: map['nmsls'],
+            kecamatan: map['nmkec'],
+            desa: map['nmdesa'],
+            idsls: map['idsls'],
+            kodePos: map['kode_pos']?.toString(),
+          );
+        }).toList();
+        debugPrint(
+          'GeoJSON(list): loaded ${_cachedMetadata!.length} metadata items',
+        );
+        return _cachedMetadata!;
+      } catch (e) {
+        debugPrint('GeoJSON(list): metadata load failed: $e');
+        // Fallback to normal loading if metadata fails
+      }
+    }
+    */
+
+    if (_polygonCache.containsKey(cleanPath)) {
+      debugPrint('GeoJSON(list): returning cached data for $cleanPath');
+      return _polygonCache[cleanPath]!;
+    }
+
     debugPrint('GeoJSON(list): attempting to load asset: $cleanPath');
     String jsonStr;
     try {
@@ -983,117 +1058,18 @@ class MapRepositoryImpl implements MapRepository {
       debugPrint('GeoJSON(list): loadString failed for $cleanPath: $e');
       rethrow;
     }
-    final dynamic data = json.decode(jsonStr);
 
-    final List<PolygonData> results = <PolygonData>[];
-
-    List<dynamic> features;
-    if (data is Map && data['features'] is List) {
-      features = data['features'] as List<dynamic>;
-    } else if (data is List) {
-      features = data;
-    } else if (data is Map) {
-      features = [data];
-    } else {
-      debugPrint('GeoJSON(list): unsupported root format');
-      return results;
-    }
-
-    for (final dynamic f in features) {
-      if (f is! Map<String, dynamic>) continue;
-      final Map<String, dynamic> feature = f;
-      final Map<String, dynamic>? properties =
-          feature['properties'] as Map<String, dynamic>?;
-      final String? name = properties != null
-          ? properties['nmsls'] as String?
-          : null;
-      final String? kec = properties != null
-          ? properties['nmkec'] as String?
-          : null;
-      final String? desa = properties != null
-          ? properties['nmdesa'] as String?
-          : null;
-      final String? idsls = properties != null
-          ? properties['idsls'] as String?
-          : null;
-      final String? kodePos = properties != null
-          ? properties['kode_pos']?.toString()
-          : null;
-
-      final Map<String, dynamic>? geometry =
-          feature['geometry'] as Map<String, dynamic>?;
-      if (geometry == null) {
-        results.add(
-          PolygonData(
-            points: const <LatLng>[],
-            name: name,
-            kecamatan: kec,
-            desa: desa,
-            idsls: idsls,
-            kodePos: kodePos,
-          ),
-        );
-        continue;
-      }
-      final String? type = geometry['type'] as String?;
-      final dynamic coordinates = geometry['coordinates'];
-
-      List<dynamic>? ring;
-      if (type == 'MultiPolygon') {
-        if (coordinates is List &&
-            coordinates.isNotEmpty &&
-            coordinates[0] is List &&
-            (coordinates[0] as List).isNotEmpty &&
-            (coordinates[0] as List)[0] is List) {
-          ring = (coordinates[0] as List)[0] as List;
-        }
-      } else if (type == 'Polygon') {
-        if (coordinates is List &&
-            coordinates.isNotEmpty &&
-            coordinates[0] is List) {
-          ring = coordinates[0] as List;
-        }
-      }
-
-      if (ring == null) {
-        debugPrint('GeoJSON(list): invalid geometry for a feature, type=$type');
-        results.add(
-          PolygonData(
-            points: const <LatLng>[],
-            name: name,
-            kecamatan: kec,
-            desa: desa,
-            idsls: idsls,
-            kodePos: kodePos,
-          ),
-        );
-        continue;
-      }
-
-      final List<LatLng> points = <LatLng>[];
-      for (final dynamic coord in ring) {
-        if (coord is List && coord.length >= 2) {
-          final double lon = (coord[0] as num).toDouble();
-          final double lat = (coord[1] as num).toDouble();
-          points.add(LatLng(lat, lon));
-        }
-      }
-      results.add(
-        PolygonData(
-          points: points,
-          name: name,
-          kecamatan: kec,
-          desa: desa,
-          idsls: idsls,
-          kodePos: kodePos,
-        ),
+    try {
+      final results = await compute(_parseGeoJsonList, jsonStr);
+      _polygonCache[cleanPath] = results;
+      debugPrint(
+        'GeoJSON(list): loaded ${results.length} polygons with names from $cleanPath',
       );
+      return results;
+    } catch (e) {
+      debugPrint('GeoJSON(list): parse failed for $cleanPath: $e');
+      return [];
     }
-
-    debugPrint(
-      'GeoJSON(list): loaded ${results.length} polygons with names from $cleanPath',
-    );
-    return results;
   }
 
   @override
@@ -1388,4 +1364,179 @@ class MapRepositoryImpl implements MapRepository {
       return [];
     }
   }
+}
+
+List<PolygonData> _parseGeoJsonList(String jsonStr) {
+  final dynamic data = json.decode(jsonStr);
+
+  final List<PolygonData> results = <PolygonData>[];
+
+  List<dynamic> features;
+  if (data is Map && data['features'] is List) {
+    features = data['features'] as List<dynamic>;
+  } else if (data is List) {
+    features = data;
+  } else if (data is Map) {
+    features = [data];
+  } else {
+    debugPrint('GeoJSON(list): unsupported root format');
+    return results;
+  }
+
+  for (final dynamic f in features) {
+    if (f is! Map<String, dynamic>) continue;
+    final Map<String, dynamic> feature = f;
+    final Map<String, dynamic>? properties =
+        feature['properties'] as Map<String, dynamic>?;
+    final String? name = properties != null
+        ? properties['nmsls'] as String?
+        : null;
+    final String? kec = properties != null
+        ? properties['nmkec'] as String?
+        : null;
+    final String? desa = properties != null
+        ? properties['nmdesa'] as String?
+        : null;
+    final String? idsls = properties != null
+        ? properties['idsls'] as String?
+        : null;
+    final String? kodePos = properties != null
+        ? properties['kode_pos']?.toString()
+        : null;
+
+    final Map<String, dynamic>? geometry =
+        feature['geometry'] as Map<String, dynamic>?;
+    if (geometry == null) {
+      results.add(
+        PolygonData(
+          points: const <LatLng>[],
+          name: name,
+          kecamatan: kec,
+          desa: desa,
+          idsls: idsls,
+          kodePos: kodePos,
+        ),
+      );
+      continue;
+    }
+    final String? type = geometry['type'] as String?;
+    final dynamic coordinates = geometry['coordinates'];
+
+    List<dynamic>? ring;
+    if (type == 'MultiPolygon') {
+      if (coordinates is List &&
+          coordinates.isNotEmpty &&
+          coordinates[0] is List &&
+          (coordinates[0] as List).isNotEmpty &&
+          (coordinates[0] as List)[0] is List) {
+        ring = (coordinates[0] as List)[0] as List;
+      }
+    } else if (type == 'Polygon') {
+      if (coordinates is List &&
+          coordinates.isNotEmpty &&
+          coordinates[0] is List) {
+        ring = coordinates[0] as List;
+      }
+    }
+
+    if (ring == null) {
+      debugPrint('GeoJSON(list): invalid geometry for a feature, type=$type');
+      results.add(
+        PolygonData(
+          points: const <LatLng>[],
+          name: name,
+          kecamatan: kec,
+          desa: desa,
+          idsls: idsls,
+          kodePos: kodePos,
+        ),
+      );
+      continue;
+    }
+
+    final List<LatLng> points = <LatLng>[];
+    for (final dynamic coord in ring) {
+      if (coord is List && coord.length >= 2) {
+        final double lon = (coord[0] as num).toDouble();
+        final double lat = (coord[1] as num).toDouble();
+        points.add(LatLng(lat, lon));
+      }
+    }
+    results.add(
+      PolygonData(
+        points: points,
+        name: name,
+        kecamatan: kec,
+        desa: desa,
+        idsls: idsls,
+        kodePos: kodePos,
+      ),
+    );
+  }
+  return results;
+}
+
+Map<String, List<LatLng>> _parseOptimizedGeoJson(String jsonStr) {
+  final dynamic data = json.decode(jsonStr);
+  final Map<String, List<LatLng>> results = {};
+
+  List<dynamic> features;
+  if (data is Map && data['features'] is List) {
+    features = data['features'] as List<dynamic>;
+  } else {
+    return results;
+  }
+
+  for (final dynamic f in features) {
+    if (f is! Map<String, dynamic>) continue;
+    final Map<String, dynamic> feature = f;
+    final Map<String, dynamic>? properties =
+        feature['properties'] as Map<String, dynamic>?;
+    final String? idsls = properties != null
+        ? properties['idsls'] as String?
+        : null;
+
+    if (idsls == null) continue;
+
+    final Map<String, dynamic>? geometry =
+        feature['geometry'] as Map<String, dynamic>?;
+    if (geometry == null) continue;
+
+    final String? type = geometry['type'] as String?;
+    final dynamic coordinates = geometry['coordinates'];
+
+    List<dynamic> ring;
+    if (type == 'MultiPolygon') {
+      if (coordinates is List &&
+          coordinates.isNotEmpty &&
+          coordinates[0] is List &&
+          (coordinates[0] as List).isNotEmpty &&
+          (coordinates[0] as List)[0] is List) {
+        ring = (coordinates[0] as List)[0] as List;
+      } else {
+        continue;
+      }
+    } else if (type == 'Polygon') {
+      if (coordinates is List &&
+          coordinates.isNotEmpty &&
+          coordinates[0] is List) {
+        ring = coordinates[0] as List;
+      } else {
+        continue;
+      }
+    } else {
+      continue;
+    }
+
+    final List<LatLng> points = <LatLng>[];
+    for (final dynamic coord in ring) {
+      if (coord is List && coord.length >= 2) {
+        final double lon = (coord[0] as num).toDouble();
+        final double lat = (coord[1] as num).toDouble();
+        points.add(LatLng(lat, lon));
+      }
+    }
+    results[idsls] = points;
+  }
+  return results;
 }

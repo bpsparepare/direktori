@@ -2417,7 +2417,7 @@ class _DirektoriDataGridSource extends DataGridSource {
       String kdSls = '';
       try {
         final polygons = await repo.getAllPolygonsMetaFromGeoJson(
-          'assets/geojson/final_sls.geojson',
+          'assets/geojson/final_sls_optimized.json',
         );
         for (final polygon in polygons) {
           if (_isPointInPolygon(LatLng(result[0], result[1]), polygon.points)) {

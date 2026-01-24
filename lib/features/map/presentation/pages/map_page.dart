@@ -30,6 +30,7 @@ import '../../../contribution/presentation/bloc/contribution_event.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
 import '../../data/services/bps_gc_service.dart';
 import '../../data/services/gc_credentials_service.dart';
+import '../../../../core/utils/map_utils.dart';
 import 'groundcheck_page.dart';
 
 class MapPage extends StatelessWidget {
@@ -1918,7 +1919,7 @@ class MapPage extends StatelessWidget {
                     .state
                     .polygonsMeta;
                 for (final polygon in polygons) {
-                  if (_isPointInPolygon(point, polygon.points)) {
+                  if (MapUtils.isPointInPolygon(point, polygon.points)) {
                     idSls = polygon.idsls ?? '';
                     namaSls = polygon.name;
                     break;
@@ -2082,97 +2083,148 @@ class MapPage extends StatelessWidget {
     final String latDMS = _convertToDMS(point.latitude, true);
     final String lngDMS = _convertToDMS(point.longitude, false);
 
-    // Use the passed MapBloc instance
-    final state = mapBloc.state;
+    // Check if polygons data is stale (has metadata but no points)
+    // This happens if the app was hot-reloaded after we disabled the metadata-only optimization
+    final isStale =
+        mapBloc.state.polygonsMeta.isNotEmpty &&
+        mapBloc.state.polygonsMeta.first.points.isEmpty;
+
+    if (isStale) {
+      print(
+        '⚠️ [DEBUG] Stale polygon data detected (no points). Triggering reload...',
+      );
+      mapBloc.add(const PolygonsListRequested());
+    }
 
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Informasi Koordinat'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Koordinat Desimal:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text('Latitude: ${point.latitude.toStringAsFixed(6)}'),
-            Text('Longitude: ${point.longitude.toStringAsFixed(6)}'),
-            const SizedBox(height: 16),
-
-            const Text(
-              'Koordinat DMS:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text('Latitude: $latDMS'),
-            Text('Longitude: $lngDMS'),
-            const SizedBox(height: 16),
-
-            const Text(
-              'SLS Terpilih:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Builder(
-              builder: (builderContext) {
-                String? polygonInfo;
-                for (final polygon in state.polygonsMeta) {
-                  if (_isPointInPolygon(point, polygon.points)) {
-                    polygonInfo = '${polygon.name} (${polygon.idsls})';
-                    break;
-                  }
-                }
-
-                return polygonInfo != null
-                    ? Text('SLS: $polygonInfo')
-                    : const Text('Tidak ada SLS di lokasi ini');
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              context.read<MapBloc>().add(const TemporaryMarkerRemoved());
-            },
-            child: const Text('Tutup'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              context.read<MapBloc>().add(const TemporaryMarkerRemoved());
-              // Cari polygon di state yang sudah ada
-              for (int i = 0; i < state.polygonsMeta.length; i++) {
-                final polygon = state.polygonsMeta[i];
-                if (_isPointInPolygon(point, polygon.points)) {
-                  // Select polygon menggunakan mapBloc yang sudah diambil
-                  mapBloc.add(PolygonSelectedByIndex(i));
-
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('SLS ${polygon.name} telah dipilih'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                  return;
-                }
-              }
-
-              // Jika tidak ditemukan
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Tidak ada SLS di lokasi ini'),
-                  backgroundColor: Colors.orange,
+      builder: (dialogContext) => BlocBuilder<MapBloc, MapState>(
+        bloc: mapBloc,
+        builder: (context, state) {
+          return AlertDialog(
+            title: const Text('Informasi Koordinat'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Koordinat Desimal:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-              );
-            },
-            child: const Text('Pilih SLS'),
-          ),
-        ],
+                const SizedBox(height: 4),
+                Text('Latitude: ${point.latitude.toStringAsFixed(6)}'),
+                Text('Longitude: ${point.longitude.toStringAsFixed(6)}'),
+                const SizedBox(height: 16),
+
+                const Text(
+                  'Koordinat DMS:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text('Latitude: $latDMS'),
+                Text('Longitude: $lngDMS'),
+                const SizedBox(height: 16),
+
+                const Text(
+                  'SLS Terpilih:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Builder(
+                  builder: (builderContext) {
+                    // Show loading if we are reloading data
+                    if (state.polygonsMeta.isNotEmpty &&
+                        state.polygonsMeta.first.points.isEmpty) {
+                      return const Center(
+                        child: Column(
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 8),
+                            Text('Memuat data geometri SLS...'),
+                          ],
+                        ),
+                      );
+                    }
+
+                    String? polygonInfo;
+                    String? kodePosInfo;
+
+                    for (final polygon in state.polygonsMeta) {
+                      if (MapUtils.isPointInPolygon(point, polygon.points)) {
+                        polygonInfo = '${polygon.name} (${polygon.idsls})';
+                        kodePosInfo = polygon.kodePos;
+                        break;
+                      }
+                    }
+
+                    if (polygonInfo != null) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(polygonInfo),
+                          if (kodePosInfo != null &&
+                              kodePosInfo.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Kode Pos:',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(kodePosInfo),
+                          ],
+                        ],
+                      );
+                    }
+                    return const Text('Tidak ada SLS di lokasi ini');
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  mapBloc.add(const TemporaryMarkerRemoved());
+                },
+                child: const Text('Tutup'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  mapBloc.add(const TemporaryMarkerRemoved());
+
+                  bool found = false;
+                  for (int i = 0; i < state.polygonsMeta.length; i++) {
+                    final polygon = state.polygonsMeta[i];
+                    if (MapUtils.isPointInPolygon(point, polygon.points)) {
+                      mapBloc.add(PolygonSelectedByIndex(i));
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('SLS ${polygon.name} telah dipilih'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                      found = true;
+                      return;
+                    }
+                  }
+
+                  // Jika tidak ditemukan
+                  if (!found) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Tidak ada SLS di lokasi ini'),
+                        backgroundColor: Colors.orange,
+                      ),
+                    );
+                  }
+                },
+                child: const Text('Pilih SLS'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -2211,7 +2263,7 @@ class MapPage extends StatelessWidget {
       print('DEBUG: Total polygons in state for find: ${polygons.length}');
 
       for (final polygon in polygons) {
-        if (_isPointInPolygon(point, polygon.points)) {
+        if (MapUtils.isPointInPolygon(point, polygon.points)) {
           print('DEBUG: Found polygon in _findPolygonAtPoint: ${polygon.name}');
           return '${polygon.name} (${polygon.idsls})';
         }
@@ -2222,22 +2274,6 @@ class MapPage extends StatelessWidget {
       print('DEBUG: Error in _findPolygonAtPoint: $e');
       return null;
     }
-  }
-
-  bool _isPointInPolygon(LatLng point, List<LatLng> polygon) {
-    int intersectCount = 0;
-    for (int j = 0, i = 1; i < polygon.length; j = i++) {
-      if (((polygon[i].latitude > point.latitude) !=
-              (polygon[j].latitude > point.latitude)) &&
-          (point.longitude <
-              (polygon[j].longitude - polygon[i].longitude) *
-                      (point.latitude - polygon[i].latitude) /
-                      (polygon[j].latitude - polygon[i].latitude) +
-                  polygon[i].longitude)) {
-        intersectCount++;
-      }
-    }
-    return (intersectCount % 2) == 1;
   }
 
   void _selectPolygonAtPoint(BuildContext context, LatLng point) async {
@@ -2253,7 +2289,7 @@ class MapPage extends StatelessWidget {
 
       for (int i = 0; i < polygons.length; i++) {
         final polygon = polygons[i];
-        if (_isPointInPolygon(point, polygon.points)) {
+        if (MapUtils.isPointInPolygon(point, polygon.points)) {
           print('DEBUG: Found polygon at index $i: ${polygon.name}');
           // Select the polygon by index seperti pilih polygon biasa
           bloc.add(PolygonSelectedByIndex(i));
@@ -2339,7 +2375,7 @@ class MapPage extends StatelessWidget {
 
                 final polygons = context.read<MapBloc>().state.polygonsMeta;
                 for (final polygon in polygons) {
-                  if (_isPointInPolygon(point, polygon.points)) {
+                  if (MapUtils.isPointInPolygon(point, polygon.points)) {
                     idSls = polygon.idsls ?? '';
                     namaSls = polygon.name;
                     kodePos = polygon.kodePos;
@@ -5270,7 +5306,7 @@ class MapPage extends StatelessWidget {
 
     final polygons = mapBloc.state.polygonsMeta;
     for (final polygon in polygons) {
-      if (_isPointInPolygon(newPoint, polygon.points)) {
+      if (MapUtils.isPointInPolygon(newPoint, polygon.points)) {
         idSls = polygon.idsls ?? '';
         namaSls = polygon.name;
         kodePos = polygon.kodePos;
@@ -6071,6 +6107,7 @@ class MapPage extends StatelessWidget {
                           child: const Text('Simpan'),
                         ),
                       ),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
@@ -6188,7 +6225,7 @@ class MapPage extends StatelessWidget {
     // Find polygon at point to get regional data
     final polygons = mapBloc.state.polygonsMeta;
     for (final polygon in polygons) {
-      if (_isPointInPolygon(point, polygon.points)) {
+      if (MapUtils.isPointInPolygon(point, polygon.points)) {
         idSls = polygon.idsls ?? '';
         namaSls = polygon.name;
         kodePos = polygon.kodePos;
@@ -6604,7 +6641,7 @@ class MapPage extends StatelessWidget {
       print('📊 [DEBUG] Jumlah polygon tersedia: ${polygons.length}');
 
       for (final polygon in polygons) {
-        if (_isPointInPolygon(point, polygon.points)) {
+        if (MapUtils.isPointInPolygon(point, polygon.points)) {
           idSls = polygon.idsls ?? '';
           namaSls = polygon.name; // Mengambil nama SLS dari polygon
           kodePos = polygon.kodePos; // Ambil kode pos dari GeoJSON
@@ -7065,7 +7102,7 @@ class MapPage extends StatelessWidget {
     // Find polygon at point to get regional data
     final polygons = mapBloc.state.polygonsMeta;
     for (final polygon in polygons) {
-      if (_isPointInPolygon(point, polygon.points)) {
+      if (MapUtils.isPointInPolygon(point, polygon.points)) {
         idSls = polygon.idsls ?? '';
         namaSls = polygon.name;
         kodePos = polygon.kodePos;

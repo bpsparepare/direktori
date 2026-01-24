@@ -11,6 +11,7 @@ import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
 import '../../data/repositories/map_repository_impl.dart';
+import '../../data/services/groundcheck_supabase_service.dart';
 import '../../domain/entities/place.dart';
 import '../../domain/usecases/get_initial_map_config.dart';
 import '../../domain/usecases/get_places.dart';
@@ -34,6 +35,8 @@ class _MainPageState extends State<MainPage> {
   final FocusNode _searchFocusNode = FocusNode();
   List<Place> _searchResults = [];
   List<Place> _allPlaces = [];
+  bool _isMitra = false;
+  bool _loadingRole = true;
 
   @override
   void initState() {
@@ -41,6 +44,18 @@ class _MainPageState extends State<MainPage> {
     _sharedMapController = MapController();
     _selectedIndex = widget.initialTabIndex ?? 0;
     _loadPlaces();
+    _checkUserRole();
+  }
+
+  Future<void> _checkUserRole() async {
+    final service = GroundcheckSupabaseService();
+    final role = await service.fetchCurrentUserRole();
+    if (mounted) {
+      setState(() {
+        _isMitra = (role == 'mitra');
+        _loadingRole = false;
+      });
+    }
   }
 
   @override
@@ -221,6 +236,12 @@ class _MainPageState extends State<MainPage> {
   }
 
   Widget _buildOverlayContent() {
+    // If mitra, max index is 2 (0: Jelajah, 1: Dashboard, 2: Kontribusi)
+    // If user tries to access index 3 (Groundcheck), fallback to 0
+    if (_isMitra && _selectedIndex > 2) {
+      _selectedIndex = 0;
+    }
+
     switch (_selectedIndex) {
       case 0:
         return MapPage(mapController: _sharedMapController);
@@ -229,7 +250,10 @@ class _MainPageState extends State<MainPage> {
       case 2:
         return const ContributionPage();
       case 3:
-        return GroundcheckPage(onGoToMap: _focusGroundcheckLocation);
+        // Only accessible if not mitra
+        return _isMitra
+            ? MapPage(mapController: _sharedMapController)
+            : GroundcheckPage(onGoToMap: _focusGroundcheckLocation);
       default:
         return MapPage(mapController: _sharedMapController);
     }
@@ -249,8 +273,10 @@ class _MainPageState extends State<MainPage> {
               index: _selectedIndex == 0 ? 0 : _selectedIndex - 1,
               children: [
                 DashboardPage(mapController: _sharedMapController),
-                const GroundcheckHistoryPage(),
-                GroundcheckPage(onGoToMap: _focusGroundcheckLocation),
+                const GroundcheckHistoryPage(), // This seems unused in tabs but part of stack
+                _isMitra
+                    ? const SizedBox.shrink() // Hide GC page for mitra
+                    : GroundcheckPage(onGoToMap: _focusGroundcheckLocation),
               ],
             ),
           ),
@@ -282,6 +308,10 @@ class _MainPageState extends State<MainPage> {
                         child: TextField(
                           controller: _searchController,
                           focusNode: _searchFocusNode,
+                          autofocus: false,
+                          onTapOutside: (event) {
+                            _searchFocusNode.unfocus();
+                          },
                           decoration: const InputDecoration(
                             hintText: 'Cari tempat...',
                             hintStyle: TextStyle(
@@ -362,20 +392,24 @@ class _MainPageState extends State<MainPage> {
         type: BottomNavigationBarType.fixed,
         selectedItemColor: Colors.blue,
         unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Jelajah'),
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.explore),
+            label: 'Jelajah',
+          ),
+          const BottomNavigationBarItem(
             icon: Icon(Icons.dashboard),
             label: 'Dashboard',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.add_circle_outline),
             label: 'Kontribusi',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.fact_check_outlined),
-            label: 'Groundcheck',
-          ),
+          if (!_isMitra)
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.fact_check_outlined),
+              label: 'Groundcheck',
+            ),
         ],
       ),
     );

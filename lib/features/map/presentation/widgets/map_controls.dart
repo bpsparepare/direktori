@@ -5,12 +5,14 @@ import 'package:latlong2/latlong.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
+import '../bloc/map_state.dart';
 import '../../data/repositories/map_repository_impl.dart';
 import '../../data/services/bps_gc_service.dart';
 import 'compass_widget.dart';
 import '../../domain/entities/polygon_data.dart';
 import 'map_type.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class MapControls extends StatefulWidget {
   final MapController mapController;
@@ -72,14 +74,26 @@ class MapControls extends StatefulWidget {
 
 class _MapControlsState extends State<MapControls> {
   bool _isLoadingLocation = false;
+  String _appVersion = '';
+  bool _hasPromptedDownload = false;
 
   @override
   void initState() {
     super.initState();
+    _loadAppVersion();
     // Auto-detect location when widget is initialized
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _getCurrentLocation();
     });
+  }
+
+  Future<void> _loadAppVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() {
+        _appVersion = 'v${info.version}';
+      });
+    }
   }
 
   Future<void> _getCurrentLocation() async {
@@ -201,65 +215,100 @@ class _MapControlsState extends State<MapControls> {
   }
 
   Future<void> _handleFullDownload(BuildContext context) async {
-    final prefs = await SharedPreferences.getInstance();
-    final lastRun = prefs.getInt('last_full_download_timestamp');
-    final now = DateTime.now().millisecondsSinceEpoch;
-    // Cooldown 30 menit
-    const cooldown = 30 * 60 * 1000;
-
-    if (lastRun != null && (now - lastRun) < cooldown) {
-      final remaining = Duration(milliseconds: cooldown - (now - lastRun));
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Harap tunggu ${remaining.inMinutes + 1} menit untuk download full lagi.',
-            ),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
-    if (!context.mounted) return;
-
+    // Show confirmation dialog
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Download Semua Data'),
+        title: const Text('Download Semua Data?'),
         content: const Text(
-          'Proses ini akan mengunduh ulang SELURUH data dari server.\n\n'
-          '• Membutuhkan waktu SANGAT LAMA\n'
-          '• Menghabiskan kuota data\n'
-          '• Aplikasi mungkin terasa berat saat proses\n\n'
-          'Disarankan menggunakan "Refresh Data Terbaru" jika hanya ingin update data harian.\n\n'
-          'Apakah Anda yakin ingin melanjutkan?',
+          'Ini akan menghapus data lokal dan mendownload ulang 48.000+ data.\n\n'
+          'Proses ini membutuhkan waktu lama dan kuota internet yang besar.\n'
+          'Aplikasi tidak dapat digunakan selama proses ini.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Batal'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Lanjutkan'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Download Ulang'),
           ),
         ],
       ),
     );
 
-    if (confirm == true && context.mounted) {
-      await prefs.setInt('last_full_download_timestamp', now);
-      context.read<MapBloc>().add(
-        const PlacesRefreshRequested(onlyToday: false),
-      );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Memulai download semua data...'),
-          duration: Duration(seconds: 2),
+    if (confirm != true) return;
+
+    // Show blocking progress dialog
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: Dialog(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                CircularProgressIndicator(),
+                SizedBox(height: 20),
+                Text(
+                  'Sedang mendownload data...',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Mohon tunggu, jangan tutup aplikasi.\nIni mungkin memakan waktu beberapa menit.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
         ),
-      );
+      ),
+    );
+
+    try {
+      // Trigger full sync via BLoC
+      // We use a completer mechanism or just wait for state change if possible,
+      // but here we just trigger and wait a bit, or ideally await the repository directly if we could.
+      // Since we are in UI, we can call repository directly or rely on Bloc listener.
+      // For simplicity and blocking UI, let's use the repository directly via context.read
+      // BUT, MapBloc handles the state. Let's send event and wait for completion.
+      // Actually, calling repository directly here is cleaner for "awaiting" the result to close dialog.
+
+      final repository = context.read<MapRepositoryImpl>();
+      await repository.refreshPlaces(onlyToday: false); // Force full sync logic
+
+      if (context.mounted) {
+        // Close progress dialog
+        Navigator.pop(context);
+
+        // Refresh UI state via Bloc
+        context.read<MapBloc>().add(const PlacesRequested());
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Download selesai! Data berhasil diperbarui.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // Close progress dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal mendownload data: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -295,58 +344,66 @@ class _MapControlsState extends State<MapControls> {
     return '${localDate.day}/${localDate.month} ${localDate.hour}:${localDate.minute.toString().padLeft(2, '0')}';
   }
 
+  Future<void> _showInitialDownloadPrompt(BuildContext context) async {
+    // DOUBLE CHECK: Cek repository langsung untuk memastikan data benar-benar kosong
+    // Ini mencegah popup muncul saat BLoC belum selesai memuat data tapi status sudah success
+    try {
+      final repository = context.read<MapRepositoryImpl>();
+      final places = await repository.getPlaces();
+      if (places.isNotEmpty) {
+        // Data sudah ada, batalkan popup
+        return;
+      }
+    } catch (e) {
+      debugPrint('Error checking repository in prompt: $e');
+    }
+
+    if (!mounted) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Download Data Awal'),
+        content: const Text(
+          'Database lokal kosong. Perlu mendownload data wilayah (±48.000 data).\n\n'
+          'Proses ini membutuhkan koneksi internet.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Nanti'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Download Sekarang'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      _handleFullDownload(context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Positioned(
       right: 16,
       top: 100,
-      child: Column(
-        children: [
-          // Map Type Selector
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: PopupMenuButton<MapType>(
-              icon: const Icon(Icons.layers, color: Colors.black87),
-              tooltip: 'Pilih Jenis Peta',
-              onSelected: (MapType mapType) {
-                widget.onMapTypeChanged?.call(mapType);
-              },
-              itemBuilder: (BuildContext context) =>
-                  MapType.values.map((MapType mapType) {
-                    return PopupMenuItem<MapType>(
-                      value: mapType,
-                      child: Row(
-                        children: [
-                          Icon(
-                            widget.currentMapType == mapType
-                                ? Icons.radio_button_checked
-                                : Icons.radio_button_unchecked,
-                            color: widget.currentMapType == mapType
-                                ? Colors.blue
-                                : Colors.grey,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(mapType.name),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Offset Controls (only show for Esri satellite)
-          if (widget.currentMapType == MapType.satellite)
+      child: BlocListener<MapBloc, MapState>(
+        listener: (context, state) {
+          if (!_hasPromptedDownload &&
+              state.status == MapStatus.success &&
+              state.places.isEmpty) {
+            _hasPromptedDownload = true;
+            _showInitialDownloadPrompt(context);
+          }
+        },
+        child: Column(
+          children: [
+            // Map Type Selector
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -359,279 +416,288 @@ class _MapControlsState extends State<MapControls> {
                   ),
                 ],
               ),
-              child: PopupMenuButton(
-                icon: const Icon(Icons.tune, color: Colors.black87),
-                tooltip: 'Sesuaikan Posisi Peta',
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    enabled: false,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'Sesuaikan Posisi Peta',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+              child: PopupMenuButton<MapType>(
+                icon: const Icon(Icons.layers, color: Colors.black87),
+                tooltip: 'Pilih Jenis Peta',
+                onSelected: (MapType mapType) {
+                  widget.onMapTypeChanged?.call(mapType);
+                },
+                itemBuilder: (BuildContext context) =>
+                    MapType.values.map((MapType mapType) {
+                      return PopupMenuItem<MapType>(
+                        value: mapType,
+                        child: Row(
+                          children: [
+                            Icon(
+                              widget.currentMapType == mapType
+                                  ? Icons.radio_button_checked
+                                  : Icons.radio_button_unchecked,
+                              color: widget.currentMapType == mapType
+                                  ? Colors.blue
+                                  : Colors.grey,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(mapType.name),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Offset Controls (only show for Esri satellite)
+            if (widget.currentMapType == MapType.satellite)
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: PopupMenuButton(
+                  icon: const Icon(Icons.tune, color: Colors.black87),
+                  tooltip: 'Sesuaikan Posisi Peta',
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      enabled: false,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Sesuaikan Posisi Peta',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        // X Offset Control
-                        Row(
+                          const SizedBox(height: 16),
+                          // X Offset Control
+                          Row(
+                            children: [
+                              const Text('X: '),
+                              Expanded(
+                                child: Slider(
+                                  value: widget.currentOffsetX,
+                                  min: -50.0,
+                                  max: 50.0,
+                                  divisions: 100,
+                                  label: widget.currentOffsetX.toStringAsFixed(
+                                    1,
+                                  ),
+                                  onChanged: (value) {
+                                    widget.onOffsetChanged?.call(
+                                      value,
+                                      widget.currentOffsetY,
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Y Offset Control
+                          Row(
+                            children: [
+                              const Text('Y: '),
+                              Expanded(
+                                child: Slider(
+                                  value: widget.currentOffsetY,
+                                  min: -50.0,
+                                  max: 50.0,
+                                  divisions: 100,
+                                  label: widget.currentOffsetY.toStringAsFixed(
+                                    1,
+                                  ),
+                                  onChanged: (value) {
+                                    widget.onOffsetChanged?.call(
+                                      widget.currentOffsetX,
+                                      value,
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Reset Button
+                          ElevatedButton(
+                            onPressed: () {
+                              widget.onOffsetChanged?.call(0.0, 0.0);
+                            },
+                            child: const Text('Reset'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 8),
+
+            // Compass Widget
+            CompassWidget(rotation: widget.rotation, onTap: _resetToNorth),
+            const SizedBox(height: 8),
+
+            // Current Location Button
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: IconButton(
+                onPressed: _isLoadingLocation ? null : _getCurrentLocation,
+                icon: _isLoadingLocation
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.my_location, color: Colors.green),
+                tooltip: 'Lokasi Saya',
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Refresh Markers Button
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: PopupMenuButton<String>(
+                icon: const Icon(Icons.refresh, color: Colors.black87),
+                tooltip: 'Refresh Marker',
+                onSelected: (value) {
+                  if (value == 'all') {
+                    _handleFullDownload(context);
+                  } else if (value == 'refresh') {
+                    // Incremental sync (default)
+                    // Use onlyToday: true to signal Incremental Sync (forceFull=false)
+                    context.read<MapBloc>().add(
+                      const PlacesRefreshRequested(onlyToday: true),
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Mengambil data terbaru...'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  }
+                },
+                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                  PopupMenuItem<String>(
+                    enabled: false,
+                    child: FutureBuilder<String>(
+                      future: _getLastIncrementalSyncText(),
+                      builder: (context, snapshot) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text('X: '),
-                            Expanded(
-                              child: Slider(
-                                value: widget.currentOffsetX,
-                                min: -50.0,
-                                max: 50.0,
-                                divisions: 100,
-                                label: widget.currentOffsetX.toStringAsFixed(1),
-                                onChanged: (value) {
-                                  widget.onOffsetChanged?.call(
-                                    value,
-                                    widget.currentOffsetY,
-                                  );
-                                },
+                            const Text(
+                              'Terakhir Update:',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            Text(
+                              snapshot.data ?? 'Memuat...',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.black87,
                               ),
                             ),
                           ],
-                        ),
-                        // Y Offset Control
-                        Row(
-                          children: [
-                            const Text('Y: '),
-                            Expanded(
-                              child: Slider(
-                                value: widget.currentOffsetY,
-                                min: -50.0,
-                                max: 50.0,
-                                divisions: 100,
-                                label: widget.currentOffsetY.toStringAsFixed(1),
-                                onChanged: (value) {
-                                  widget.onOffsetChanged?.call(
-                                    widget.currentOffsetX,
-                                    value,
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        // Reset Button
-                        ElevatedButton(
-                          onPressed: () {
-                            widget.onOffsetChanged?.call(0.0, 0.0);
-                          },
-                          child: const Text('Reset'),
-                        ),
-                      ],
+                        );
+                      },
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem<String>(
+                    value: 'refresh',
+                    child: ListTile(
+                      leading: Icon(Icons.sync),
+                      title: Text('Refresh Data'),
+                      subtitle: Text('Ambil update terbaru (Cepat)'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'all',
+                    child: ListTile(
+                      leading: Icon(Icons.cloud_download),
+                      title: Text('Download Semua Data'),
+                      subtitle: Text('Reset ulang database (Lama)'),
+                      contentPadding: EdgeInsets.zero,
                     ),
                   ),
                 ],
               ),
             ),
-          const SizedBox(height: 8),
-
-          // Compass Widget
-          CompassWidget(rotation: widget.rotation, onTap: _resetToNorth),
-          const SizedBox(height: 8),
-
-          // Current Location Button
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: IconButton(
-              onPressed: _isLoadingLocation ? null : _getCurrentLocation,
-              icon: _isLoadingLocation
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.my_location, color: Colors.green),
-              tooltip: 'Lokasi Saya',
-            ),
-          ),
-          const SizedBox(height: 8),
-          // Refresh Markers Button
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: PopupMenuButton<String>(
-              icon: const Icon(Icons.refresh, color: Colors.black87),
-              tooltip: 'Refresh Marker',
-              onSelected: (value) {
-                if (value == 'all') {
-                  _handleFullDownload(context);
-                } else if (value == 'today') {
-                  context.read<MapBloc>().add(
-                    const PlacesRefreshRequested(onlyToday: true),
-                  );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Mengambil data terbaru...'),
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
-                }
-              },
-              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                PopupMenuItem<String>(
-                  enabled: false,
-                  child: FutureBuilder<String>(
-                    future: _getLastIncrementalSyncText(),
-                    builder: (context, snapshot) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            'Terakhir Update:',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                          Text(
-                            snapshot.data ?? 'Memuat...',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-                const PopupMenuDivider(),
-                const PopupMenuItem<String>(
-                  value: 'today',
-                  child: ListTile(
-                    leading: Icon(Icons.sync),
-                    title: Text('Refresh Data Terbaru'),
-                    subtitle: Text('Ambil data sejak sync terakhir'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'all',
-                  child: ListTile(
-                    leading: Icon(Icons.cloud_download),
-                    title: Text('Download Semua Data'),
-                    subtitle: Text('Full load (sangat lama)'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          // Toggle Non-Verified Groundcheck Markers
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: IconButton(
-              onPressed: () {
-                if (widget.onToggleNonVerifiedGroundchecks != null) {
-                  widget.onToggleNonVerifiedGroundchecks!(
-                    !widget.showNonVerifiedGroundchecks,
-                  );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        !widget.showNonVerifiedGroundchecks
-                            ? 'Menampilkan semua hasil GC'
-                            : 'Menampilkan hanya GC yang sudah selesai (Kode 1)',
-                      ),
-                      duration: const Duration(milliseconds: 1000),
-                    ),
-                  );
-                }
-              },
-              icon: Icon(
-                widget.showNonVerifiedGroundchecks
-                    ? Icons.filter_alt_off
-                    : Icons.filter_alt,
-                color: widget.showNonVerifiedGroundchecks
-                    ? Colors.grey
-                    : Colors.blue,
-              ),
-              tooltip: 'Filter Status GC (Kode 1)',
-            ),
-          ),
-          const SizedBox(height: 8),
-          // Pilih Polygon FAB
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: _showPolygonSelection,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.select_all, color: Colors.blue, size: 20),
-                      // SizedBox(width: 6),
-                      // Text(
-                      //   'Pilih Polygon',
-                      //   style: TextStyle(
-                      //     color: Colors.blue,
-                      //     fontSize: 12,
-                      //     fontWeight: FontWeight.w500,
-                      //   ),
-                      // ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          if (widget.isPolygonSelected) ...[
             const SizedBox(height: 8),
-            // Hapus Pilihan FAB
+            // Toggle Non-Verified Groundcheck Markers
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: IconButton(
+                onPressed: () {
+                  if (widget.onToggleNonVerifiedGroundchecks != null) {
+                    widget.onToggleNonVerifiedGroundchecks!(
+                      !widget.showNonVerifiedGroundchecks,
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          !widget.showNonVerifiedGroundchecks
+                              ? 'Menampilkan semua hasil GC'
+                              : 'Menampilkan hanya GC yang sudah selesai (Kode 1)',
+                        ),
+                        duration: const Duration(milliseconds: 1000),
+                      ),
+                    );
+                  }
+                },
+                icon: Icon(
+                  widget.showNonVerifiedGroundchecks
+                      ? Icons.filter_alt_off
+                      : Icons.filter_alt,
+                  color: widget.showNonVerifiedGroundchecks
+                      ? Colors.grey
+                      : Colors.blue,
+                ),
+                tooltip: 'Filter Status GC (Kode 1)',
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Pilih Polygon FAB
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -648,7 +714,7 @@ class _MapControlsState extends State<MapControls> {
                 color: Colors.transparent,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(8),
-                  onTap: _clearPolygonSelection,
+                  onTap: _showPolygonSelection,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -657,15 +723,80 @@ class _MapControlsState extends State<MapControls> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: const [
-                        Icon(Icons.layers_clear, color: Colors.red, size: 20),
+                        Icon(Icons.select_all, color: Colors.blue, size: 20),
+                        // SizedBox(width: 6),
+                        // Text(
+                        //   'Pilih Polygon',
+                        //   style: TextStyle(
+                        //     color: Colors.blue,
+                        //     fontSize: 12,
+                        //     fontWeight: FontWeight.w500,
+                        //   ),
+                        // ),
                       ],
                     ),
                   ),
                 ),
               ),
             ),
+            if (widget.isPolygonSelected) ...[
+              const SizedBox(height: 8),
+              // Hapus Pilihan FAB
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: _clearPolygonSelection,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.layers_clear, color: Colors.red, size: 20),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+
+            // App Version Info (Small text at bottom)
+            if (_appVersion.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  _appVersion,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

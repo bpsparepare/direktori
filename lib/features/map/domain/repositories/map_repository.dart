@@ -14,6 +14,7 @@ abstract class MapRepository {
     double east,
   );
   Future<List<LatLng>> getFirstPolygonFromGeoJson(String assetPath);
+  Future<List<LatLng>> getPolygonPoints(String idsls);
   Future<PolygonData> getFirstPolygonMetaFromGeoJson(String assetPath);
   Future<List<PolygonData>> getAllPolygonsMetaFromGeoJson(String assetPath);
   Future<List<DirektoriModel>> searchDirectoriesWithoutCoordinates(

@@ -106,6 +106,84 @@ class BpsGcService {
   String? get currentGcToken => _gcToken;
   String? get cookieHeader => _cookieHeader;
 
+  /// Refresh session: Mengambil ulang data user dan token dari halaman dashboard
+  Future<Map<String, String>?> refreshSession() async {
+    if (_cookieHeader == null) return null;
+
+    try {
+      final response = await _client.get(
+        Uri.parse('$baseUrl/dirgc'),
+        headers: {
+          'Cookie': _cookieHeader!,
+          'User-Agent': _userAgent,
+          'Accept':
+              'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final html = response.body;
+        String userName = '';
+        String gcToken = '';
+        String csrfToken = '';
+
+        // Extract Username
+        // Regex untuk .user-name.fw-bolder
+        final userRegex = RegExp(
+          r'<span[^>]*class="[^"]*user-name[^"]*fw-bolder[^"]*"[^>]*>\s*([^<]+)\s*<\/span>',
+        );
+        final userMatch = userRegex.firstMatch(html);
+        if (userMatch != null) {
+          userName = userMatch.group(1)?.trim() ?? '';
+        } else {
+          // Fallback regex
+          final fallbackRegex = RegExp(
+            r'class="[^"]*(username|info)[^"]*">\s*<p>\s*([^<]+)\s*<\/p>',
+          );
+          final fallbackMatch = fallbackRegex.firstMatch(html);
+          if (fallbackMatch != null) {
+            userName = fallbackMatch.group(2)?.trim() ?? '';
+          }
+        }
+
+        // Extract GC Token
+        // Regex: let gcSubmitToken = '...'; OR "..."
+        // Menggunakan r'''...''' untuk menangani quote campuran
+        final gcRegex = RegExp(
+          r'''let\s+gcSubmitToken\s*=\s*['"]([^'"]+)['"]''',
+        );
+        final gcMatch = gcRegex.firstMatch(html);
+        if (gcMatch != null) {
+          gcToken = gcMatch.group(1) ?? '';
+        } else {
+          // Try input hidden
+          final gcInputRegex = RegExp(r'name="gc_token"\s+value="([^"]+)"');
+          final gcInputMatch = gcInputRegex.firstMatch(html);
+          if (gcInputMatch != null) {
+            gcToken = gcInputMatch.group(1) ?? '';
+          }
+        }
+
+        // Extract CSRF Token
+        final csrfRegex = RegExp(r'name="csrf-token"\s+content="([^"]+)"');
+        final csrfMatch = csrfRegex.firstMatch(html);
+        if (csrfMatch != null) {
+          csrfToken = csrfMatch.group(1) ?? '';
+        }
+
+        return {
+          'userName': userName,
+          'gcToken': gcToken,
+          'csrfToken': csrfToken,
+        };
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Refresh session failed: $e');
+      return null;
+    }
+  }
+
   /// Kirim data konfirmasi user via WebView JS Injection.
   /// Ini menghindari masalah HttpOnly Cookie dan Error 419.
   Future<Map<String, dynamic>?> logout() async {

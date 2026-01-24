@@ -18,6 +18,11 @@ class MapState extends Equatable {
   final List<PolygonData> selectedPolygons; // New field for multiple selection
   final LatLng? temporaryMarker;
   final String? error;
+  // Store last bounds to preserve view during refresh
+  final double? lastSouth;
+  final double? lastNorth;
+  final double? lastWest;
+  final double? lastEast;
 
   const MapState({
     this.status = MapStatus.initial,
@@ -31,6 +36,10 @@ class MapState extends Equatable {
     this.selectedPolygons = const [], // Initialize
     this.temporaryMarker,
     this.error,
+    this.lastSouth,
+    this.lastNorth,
+    this.lastWest,
+    this.lastEast,
   });
 
   MapState copyWith({
@@ -48,6 +57,10 @@ class MapState extends Equatable {
     bool clearSelectedPlace = false,
     bool clearTemporaryMarker = false,
     bool clearSelectedPolygonMeta = false,
+    double? lastSouth,
+    double? lastNorth,
+    double? lastWest,
+    double? lastEast,
   }) {
     return MapState(
       status: status ?? this.status,
@@ -67,6 +80,10 @@ class MapState extends Equatable {
           ? null
           : (temporaryMarker ?? this.temporaryMarker),
       error: error ?? this.error,
+      lastSouth: lastSouth ?? this.lastSouth,
+      lastNorth: lastNorth ?? this.lastNorth,
+      lastWest: lastWest ?? this.lastWest,
+      lastEast: lastEast ?? this.lastEast,
     );
   }
 
@@ -83,5 +100,9 @@ class MapState extends Equatable {
     selectedPolygons, // Add to props
     temporaryMarker,
     error,
+    lastSouth,
+    lastNorth,
+    lastWest,
+    lastEast,
   ];
 }

@@ -131,8 +131,8 @@ class GroundcheckDataSource extends DataGridSource {
             code = '';
             label = 'Belum GC';
             base = Colors.grey;
-          } else if (lower == '0' || lower.contains('tidak ditemukan')) {
-            code = '0';
+          } else if (lower == '99' || lower.contains('tidak ditemukan')) {
+            code = '99';
             label = 'Tidak Ditemukan';
             base = Colors.red;
           } else if (lower == '1' || lower.contains('ditemukan')) {
@@ -147,6 +147,10 @@ class GroundcheckDataSource extends DataGridSource {
             code = '4';
             label = 'Ganda';
             base = Colors.orange;
+          } else if (lower == '5' || lower.contains('usaha baru')) {
+            code = '5';
+            label = 'Usaha Baru';
+            base = Colors.blue;
           } else {
             label = raw;
             base = Colors.blueGrey;
@@ -421,12 +425,39 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       final local = await _supabaseService.loadLocalRecords();
       if (local.isNotEmpty && mounted) {
         _processRecords(local);
+      } else {
+        // Jika data lokal kosong, JANGAN otomatis sync (karena akan trigger full download).
+        // Biarkan user melakukan inisiasi download via tombol refresh atau UI kosong.
+        // Initialize empty data to prevent UI crash
+        if (mounted) {
+          _processRecords([]);
+        }
+        return;
       }
 
       // 2. Sync with server (fetch only updates)
-      final records = await _supabaseService.syncRecords();
-      if (mounted) {
-        _processRecords(records);
+      // Hanya jalankan auto-sync jika kita sudah punya data lokal (incremental sync)
+      try {
+        final records = await _supabaseService.syncRecords();
+        if (mounted) {
+          if (records.isEmpty && _allRecords.isNotEmpty) {
+            // Jika sync mengembalikan list kosong (error) tapi kita punya data lokal,
+            // JANGAN ditimpa. Pertahankan data lokal yang sudah tampil.
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Gagal sinkronisasi data terbaru. Menggunakan data lokal.',
+                ),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          } else {
+            _processRecords(records);
+          }
+        }
+      } catch (e) {
+        debugPrint('Error during background sync: $e');
+        // Ignore error, keep showing local data
       }
     } catch (e) {
       setState(() {
@@ -494,6 +525,81 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     final prefs = await SharedPreferences.getInstance();
     if (_gcToken != null) await prefs.setString('gc_token', _gcToken!);
     if (_gcCookie != null) await prefs.setString('gc_cookie', _gcCookie!);
+  }
+
+  Future<void> _handleRefreshSession() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final data = await _gcService.refreshSession();
+      if (data != null) {
+        final userName = data['userName'] ?? '';
+        final gcToken = data['gcToken'] ?? '';
+        final csrfToken = data['csrfToken'] ?? '';
+
+        if (userName.isNotEmpty) {
+          setState(() {
+            _currentUser = userName;
+          });
+        }
+        if (gcToken.isNotEmpty) {
+          setState(() {
+            _gcToken = gcToken;
+          });
+        }
+        if (csrfToken.isNotEmpty) {
+          setState(() {
+            _csrfToken = csrfToken;
+          });
+        }
+
+        // Update credentials in service
+        if (_gcCookie != null && _userAgent != null) {
+          _gcService.setCredentials(
+            cookie: _gcCookie!,
+            csrfToken: _csrfToken ?? '',
+            gcToken: _gcToken ?? '',
+            userAgent: _userAgent!,
+          );
+          await _saveStoredGcCredentials();
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Sesi berhasil diperbarui!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Gagal memperbarui sesi. Cookie mungkin kadaluarsa.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error refresh sesi: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _handleLogout() async {
@@ -1140,7 +1246,9 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     // Simpan perubahan ke cache lokal agar tetap ada saat restart (optimistic update)
     await _supabaseService.saveLocalRecords(_allRecords);
 
-    await _supabaseService.updateRecord(updated);
+    // Jangan update timestamp jika ini hanya update status upload (isUploaded=true)
+    // Agar updated_at tetap mencerminkan waktu pengambilan data di lapangan.
+    await _supabaseService.updateRecord(updated, updateTimestamp: !isUploaded);
 
     // Khusus update status upload (jika true) menggunakan fungsi terpisah
     if (isUploaded) {
@@ -1559,6 +1667,129 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     _dataSource!.updateData(filtered);
   }
 
+  Future<void> _handleBulkEditStatus() async {
+    final selected = _dataGridController.selectedRows;
+    if (selected.isEmpty) return;
+
+    String? selectedStatus;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('Ubah Status ${selected.length} Data'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Pilih status baru untuk data yang dipilih:'),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedStatus,
+                    items: const [
+                      DropdownMenuItem(value: '1', child: Text('Ditemukan')),
+                      DropdownMenuItem(
+                        value: '99',
+                        child: Text('Tidak Ditemukan'),
+                      ),
+                      DropdownMenuItem(value: '3', child: Text('Tutup')),
+                      DropdownMenuItem(value: '4', child: Text('Ganda')),
+                      DropdownMenuItem(value: '5', child: Text('Usaha Baru')),
+                    ],
+                    onChanged: (v) {
+                      setState(() {
+                        selectedStatus = v;
+                      });
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'Status GC',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Batal'),
+                ),
+                ElevatedButton(
+                  onPressed: selectedStatus != null
+                      ? () => Navigator.pop(ctx, true)
+                      : null,
+                  child: const Text('Simpan'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirm == true && selectedStatus != null) {
+      // setState(() {
+      //   _isLoading = true;
+      // });
+
+      int count = 0;
+      for (final row in selected) {
+        final record = _dataSource?.getRecord(row);
+        if (record != null) {
+          final updated = GroundcheckRecord(
+            idsbr: record.idsbr,
+            namaUsaha: record.namaUsaha,
+            alamatUsaha: record.alamatUsaha,
+            kodeWilayah: record.kodeWilayah,
+            statusPerusahaan: record.statusPerusahaan,
+            skalaUsaha: record.skalaUsaha,
+            gcsResult: selectedStatus!,
+            latitude: record.latitude,
+            longitude: record.longitude,
+            perusahaanId: record.perusahaanId,
+            userId: record.userId,
+            isUploaded: false, // Reset status upload karena data berubah
+          );
+
+          // Update local list
+          final idx = _allRecords.indexWhere((r) => r.idsbr == record.idsbr);
+          if (idx != -1) {
+            _allRecords[idx] = updated;
+          }
+
+          // Update Supabase
+          await _supabaseService.updateRecord(updated, updateTimestamp: true);
+
+          count++;
+        }
+      }
+
+      // Save local cache once
+      await _supabaseService.saveLocalRecords(_allRecords);
+
+      // Refresh Map
+      try {
+        MapRepositoryImpl().invalidatePlacesCache();
+        if (mounted) {
+          context.read<MapBloc>().add(const PlacesRequested());
+        }
+      } catch (_) {}
+
+      _refreshFilteredData();
+
+      if (mounted) {
+        // setState(() {
+        //   _isLoading = false;
+        // });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Berhasil mengubah status $count data')),
+        );
+        _dataGridController.selectedRows.clear();
+      }
+    }
+  }
+
   Future<void> _handleBulkGc() async {
     final selected = _dataGridController.selectedRows;
     if (selected.isEmpty) return;
@@ -1656,13 +1887,20 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       }
 
       int successCount = 0;
-      int failCount = 0;
       final total = validRecords.length;
       final random = Random();
 
       // Setup Progress Dialog Variables
       final progressNotifier = ValueNotifier<int>(0);
       final statusNotifier = ValueNotifier<String>('Menyiapkan...');
+      final successNotifier = ValueNotifier<int>(0);
+      final failNotifier = ValueNotifier<int>(0);
+      final pendingUiNotifier = ValueNotifier<int>(
+        total,
+      ); // Data yang belum disentuh
+      final isFinishedNotifier = ValueNotifier<bool>(false);
+      final isCancelledNotifier = ValueNotifier<bool>(false);
+      bool isDialogVisible = true;
 
       if (mounted) {
         // Show Progress Dialog
@@ -1673,7 +1911,14 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
             return WillPopScope(
               onWillPop: () async => false,
               child: AlertDialog(
-                title: const Text('Mengirim Data'),
+                title: ValueListenableBuilder<bool>(
+                  valueListenable: isFinishedNotifier,
+                  builder: (context, isFinished, child) {
+                    return Text(
+                      isFinished ? 'Selesai Mengirim Data' : 'Mengirim Data',
+                    );
+                  },
+                ),
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1701,120 +1946,280 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                     ValueListenableBuilder<int>(
                       valueListenable: progressNotifier,
                       builder: (context, val, child) {
+                        // Tampilkan info progress yang lebih detail jika perlu
                         return Text(
-                          '$val dari $total data',
+                          '$val dari $total data sukses',
                           style: const TextStyle(color: Colors.grey),
                         );
                       },
                     ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        // Kolom Sukses
+                        ValueListenableBuilder<int>(
+                          valueListenable: successNotifier,
+                          builder: (context, val, child) {
+                            return Column(
+                              children: [
+                                const Text(
+                                  'Sukses',
+                                  style: TextStyle(color: Colors.green),
+                                ),
+                                Text(
+                                  '$val',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                        // Kolom Gagal
+                        ValueListenableBuilder<int>(
+                          valueListenable: failNotifier,
+                          builder: (context, val, child) {
+                            return Column(
+                              children: [
+                                const Text(
+                                  'Gagal',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                                Text(
+                                  '$val',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                        // Kolom Belum
+                        ValueListenableBuilder<int>(
+                          valueListenable: pendingUiNotifier,
+                          builder: (context, val, child) {
+                            return Column(
+                              children: [
+                                const Text(
+                                  'Belum',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                                Text(
+                                  '$val',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ],
                 ),
+                actions: [
+                  ValueListenableBuilder<bool>(
+                    valueListenable: isFinishedNotifier,
+                    builder: (context, isFinished, child) {
+                      if (!isFinished) {
+                        return TextButton(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Pengiriman berjalan di latar belakang...',
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                          child: const Text('Sembunyikan'),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: isFinishedNotifier,
+                    builder: (context, isFinished, child) {
+                      if (!isFinished) {
+                        return TextButton(
+                          onPressed: () {
+                            isCancelledNotifier.value = true;
+                          },
+                          child: const Text(
+                            'Batal',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: isFinishedNotifier,
+                    builder: (context, isFinished, child) {
+                      if (isFinished) {
+                        return TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Tutup'),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ],
               ),
             );
           },
-        );
+        ).then((_) {
+          isDialogVisible = false;
+        });
       }
 
-      for (int i = 0; i < total; i++) {
-        final record = validRecords[i];
+      List<GroundcheckRecord> pendingRecords = List.from(validRecords);
+      int maxRetries = 3;
 
-        // Update UI Progress
-        progressNotifier.value = i + 1;
-        statusNotifier.value = 'Mengirim ${record.idsbr}...';
+      for (int attempt = 1; attempt <= maxRetries; attempt++) {
+        if (isCancelledNotifier.value) break;
+        if (pendingRecords.isEmpty) break;
 
-        try {
-          // Gunakan koordinat yang ada di record jika valid, atau fallback ke 0
-          final lat = double.tryParse(record.latitude) ?? 0.0;
-          final lon = double.tryParse(record.longitude) ?? 0.0;
+        final currentBatch = List<GroundcheckRecord>.from(pendingRecords);
+        pendingRecords
+            .clear(); // Kosongkan untuk menampung yang gagal di attempt ini
 
-          final resp = await _gcService.konfirmasiUser(
-            perusahaanId: record.perusahaanId,
-            latitude: lat.toString(),
-            longitude: lon.toString(),
-            hasilGc: record.gcsResult,
-          );
+        for (int i = 0; i < currentBatch.length; i++) {
+          if (isCancelledNotifier.value) break;
+          final record = currentBatch[i];
 
-          // Cek respons sukses (bisa berupa status: success atau indikator lain dari HTML response)
-          // Implementasi konfirmasiUser mengembalikan map status
+          // Update status & counter sebelum proses
+          statusNotifier.value =
+              'Percobaan $attempt/$maxRetries\nMengirim ${record.idsbr}...';
+
+          if (attempt == 1) {
+            // Jika attempt 1, ambil dari stok 'Belum'
+            if (pendingUiNotifier.value > 0) pendingUiNotifier.value--;
+          } else {
+            // Jika retry, ambil dari stok 'Gagal' (karena sedang diproses ulang)
+            if (failNotifier.value > 0) failNotifier.value--;
+          }
+
           bool isSuccess = false;
-          if (resp != null) {
-            final status = resp['status']?.toString().toLowerCase();
-            final msg = resp['message']?.toString().toLowerCase() ?? '';
-            if (status == 'success' ||
-                msg.contains('berhasil') ||
-                msg.contains('success')) {
-              isSuccess = true;
-            } else if (status == 'error' &&
-                msg.contains('sudah diground check')) {
-              // Handle kasus: "Usaha ini sudah diground check oleh user lain"
-              // Server mengembalikan data status hasil GC yang sudah ada.
-              // Kita update lokal dengan data server dan tandai isUploaded = true.
-              final data = resp['data'];
-              if (data is Map) {
-                final serverResult = data['status_hasil_gc']?.toString();
-                if (serverResult != null && serverResult.isNotEmpty) {
-                  // Anggap sukses secara lokal (sinkronisasi state server)
-                  await _applyGcInput(
-                    record,
-                    serverResult, // Update gcsResult dengan data server
-                    lat,
-                    lon,
-                    isUploaded: true, // Tandai sudah terupload
-                  );
-                  successCount++;
+          try {
+            // Gunakan koordinat yang ada di record jika valid, atau fallback ke 0
+            final lat = double.tryParse(record.latitude) ?? 0.0;
+            final lon = double.tryParse(record.longitude) ?? 0.0;
 
-                  // Jeda sebelum lanjut ke data berikutnya
-                  if (i < total - 1) {
-                    statusNotifier.value = 'Menunggu antrean berikutnya...';
-                    final delay = 2000 + random.nextInt(2001); // 2-4 detik
-                    await Future.delayed(Duration(milliseconds: delay));
+            final resp = await _gcService.konfirmasiUser(
+              perusahaanId: record.perusahaanId,
+              latitude: lat.toString(),
+              longitude: lon.toString(),
+              hasilGc: record.gcsResult,
+            );
+
+            if (resp != null) {
+              final status = resp['status']?.toString().toLowerCase();
+              final msg = resp['message']?.toString().toLowerCase() ?? '';
+              if (status == 'success' ||
+                  msg.contains('berhasil') ||
+                  msg.contains('success')) {
+                isSuccess = true;
+              } else if (status == 'error' &&
+                  msg.contains('sudah diground check')) {
+                final data = resp['data'];
+                if (data is Map) {
+                  final serverResult = data['status_hasil_gc']?.toString();
+                  if (serverResult != null && serverResult.isNotEmpty) {
+                    await _applyGcInput(
+                      record,
+                      serverResult,
+                      lat,
+                      lon,
+                      isUploaded: true,
+                    );
+                    isSuccess = true;
                   }
-
-                  continue; // Lanjut ke record berikutnya
                 }
               }
             }
+
+            if (isSuccess) {
+              await _applyGcInput(
+                record,
+                record.gcsResult,
+                lat,
+                lon,
+                isUploaded: true,
+              );
+              successCount++;
+              successNotifier.value = successCount;
+              progressNotifier.value = successCount;
+            } else {
+              debugPrint('Bulk GC Gagal untuk ${record.idsbr}: $resp');
+              pendingRecords.add(
+                record,
+              ); // Masukkan kembali ke antrean untuk retry berikutnya
+              failNotifier.value++; // Tambah counter gagal
+            }
+          } catch (e) {
+            debugPrint('Bulk GC Exception untuk ${record.idsbr}: $e');
+            pendingRecords.add(record); // Masukkan kembali ke antrean
+            failNotifier.value++; // Tambah counter gagal
           }
 
-          if (isSuccess) {
-            await _applyGcInput(
-              record,
-              record.gcsResult,
-              lat,
-              lon,
-              isUploaded: true,
-            );
-            successCount++;
-          } else {
-            failCount++;
-            debugPrint('Bulk GC Gagal untuk ${record.idsbr}: $resp');
+          // Jeda antar record (tetap ada agar tidak spam)
+          // Kecuali ini record terakhir di batch
+          if (i < currentBatch.length - 1) {
+            final delay = 1000 + random.nextInt(1001); // 1-2 detik
+            await Future.delayed(Duration(milliseconds: delay));
           }
-        } catch (e) {
-          failCount++;
-          debugPrint('Bulk GC Exception untuk ${record.idsbr}: $e');
         }
 
-        // Jeda sebelum lanjut ke data berikutnya (jika bukan data terakhir)
-        if (i < total - 1) {
-          statusNotifier.value = 'Menunggu antrean berikutnya...';
-          final delay = 2000 + random.nextInt(2001); // 2-4 detik
-          await Future.delayed(Duration(milliseconds: delay));
+        if (isCancelledNotifier.value) break;
+
+        // Setelah batch selesai, cek apakah perlu retry
+        if (pendingRecords.isNotEmpty && attempt < maxRetries) {
+          // Jeda antar attempt (agak lama agar natural)
+          // Misal 5 detik
+          for (int t = 5; t > 0; t--) {
+            if (isCancelledNotifier.value) break;
+            statusNotifier.value =
+                'Menunggu ${t}s sebelum mencoba ulang ${pendingRecords.length} data gagal...';
+            await Future.delayed(const Duration(seconds: 1));
+          }
         }
       }
 
-      // Tutup Progress Dialog
-      if (mounted) {
-        Navigator.of(context).pop();
+      if (isCancelledNotifier.value) {
+        statusNotifier.value = 'Proses Dibatalkan.';
+      } else {
+        statusNotifier.value = 'Selesai! Silakan tutup dialog.';
       }
+
+      progressNotifier.value =
+          total; // Penuhi bar di akhir (meski ada yang gagal, proses selesai)
+
+      // Update status akhir
+      isFinishedNotifier.value = true;
 
       _dataGridController.selectedRows.clear();
       setState(() {});
 
-      if (mounted) {
+      if (!isDialogVisible && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Selesai. Sukses: $successCount, Gagal: $failCount'),
-            backgroundColor: failCount > 0 ? Colors.orange : Colors.green,
+            content: Text(
+              'Bulk GC Selesai. Sukses: $successCount, Gagal: ${failNotifier.value}',
+            ),
           ),
         );
       }
@@ -1825,20 +2230,39 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          decoration: InputDecoration(
-            labelText: 'Cari',
-            hintText: 'Cari ID, nama usaha, alamat, kode wilayah',
-            prefixIcon: const Icon(Icons.search),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            isDense: true,
-          ),
-          onChanged: (value) {
-            setState(() {
-              _searchQuery = value.trim();
-            });
-            _refreshFilteredData();
-          },
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                decoration: InputDecoration(
+                  labelText: 'Cari',
+                  hintText: 'Cari ID, nama usaha, alamat, kode wilayah',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  isDense: true,
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value.trim();
+                  });
+                  _refreshFilteredData();
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: _reloadFromSupabase,
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Muat ulang data',
+            ),
+            IconButton(
+              onPressed: () => _ensureGcConfig(forceShow: true),
+              icon: const Icon(Icons.settings),
+              tooltip: 'Pengaturan GC',
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         Row(
@@ -2004,42 +2428,29 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Groundcheck'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        actions: [
-          if (_dataGridController.selectedRows.isNotEmpty)
-            TextButton.icon(
-              onPressed: _handleBulkGc,
-              icon: const Icon(Icons.send, color: Colors.white),
-              label: Text(
-                'Kirim GC (${_dataGridController.selectedRows.length})',
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-          TextButton.icon(
-            onPressed: _showBpsLoginDialog,
-            icon: const Icon(Icons.login, color: Colors.white),
-            label: const Text(
-              'Login BPS',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.cloud_upload),
-            tooltip: 'Muat ulang dari Supabase',
-            onPressed: _reloadFromSupabase,
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'Pengaturan GC',
-            onPressed: () async {
-              await _ensureGcConfig(forceShow: true);
-            },
-          ),
-        ],
-      ),
+      floatingActionButton: _dataGridController.selectedRows.isNotEmpty
+          ? Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                FloatingActionButton.extended(
+                  heroTag: 'fab_edit',
+                  onPressed: _handleBulkEditStatus,
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Ubah Status'),
+                  backgroundColor: Colors.orange,
+                ),
+                const SizedBox(width: 16),
+                FloatingActionButton.extended(
+                  heroTag: 'fab_send',
+                  onPressed: _handleBulkGc,
+                  icon: const Icon(Icons.send),
+                  label: Text(
+                    'Kirim GC (${_dataGridController.selectedRows.length})',
+                  ),
+                ),
+              ],
+            )
+          : null,
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: _isLoading
@@ -2127,23 +2538,56 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                                 const SizedBox(height: 12),
                                 SizedBox(
                                   width: double.infinity,
-                                  child: OutlinedButton.icon(
-                                    onPressed: _handleLogout,
-                                    icon: const Icon(
-                                      Icons.logout,
-                                      size: 18,
-                                      color: Colors.red,
-                                    ),
-                                    label: const Text(
-                                      'Keluar / Logout',
-                                      style: TextStyle(color: Colors.red),
-                                    ),
-                                    style: OutlinedButton.styleFrom(
-                                      side: const BorderSide(color: Colors.red),
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 12,
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          onPressed: _handleRefreshSession,
+                                          icon: const Icon(
+                                            Icons.refresh,
+                                            size: 18,
+                                            color: Colors.blue,
+                                          ),
+                                          label: const Text(
+                                            'Refresh Sesi',
+                                            style: TextStyle(
+                                              color: Colors.blue,
+                                            ),
+                                          ),
+                                          style: OutlinedButton.styleFrom(
+                                            side: const BorderSide(
+                                              color: Colors.blue,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                          ),
+                                        ),
                                       ),
-                                    ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          onPressed: _handleLogout,
+                                          icon: const Icon(
+                                            Icons.logout,
+                                            size: 18,
+                                            color: Colors.red,
+                                          ),
+                                          label: const Text(
+                                            'Logout',
+                                            style: TextStyle(color: Colors.red),
+                                          ),
+                                          style: OutlinedButton.styleFrom(
+                                            side: const BorderSide(
+                                              color: Colors.red,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
@@ -2169,186 +2613,240 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                   _buildFilterBar(),
                   const SizedBox(height: 12),
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.withValues(alpha: 0.1),
-                            spreadRadius: 1,
-                            blurRadius: 3,
-                            offset: const Offset(0, 1),
+                    child: _allRecords.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.cloud_off,
+                                  size: 64,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'Belum ada data Groundcheck tersimpan.',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Silakan download data untuk memulai.',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                ElevatedButton.icon(
+                                  onPressed: () async {
+                                    setState(() {
+                                      _isLoading = true;
+                                    });
+                                    try {
+                                      final records = await _supabaseService
+                                          .syncRecords();
+                                      if (mounted) {
+                                        _processRecords(records);
+                                      }
+                                    } catch (e) {
+                                      if (mounted) {
+                                        setState(() {
+                                          _isLoading = false;
+                                          _error = e.toString();
+                                        });
+                                      }
+                                    }
+                                  },
+                                  icon: const Icon(Icons.download),
+                                  label: const Text('Download Data'),
+                                ),
+                              ],
+                            ),
+                          )
+                        : Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.grey.withValues(alpha: 0.1),
+                                  spreadRadius: 1,
+                                  blurRadius: 3,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: SfDataGrid(
+                                source: _dataSource!,
+                                controller: _dataGridController,
+                                selectionMode: SelectionMode.multiple,
+                                showCheckboxColumn: true,
+                                onSelectionChanged: (added, removed) =>
+                                    setState(() {}),
+                                verticalScrollController: _scrollController,
+                                rowHeight: 56,
+                                headerGridLinesVisibility:
+                                    GridLinesVisibility.horizontal,
+                                gridLinesVisibility:
+                                    GridLinesVisibility.horizontal,
+                                columnWidthMode: ColumnWidthMode.fill,
+                                allowSorting: true,
+                                columns: [
+                                  GridColumn(
+                                    columnName: 'idsbr',
+                                    label: Container(
+                                      alignment: Alignment.centerLeft,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
+                                      color: Colors.blue[50],
+                                      child: const Text(
+                                        'ID SBR',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  GridColumn(
+                                    columnName: 'nama_usaha',
+                                    label: Container(
+                                      alignment: Alignment.centerLeft,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
+                                      color: Colors.blue[50],
+                                      child: const Text(
+                                        'Nama Usaha',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  GridColumn(
+                                    columnName: 'alamat_usaha',
+                                    label: Container(
+                                      alignment: Alignment.centerLeft,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
+                                      color: Colors.blue[50],
+                                      child: const Text(
+                                        'Alamat Usaha',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  GridColumn(
+                                    columnName: 'kode_wilayah',
+                                    label: Container(
+                                      alignment: Alignment.centerLeft,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
+                                      color: Colors.blue[50],
+                                      child: const Text(
+                                        'Kode Wilayah',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  GridColumn(
+                                    columnName: 'status_perusahaan',
+                                    label: Container(
+                                      alignment: Alignment.centerLeft,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
+                                      color: Colors.blue[50],
+                                      child: const Text(
+                                        'Status Perusahaan',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  GridColumn(
+                                    columnName: 'isUploaded',
+                                    width: 80,
+                                    label: Container(
+                                      alignment: Alignment.center,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
+                                      color: Colors.blue[50],
+                                      child: const Text(
+                                        'Up?',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  GridColumn(
+                                    columnName: 'gcs_result',
+                                    label: Container(
+                                      alignment: Alignment.centerLeft,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
+                                      color: Colors.blue[50],
+                                      child: const Text(
+                                        'GCS Result',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  GridColumn(
+                                    columnName: 'gc_action',
+                                    width: 120,
+                                    label: Container(
+                                      alignment: Alignment.center,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
+                                      color: Colors.blue[50],
+                                      child: const Text(
+                                        'Aksi',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: SfDataGrid(
-                          source: _dataSource!,
-                          controller: _dataGridController,
-                          selectionMode: SelectionMode.multiple,
-                          showCheckboxColumn: true,
-                          onSelectionChanged: (added, removed) =>
-                              setState(() {}),
-                          verticalScrollController: _scrollController,
-                          rowHeight: 56,
-                          headerGridLinesVisibility:
-                              GridLinesVisibility.horizontal,
-                          gridLinesVisibility: GridLinesVisibility.horizontal,
-                          columnWidthMode: ColumnWidthMode.fill,
-                          allowSorting: true,
-                          columns: [
-                            GridColumn(
-                              columnName: 'idsbr',
-                              label: Container(
-                                alignment: Alignment.centerLeft,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                color: Colors.blue[50],
-                                child: const Text(
-                                  'ID SBR',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            GridColumn(
-                              columnName: 'nama_usaha',
-                              label: Container(
-                                alignment: Alignment.centerLeft,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                color: Colors.blue[50],
-                                child: const Text(
-                                  'Nama Usaha',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            GridColumn(
-                              columnName: 'alamat_usaha',
-                              label: Container(
-                                alignment: Alignment.centerLeft,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                color: Colors.blue[50],
-                                child: const Text(
-                                  'Alamat Usaha',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            GridColumn(
-                              columnName: 'kode_wilayah',
-                              label: Container(
-                                alignment: Alignment.centerLeft,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                color: Colors.blue[50],
-                                child: const Text(
-                                  'Kode Wilayah',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            GridColumn(
-                              columnName: 'status_perusahaan',
-                              label: Container(
-                                alignment: Alignment.centerLeft,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                color: Colors.blue[50],
-                                child: const Text(
-                                  'Status Perusahaan',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            GridColumn(
-                              columnName: 'isUploaded',
-                              width: 80,
-                              label: Container(
-                                alignment: Alignment.center,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                color: Colors.blue[50],
-                                child: const Text(
-                                  'Up?',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            GridColumn(
-                              columnName: 'gcs_result',
-                              label: Container(
-                                alignment: Alignment.centerLeft,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                color: Colors.blue[50],
-                                child: const Text(
-                                  'GCS Result',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            GridColumn(
-                              columnName: 'gc_action',
-                              width: 120,
-                              label: Container(
-                                alignment: Alignment.center,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                color: Colors.blue[50],
-                                child: const Text(
-                                  'Aksi',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
                   ),
                 ],
               ),

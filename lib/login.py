@@ -136,12 +136,23 @@ def login_with_sso(username, password, otp_code=None):
                 }
                 
                 // Try getting username
-                let userEl = document.querySelector('.dropdown-user .username') || 
+                let userEl = document.querySelector('.user-name.fw-bolder') || 
+                             document.querySelector('.dropdown-user .username') || 
                              document.querySelector('.user-panel .info p');
-                if (userEl) user_name = userEl.innerText.trim();
+                
+                if (userEl) {
+                    user_name = userEl.innerText.trim();
+                    console.log("Found username: " + user_name);
+                } else {
+                    console.log("Username element not found");
+                }
                 
                 return {gc_token, csrf_token, user_name};
             }''')
+            
+            # Print log if username found
+            if tokens.get('user_name'):
+                print(f"Log: Username found: {tokens.get('user_name')}")
             
             result = {
                 "status": "success",

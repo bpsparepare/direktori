@@ -27,8 +27,11 @@ class GroundcheckSupabaseService {
 
         if (sinceStr != null) {
           query = query.gt('updated_at', sinceStr);
+          // Optimize: gunakan index updated_at untuk incremental sync
+          query = query.order('updated_at', ascending: true);
         }
 
+        // Always order by idsbr for deterministic pagination
         final batch = await query
             .order('idsbr', ascending: true)
             .range(start, start + batchSize - 1);
@@ -234,6 +237,26 @@ class GroundcheckSupabaseService {
     }
   }
 
+  Future<String?> fetchCurrentUserRole() async {
+    try {
+      final user = _client.auth.currentUser;
+      if (user == null) return null;
+
+      final response = await _client
+          .from('users')
+          .select('role')
+          .eq('auth_uid', user.id)
+          .maybeSingle();
+
+      if (response != null && response['role'] != null) {
+        return response['role'].toString();
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   Future<void> updateLocalRecord(GroundcheckRecord record) async {
     try {
       final records = await loadLocalRecords();
@@ -249,7 +272,10 @@ class GroundcheckSupabaseService {
     }
   }
 
-  Future<void> updateRecord(GroundcheckRecord record) async {
+  Future<void> updateRecord(
+    GroundcheckRecord record, {
+    bool updateTimestamp = true,
+  }) async {
     try {
       final data = {
         'idsbr': record.idsbr,
@@ -262,9 +288,12 @@ class GroundcheckSupabaseService {
         'latitude': record.latitude,
         'longitude': record.longitude,
         'perusahaan_id': record.perusahaanId,
-        'updated_at': DateTime.now().toIso8601String(),
         'isUploaded': record.isUploaded,
       };
+
+      if (updateTimestamp) {
+        data['updated_at'] = DateTime.now().toIso8601String();
+      }
 
       if (record.userId != null) {
         data['user_id'] = record.userId!;
@@ -290,10 +319,7 @@ class GroundcheckSupabaseService {
     try {
       final response = await _client
           .from(_tableName)
-          .update({
-            'isUploaded': isUploaded,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
+          .update({'isUploaded': isUploaded})
           .eq('idsbr', idsbr)
           .select();
 
@@ -390,6 +416,63 @@ class GroundcheckSupabaseService {
       return null;
     } catch (_) {
       return null;
+    }
+  }
+
+  Future<bool> deleteOrCloseRecord(String idsbr) async {
+    try {
+      // Determine if temp
+      final bool isTemp =
+          idsbr.toUpperCase().startsWith('TEMP') ||
+          idsbr.toUpperCase().startsWith('BARU');
+
+      // 1. Update Local Cache First
+      final records = await loadLocalRecords();
+      final index = records.indexWhere((r) => r.idsbr == idsbr);
+
+      if (index != -1) {
+        if (isTemp) {
+          records.removeAt(index);
+        } else {
+          final old = records[index];
+          records[index] = GroundcheckRecord(
+            idsbr: old.idsbr,
+            namaUsaha: old.namaUsaha,
+            alamatUsaha: old.alamatUsaha,
+            kodeWilayah: old.kodeWilayah,
+            statusPerusahaan: old.statusPerusahaan,
+            skalaUsaha: old.skalaUsaha,
+            gcsResult: '3', // Tutup
+            latitude: old.latitude,
+            longitude: old.longitude,
+            perusahaanId: old.perusahaanId,
+            userId: old.userId,
+            isUploaded: old.isUploaded,
+          );
+        }
+        await saveLocalRecords(records);
+      }
+
+      // 2. Update Remote
+      if (isTemp) {
+        await _client.from(_tableName).delete().eq('idsbr', idsbr);
+      } else {
+        await _client
+            .from(_tableName)
+            .update({
+              'gcs_result': '3', // Tutup
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('idsbr', idsbr);
+      }
+
+      return true;
+    } catch (e) {
+      print('Error deleteOrCloseRecord: $e');
+      // If local succeeded but remote failed, we might still want to return true
+      // or false depending on how strict we are.
+      // Given "Local First", if local is updated, we are partially successful.
+      return false;
     }
   }
 

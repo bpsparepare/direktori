@@ -442,7 +442,7 @@ class _DirektoriListViewState extends State<_DirektoriListView> {
                               try {
                                 final polygons = await repo
                                     .getAllPolygonsMetaFromGeoJson(
-                                      'assets/geojson/final_sls.geojson',
+                                      'assets/geojson/final_sls_optimized.json',
                                     );
                                 String idSls = '';
                                 String? kodePos;

@@ -21,6 +21,7 @@ import 'features/map/domain/usecases/get_places_in_bounds.dart';
 import 'features/map/domain/usecases/refresh_places.dart';
 import 'features/map/domain/usecases/get_first_polygon_meta_from_geojson.dart';
 import 'features/map/domain/usecases/get_all_polygons_meta_from_geojson.dart';
+import 'features/map/domain/usecases/get_polygon_points.dart';
 import 'features/contribution/presentation/bloc/contribution_bloc.dart';
 import 'features/contribution/data/repositories/contribution_repository_impl.dart';
 import 'features/contribution/data/datasources/contribution_remote_datasource.dart';
@@ -63,59 +64,68 @@ class MyApp extends StatelessWidget {
       ),
     );
 
-    return MultiBlocProvider(
+    return MultiRepositoryProvider(
       providers: [
-        BlocProvider<AuthBloc>(
-          create: (context) => AuthBloc(
-            getCurrentUserUseCase: GetCurrentUserUseCase(authRepository),
-            signInWithEmailUseCase: SignInWithEmailUseCase(authRepository),
-            signInWithGoogleUseCase: SignInWithGoogleUseCase(authRepository),
-            signOutUseCase: SignOutUseCase(authRepository),
-          )..add(AuthCheckRequested()),
-        ),
-        BlocProvider<MapBloc>(
-          create: (context) =>
-              MapBloc(
-                  getInitialMapConfig: GetInitialMapConfig(mapRepository),
-                  getPlaces: GetPlaces(mapRepository),
-                  refreshPlaces: RefreshPlaces(mapRepository),
-                  getPlacesInBounds: GetPlacesInBounds(mapRepository),
-                  getFirstPolygonMeta: GetFirstPolygonMetaFromGeoJson(
-                    mapRepository,
-                  ),
-                  getAllPolygonsMeta: GetAllPolygonsMetaFromGeoJson(
-                    mapRepository,
-                  ),
-                )
-                ..add(const MapInitRequested())
-                ..add(const PlacesRequested())
-                ..add(const PolygonsListRequested())
-                ..add(const PlacesRefreshRequested(onlyToday: true)),
-        ),
-        BlocProvider<ContributionBloc>(
-          create: (context) => ContributionBloc(
-            repository: contributionRepository,
-            createContributionUseCase: CreateContributionUseCase(
-              contributionRepository,
-            ),
-            getUserStatsUseCase: GetUserStatsUseCase(contributionRepository),
-            getUserContributionsUseCase: GetUserContributionsUseCase(
-              contributionRepository,
-            ),
-            getLeaderboardUseCase: GetLeaderboardUseCase(
-              contributionRepository,
-            ),
-          ),
+        RepositoryProvider<AuthRepositoryImpl>.value(value: authRepository),
+        RepositoryProvider<MapRepositoryImpl>.value(value: mapRepository),
+        RepositoryProvider<ContributionRepositoryImpl>.value(
+          value: contributionRepository,
         ),
       ],
-      child: MaterialApp(
-        title: 'Direktori',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-          useMaterial3: true,
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider<AuthBloc>(
+            create: (context) => AuthBloc(
+              getCurrentUserUseCase: GetCurrentUserUseCase(authRepository),
+              signInWithEmailUseCase: SignInWithEmailUseCase(authRepository),
+              signInWithGoogleUseCase: SignInWithGoogleUseCase(authRepository),
+              signOutUseCase: SignOutUseCase(authRepository),
+            )..add(AuthCheckRequested()),
+          ),
+          BlocProvider<MapBloc>(
+            create: (context) =>
+                MapBloc(
+                    getInitialMapConfig: GetInitialMapConfig(mapRepository),
+                    getPlaces: GetPlaces(mapRepository),
+                    refreshPlaces: RefreshPlaces(mapRepository),
+                    getPlacesInBounds: GetPlacesInBounds(mapRepository),
+                    getFirstPolygonMeta: GetFirstPolygonMetaFromGeoJson(
+                      mapRepository,
+                    ),
+                    getAllPolygonsMeta: GetAllPolygonsMetaFromGeoJson(
+                      mapRepository,
+                    ),
+                    getPolygonPoints: GetPolygonPoints(mapRepository),
+                  )
+                  ..add(const MapInitRequested())
+                  ..add(const PlacesRequested())
+                  ..add(const PolygonsListRequested()),
+          ),
+          BlocProvider<ContributionBloc>(
+            create: (context) => ContributionBloc(
+              repository: contributionRepository,
+              createContributionUseCase: CreateContributionUseCase(
+                contributionRepository,
+              ),
+              getUserStatsUseCase: GetUserStatsUseCase(contributionRepository),
+              getUserContributionsUseCase: GetUserContributionsUseCase(
+                contributionRepository,
+              ),
+              getLeaderboardUseCase: GetLeaderboardUseCase(
+                contributionRepository,
+              ),
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          title: 'Direktori',
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+            useMaterial3: true,
+          ),
+          home: const VersionCheckWrapper(child: AuthWrapper()),
+          debugShowCheckedModeBanner: false,
         ),
-        home: const VersionCheckWrapper(child: AuthWrapper()),
-        debugShowCheckedModeBanner: false,
       ),
     );
   }

@@ -99,7 +99,7 @@ class _InAppWebViewLoginDialogState extends State<InAppWebViewLoginDialog> {
                   // Regex: let\s+gcSubmitToken\s*=\s*(['"])([^'"]+)\1
                   const regex = /let\\s+gcSubmitToken\\s*=\\s*(['"])([^'"]+)\\1/;
                   const match = html.match(regex);
-                  if (match) {
+                  if (match) { 
                       gc_token = match[2];
                       console.log("Found gc_token via regex: " + gc_token);
                   }
@@ -123,11 +123,18 @@ class _InAppWebViewLoginDialogState extends State<InAppWebViewLoginDialog> {
               }
               
               // Try getting username
-              let userEl = document.querySelector('.user-panel .info p') || 
-                           document.querySelector('.dropdown-user .username') ||
-                           document.querySelector('.user-menu span.hidden-xs') ||
-                           document.querySelector('.navbar-nav .user-menu a span');
-              if (userEl) user_name = userEl.innerText.trim();
+               let userEl = document.querySelector('.user-name.fw-bolder') || 
+                            document.querySelector('.user-panel .info p') || 
+                            document.querySelector('.dropdown-user .username') ||
+                            document.querySelector('.user-menu span.hidden-xs') ||
+                            document.querySelector('.navbar-nav .user-menu a span');
+
+               if (userEl) {
+                 user_name = userEl.innerText.trim();
+                 console.log("Found username: " + user_name);
+               } else {
+                 console.log("Username element not found");
+               }
               
               return {
                 gc_token: gc_token,
