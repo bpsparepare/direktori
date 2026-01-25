@@ -11,10 +11,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/services/bps_gc_service.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
+import '../../data/constants/wilayah_mapping.dart';
 import '../widgets/python_login_dialog.dart';
 import '../widgets/inappwebview_login_dialog.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
+import '../bloc/map_state.dart';
 import '../../data/repositories/map_repository_impl.dart';
 
 // Optional bootstrap via --dart-define (removed)
@@ -31,8 +33,13 @@ class GroundcheckRecord {
   final String longitude;
   final String perusahaanId;
   final String? userId;
+  final String? kdProv;
+  final String? kdKab;
+  final String? kdKec;
+  final String? kdDesa;
   final bool isUploaded;
   final bool isRevisi;
+  final bool allowCancel;
 
   GroundcheckRecord({
     required this.idsbr,
@@ -46,8 +53,13 @@ class GroundcheckRecord {
     required this.longitude,
     required this.perusahaanId,
     this.userId,
+    this.kdProv,
+    this.kdKab,
+    this.kdKec,
+    this.kdDesa,
     this.isUploaded = false,
     this.isRevisi = false,
+    this.allowCancel = true,
   });
 
   factory GroundcheckRecord.fromJson(Map<String, dynamic> json) {
@@ -67,8 +79,13 @@ class GroundcheckRecord {
       longitude: lon,
       perusahaanId: perusahaan,
       userId: json['user_id']?.toString(),
+      kdProv: json['kd_prov']?.toString(),
+      kdKab: json['kd_kab']?.toString(),
+      kdKec: json['kd_kec']?.toString(),
+      kdDesa: json['kd_desa']?.toString(),
       isUploaded: json['isUploaded'] == true,
       isRevisi: json['is_revisi'] == true || json['isRevisi'] == true,
+      allowCancel: json['allow_cancel'] != false,
     );
   }
 
@@ -85,8 +102,13 @@ class GroundcheckRecord {
       'longitude': longitude,
       'perusahaan_id': perusahaanId,
       'user_id': userId,
+      'kd_prov': kdProv,
+      'kd_kab': kdKab,
+      'kd_kec': kdKec,
+      'kd_desa': kdDesa,
       'isUploaded': isUploaded,
       'isRevisi': isRevisi,
+      'allow_cancel': allowCancel,
     };
   }
 
@@ -102,8 +124,13 @@ class GroundcheckRecord {
     String? longitude,
     String? perusahaanId,
     String? userId,
+    String? kdProv,
+    String? kdKab,
+    String? kdKec,
+    String? kdDesa,
     bool? isUploaded,
     bool? isRevisi,
+    bool? allowCancel,
   }) {
     return GroundcheckRecord(
       idsbr: idsbr ?? this.idsbr,
@@ -117,8 +144,13 @@ class GroundcheckRecord {
       longitude: longitude ?? this.longitude,
       perusahaanId: perusahaanId ?? this.perusahaanId,
       userId: userId ?? this.userId,
+      kdProv: kdProv ?? this.kdProv,
+      kdKab: kdKab ?? this.kdKab,
+      kdKec: kdKec ?? this.kdKec,
+      kdDesa: kdDesa ?? this.kdDesa,
       isUploaded: isUploaded ?? this.isUploaded,
       isRevisi: isRevisi ?? this.isRevisi,
+      allowCancel: allowCancel ?? this.allowCancel,
     );
   }
 }
@@ -445,8 +477,9 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   String _searchQuery = '';
   String? _statusFilter;
   String? _gcsFilter;
-  bool? _isUploadedFilter;
+  String? _isUploadedFilter;
   bool _isLoading = true;
+  bool _isDeletingNew = false;
   String? _error;
   String? _gcCookie;
   String? _gcToken;
@@ -473,11 +506,14 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       if (local.isNotEmpty && mounted) {
         _processRecords(local);
       } else {
-        // Jika data lokal kosong, JANGAN otomatis sync (karena akan trigger full download).
-        // Biarkan user melakukan inisiasi download via tombol refresh atau UI kosong.
-        // Initialize empty data to prevent UI crash
+        // Jika data lokal kosong, JANGAN otomatis sync.
+        // Tampilkan konfirmasi ke user terlebih dahulu.
         if (mounted) {
           _processRecords([]);
+          // Tampilkan dialog konfirmasi setelah frame selesai dirender
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _showDownloadConfirmation();
+          });
         }
         return;
       }
@@ -514,6 +550,72 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     }
   }
 
+  Future<void> _showDownloadConfirmation() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Data Lokal Kosong'),
+        content: const Text(
+          'Belum ada data tersimpan di HP. Apakah Anda ingin mengunduh data groundcheck dari server sekarang?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Nanti'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Unduh'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        // Force full sync karena lokal kosong
+        final records = await _supabaseService.syncRecords(forceFull: true);
+        if (mounted) {
+          _processRecords(records);
+          if (records.isNotEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Berhasil mengunduh ${records.length} data.'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Data kosong di server atau gagal unduh.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Gagal mengunduh: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
+    }
+  }
+
   void _processRecords(List<GroundcheckRecord> records) {
     _allRecords = records;
     _statusOptions =
@@ -539,18 +641,6 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       );
       _isLoading = false;
     });
-  }
-
-  Future<void> _reloadFromSupabase() async {
-    await _loadData();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Data dimuat ulang dari Supabase'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
   }
 
   @override
@@ -1270,6 +1360,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     double? lat,
     double? lon, {
     bool isUploaded = false,
+    bool? allowCancel,
   }) async {
     final updated = GroundcheckRecord(
       idsbr: record.idsbr,
@@ -1284,6 +1375,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       perusahaanId: record.perusahaanId,
       userId: record.userId,
       isUploaded: isUploaded,
+      allowCancel: allowCancel ?? record.allowCancel,
     );
     final idx = _allRecords.indexWhere((r) => r.idsbr == record.idsbr);
     if (idx != -1) {
@@ -1699,8 +1791,16 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
           r.gcsResult != _gcsFilter) {
         return false;
       }
-      if (_isUploadedFilter != null && r.isUploaded != _isUploadedFilter) {
-        return false;
+      if (_isUploadedFilter != null) {
+        if (_isUploadedFilter == 'revisi') {
+          if (!r.isRevisi) return false;
+        } else if (_isUploadedFilter == 'uploaded') {
+          // Uploaded tapi bukan revisi
+          if (!r.isUploaded || r.isRevisi) return false;
+        } else if (_isUploadedFilter == 'not_uploaded') {
+          // Belum upload dan bukan revisi
+          if (r.isUploaded || r.isRevisi) return false;
+        }
       }
       return true;
     }).toList();
@@ -1836,9 +1936,610 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Berhasil mengubah status $count data')),
         );
-        _dataGridController.selectedRows.clear();
+        setState(() {
+          _dataGridController.selectedRows = [];
+        });
       }
     }
+  }
+
+  Future<void> _handleBulkCancelGc() async {
+    final selected = _dataGridController.selectedRows;
+    if (selected.isEmpty) return;
+
+    final revisiRecords = <GroundcheckRecord>[];
+    if (_dataSource != null) {
+      for (final row in selected) {
+        final record = _dataSource!.getRecord(row);
+        // Perbaikan: Support juga status isUploaded (bukan hanya revisi) asalkan allowCancel=true
+        if (record != null &&
+            (record.isRevisi || record.isUploaded) &&
+            record.allowCancel) {
+          revisiRecords.add(record);
+        }
+      }
+    }
+
+    if (revisiRecords.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Tidak ada data yang dapat dibatalkan (Uploaded/Revisi & allowCancel).',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text('Batalkan ${revisiRecords.length} Kiriman?'),
+          content: const Text(
+            'Data yang dibatalkan akan kembali menjadi status "Belum Upload" dan bisa dikirim ulang.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text(
+                'Ya, Batalkan',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    // Show progress dialog
+    final progressNotifier = ValueNotifier<int>(0);
+    final successNotifier = ValueNotifier<int>(0);
+    final failNotifier = ValueNotifier<int>(0);
+    final isFinishedNotifier = ValueNotifier<bool>(false);
+    final total = revisiRecords.length;
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('Membatalkan Kiriman...'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ValueListenableBuilder<int>(
+                  valueListenable: progressNotifier,
+                  builder: (ctx, val, _) {
+                    return LinearProgressIndicator(
+                      value: total > 0 ? val / total : 0,
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                ValueListenableBuilder<int>(
+                  valueListenable: successNotifier,
+                  builder: (ctx, val, _) => Text('Berhasil: $val'),
+                ),
+                ValueListenableBuilder<int>(
+                  valueListenable: failNotifier,
+                  builder: (ctx, val, _) => Text(
+                    'Gagal: $val',
+                    style: TextStyle(
+                      color: val > 0 ? Colors.red : Colors.black,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ValueListenableBuilder<bool>(
+                  valueListenable: isFinishedNotifier,
+                  builder: (ctx, isFinished, _) {
+                    if (!isFinished) return const SizedBox.shrink();
+                    return ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Tutup'),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    int successCount = 0;
+    int failCount = 0;
+
+    for (int i = 0; i < total; i++) {
+      final record = revisiRecords[i];
+      try {
+        final result = await _gcService.cancelKonfirmasiUser(
+          perusahaanId: record.perusahaanId,
+        );
+
+        // Asumsi result != null berarti sukses (karena method service sudah handle error catch null)
+        // Dan kita anggap 'Cancelled' message atau JSON apapun sebagai success untuk reset status lokal
+        if (result != null) {
+          // Sukses cancel di server, reset status di DB & Lokal
+          final resetSuccess = await _supabaseService.resetRevisiStatus(
+            record.idsbr,
+          );
+          if (resetSuccess) {
+            successCount++;
+            // Update in-memory list agar UI langsung berubah tanpa reload
+            final idx = _allRecords.indexWhere((r) => r.idsbr == record.idsbr);
+            if (idx != -1) {
+              _allRecords[idx] = _allRecords[idx].copyWith(
+                isUploaded: false,
+                isRevisi: false,
+              );
+            }
+          } else {
+            failCount++;
+            debugPrint('Gagal reset status lokal untuk ${record.idsbr}');
+          }
+        } else {
+          failCount++;
+          debugPrint('Gagal cancelKonfirmasiUser untuk ${record.idsbr}');
+          // Jika ditolak/gagal cancel, set allow_cancel = false
+          await _supabaseService.disableAllowCancel(record.idsbr);
+
+          final idx = _allRecords.indexWhere((r) => r.idsbr == record.idsbr);
+          if (idx != -1) {
+            _allRecords[idx] = _allRecords[idx].copyWith(allowCancel: false);
+          }
+        }
+      } catch (e) {
+        failCount++;
+        debugPrint('Exception cancel GC: $e');
+        // Jika error exception, mungkin koneksi, jangan disable allow_cancel dulu?
+        // User bilang "klo ditolak", asumsi rejected by server response, bukan network error.
+        // Jadi di block ini kita skip disableAllowCancel kecuali kita yakin itu penolakan server.
+      }
+
+      progressNotifier.value = i + 1;
+      successNotifier.value = successCount;
+      failNotifier.value = failCount;
+
+      // Small delay
+      if (i < total - 1) {
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+    }
+
+    isFinishedNotifier.value = true;
+    _dataGridController.selectedRows = [];
+
+    // Refresh UI
+    _refreshFilteredData();
+
+    // Refresh Map
+    try {
+      MapRepositoryImpl().invalidatePlacesCache();
+      if (mounted) {
+        context.read<MapBloc>().add(const PlacesRequested());
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _handleBulkDeleteNew() async {
+    final selectedRows = _dataGridController.selectedRows;
+    if (selectedRows.isEmpty) return;
+
+    // Filter only TEMP- records
+    final tempIds = <String>[];
+    if (_dataSource != null) {
+      for (final row in selectedRows) {
+        final r = _dataSource!.getRecord(row);
+        if (r != null && r.idsbr.toUpperCase().startsWith('TEMP-')) {
+          tempIds.add(r.idsbr);
+        }
+      }
+    }
+
+    if (tempIds.isEmpty) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hapus Data Baru'),
+        content: Text(
+          'Yakin ingin menghapus ${tempIds.length} data baru yang dipilih?\n'
+          'Data akan dihapus dari server dan lokal.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() {
+        _isDeletingNew = true;
+      });
+
+      final success = await _supabaseService.deleteRecords(tempIds);
+
+      if (mounted) {
+        setState(() {
+          _isDeletingNew = false;
+        });
+
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Data berhasil dihapus'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          _dataGridController.selectedRows = [];
+          setState(() {});
+
+          // Refresh data
+          final records = await _supabaseService.loadLocalRecords();
+          _processRecords(records);
+
+          // Refresh Map
+          try {
+            MapRepositoryImpl().invalidatePlacesCache();
+            if (mounted) {
+              context.read<MapBloc>().add(const PlacesRequested());
+            }
+          } catch (_) {}
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Gagal menghapus data'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _handleBulkTambahUsaha() async {
+    final selected = _dataGridController.selectedRows;
+    if (selected.isEmpty) return;
+
+    // Filter record yang gcsResult == '5' DAN belum di-upload
+    final validRecords = <GroundcheckRecord>[];
+    int skippedCount = 0;
+    int skippedUploadedCount = 0;
+    int skippedNon5Count = 0;
+
+    if (_dataSource != null) {
+      for (final row in selected) {
+        final record = _dataSource!.getRecord(row);
+        if (record != null) {
+          if (record.isUploaded) {
+            skippedUploadedCount++;
+          } else if (record.gcsResult == '5') {
+            validRecords.add(record);
+          } else {
+            // Not code 5
+            skippedNon5Count++;
+          }
+        }
+      }
+    }
+
+    if (validRecords.isEmpty) {
+      if (mounted) {
+        String msg = 'Tidak ada data Tambah Usaha (Kode 5) valid.';
+        if (skippedUploadedCount > 0) {
+          msg = '$skippedUploadedCount data dilewati karena sudah terupload.';
+        } else if (skippedNon5Count > 0) {
+          msg = 'Data terpilih bukan Kode 5 (Alih Usaha).';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.orange),
+        );
+      }
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text('Bulk Tambah Usaha: ${validRecords.length} Data'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: [
+                Text(
+                  'Akan mengirim ${validRecords.length} data Tambah Usaha (Kode 5).',
+                ),
+                if (skippedUploadedCount > 0 || skippedNon5Count > 0)
+                  const SizedBox(height: 12),
+                if (skippedUploadedCount > 0)
+                  Text(
+                    '$skippedUploadedCount data dilewati karena SUDAH terupload.',
+                    style: const TextStyle(color: Colors.blue, fontSize: 12),
+                  ),
+                if (skippedNon5Count > 0)
+                  Text(
+                    '$skippedNon5Count data dilewati karena BUKAN kode 5.',
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Kirim'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    final configOk = await _ensureGcConfig();
+    if (!configOk) return;
+
+    // Setup Progress Dialog
+    final ValueNotifier<int> successNotifier = ValueNotifier(0);
+    final ValueNotifier<int> failNotifier = ValueNotifier(0);
+    final ValueNotifier<String> statusNotifier = ValueNotifier('Menyiapkan...');
+    final ValueNotifier<bool> isFinishedNotifier = ValueNotifier(false);
+    final ValueNotifier<bool> isCancelledNotifier = ValueNotifier(false);
+    bool isDialogVisible = true;
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          return PopScope(
+            canPop: false,
+            child: AlertDialog(
+              title: const Text('Mengirim Tambah Usaha...'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ValueListenableBuilder<String>(
+                    valueListenable: statusNotifier,
+                    builder: (context, val, child) {
+                      return Text(val, textAlign: TextAlign.center);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  const LinearProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      ValueListenableBuilder<int>(
+                        valueListenable: successNotifier,
+                        builder: (context, val, child) {
+                          return Column(
+                            children: [
+                              const Icon(
+                                Icons.check_circle,
+                                color: Colors.green,
+                              ),
+                              Text('$val Sukses'),
+                            ],
+                          );
+                        },
+                      ),
+                      ValueListenableBuilder<int>(
+                        valueListenable: failNotifier,
+                        builder: (context, val, child) {
+                          return Column(
+                            children: [
+                              const Icon(Icons.error, color: Colors.red),
+                              Text('$val Gagal'),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: isFinishedNotifier,
+                    builder: (context, isFinished, child) {
+                      if (!isFinished) {
+                        return OutlinedButton(
+                          onPressed: () {
+                            isCancelledNotifier.value = true;
+                            statusNotifier.value = 'Membatalkan...';
+                          },
+                          child: const Text('Batal'),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: isFinishedNotifier,
+                    builder: (context, isFinished, child) {
+                      if (isFinished) {
+                        return TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Tutup'),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ).then((_) {
+        isDialogVisible = false;
+      });
+    }
+
+    List<GroundcheckRecord> pendingRecords = List.from(validRecords);
+    int maxRetries = 3;
+    int successCount = 0;
+    int failCount = 0;
+    int total = validRecords.length;
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      if (isCancelledNotifier.value) break;
+      if (pendingRecords.isEmpty) break;
+
+      final currentBatch = List<GroundcheckRecord>.from(pendingRecords);
+      pendingRecords.clear();
+
+      for (int i = 0; i < currentBatch.length; i++) {
+        if (isCancelledNotifier.value) break;
+        final record = currentBatch[i];
+
+        statusNotifier.value =
+            'Percobaan $attempt/$maxRetries\nMengirim ${record.idsbr} (${i + 1}/${currentBatch.length})...';
+
+        try {
+          // --- REGION CODE PARSING LOGIC ---
+          // 1. Ambil dari record jika ada
+          String finalKecCode = record.kdKec ?? '';
+          String finalDesaCode = record.kdDesa ?? '';
+
+          // 2. Jika kosong, coba parse dari kodeWilayah (BPS Standard: PPKKKCCDDD)
+          // Contoh: 7372030001 -> Kec: 030, Desa: 001
+          // Panjang string biasanya 10 digit.
+          if ((finalKecCode.isEmpty || finalDesaCode.isEmpty) &&
+              record.kodeWilayah.length >= 10) {
+            try {
+              // PP KK KCC DDD
+              // 01 23 456 789
+              // Kec ada di index 4-6 (3 digit)
+              // Desa ada di index 7-9 (3 digit)
+              if (finalKecCode.isEmpty) {
+                finalKecCode = record.kodeWilayah.substring(4, 7);
+              }
+              if (finalDesaCode.isEmpty) {
+                finalDesaCode = record.kodeWilayah.substring(7, 10);
+              }
+            } catch (_) {
+              // Ignore parsing error
+            }
+          }
+          // ---------------------------------
+
+          // Convert codes to server IDs
+          final String serverProvId = WilayahMapping.serverProvinsiId;
+          final String serverKabId = WilayahMapping.serverKabupatenId;
+          final String serverKecId = WilayahMapping.getKecamatanId(
+            finalKecCode,
+          );
+          final String serverDesaId = WilayahMapping.getDesaId(
+            finalKecCode,
+            finalDesaCode,
+          );
+
+          // --- DEBUG MODE: PAYLOAD CHECK (LOG ONLY) ---
+          final debugPayload = {
+            '_token': 'HIDDEN',
+            'nama_usaha': record.namaUsaha,
+            'alamat': record.alamatUsaha,
+            'provinsi': serverProvId,
+            'kabupaten': serverKabId,
+            'kecamatan': serverKecId,
+            'desa': serverDesaId,
+            'latitude': record.latitude,
+            'longitude': record.longitude,
+            'confirmSubmit': true,
+          };
+          debugPrint('=== MENGIRIM DATA KE SERVER ===');
+          debugPrint(const JsonEncoder.withIndent('  ').convert(debugPayload));
+
+          final result = await _gcService.saveDraftTambahUsaha(
+            namaUsaha: record.namaUsaha,
+            alamat: record.alamatUsaha,
+            provinsiId: serverProvId,
+            kabupatenId: serverKabId,
+            kecamatanId: serverKecId,
+            desaId: serverDesaId,
+            latitude: record.latitude,
+            longitude: record.longitude,
+          );
+
+          if (result != null &&
+              (result['status'] == 'success' || result['title'] == 'Sukses')) {
+            successCount++;
+
+            // Update status upload
+            await _applyGcInput(
+              record,
+              record.gcsResult,
+              double.tryParse(record.latitude),
+              double.tryParse(record.longitude),
+              isUploaded: true,
+            );
+          } else {
+            // Failed
+            pendingRecords.add(record);
+          }
+        } catch (e) {
+          pendingRecords.add(record);
+        }
+
+        successNotifier.value = successCount;
+        failNotifier.value = failCount + pendingRecords.length;
+
+        // Small delay
+        if (i < currentBatch.length - 1) {
+          await Future.delayed(const Duration(milliseconds: 200));
+        }
+      }
+
+      if (pendingRecords.isNotEmpty && attempt < maxRetries) {
+        statusNotifier.value = 'Menunggu sebelum retry...';
+        await Future.delayed(const Duration(seconds: 2));
+      }
+    }
+
+    failCount = total - successCount;
+    failNotifier.value = failCount;
+    statusNotifier.value = 'Selesai: $successCount Sukses, $failCount Gagal';
+    isFinishedNotifier.value = true;
+
+    // Refresh UI
+    _dataGridController.selectedRows = [];
+    _refreshFilteredData();
+
+    // Refresh Map
+    try {
+      MapRepositoryImpl().invalidatePlacesCache();
+      if (mounted) {
+        context.read<MapBloc>().add(const PlacesRequested());
+      }
+    } catch (_) {}
   }
 
   Future<void> _handleBulkGc() async {
@@ -1856,7 +2557,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
         if (record != null) {
           if (record.isUploaded) {
             skippedUploadedCount++;
-          } else if (record.gcsResult.isNotEmpty) {
+          } else if (record.gcsResult.isNotEmpty && record.gcsResult != '5') {
             validRecords.add(record);
           } else {
             skippedCount++;
@@ -2196,6 +2897,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                       lat,
                       lon,
                       isUploaded: true,
+                      allowCancel: false,
                     );
                     isSuccess = true;
                   }
@@ -2262,7 +2964,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       // Update status akhir
       isFinishedNotifier.value = true;
 
-      _dataGridController.selectedRows.clear();
+      _dataGridController.selectedRows = [];
       setState(() {});
 
       if (!isDialogVisible && mounted) {
@@ -2303,11 +3005,6 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
               ),
             ),
             const SizedBox(width: 8),
-            IconButton(
-              onPressed: _reloadFromSupabase,
-              icon: const Icon(Icons.refresh),
-              tooltip: 'Muat ulang data',
-            ),
             IconButton(
               onPressed: () => _ensureGcConfig(forceShow: true),
               icon: const Icon(Icons.settings),
@@ -2375,7 +3072,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: DropdownButtonFormField<bool?>(
+              child: DropdownButtonFormField<String?>(
                 value: _isUploadedFilter,
                 decoration: const InputDecoration(
                   labelText: 'Status Upload',
@@ -2383,14 +3080,18 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                   border: OutlineInputBorder(),
                 ),
                 items: const [
-                  DropdownMenuItem<bool?>(value: null, child: Text('Semua')),
-                  DropdownMenuItem<bool?>(
-                    value: true,
+                  DropdownMenuItem<String?>(value: null, child: Text('Semua')),
+                  DropdownMenuItem<String?>(
+                    value: 'uploaded',
                     child: Text('Sudah Upload'),
                   ),
-                  DropdownMenuItem<bool?>(
-                    value: false,
+                  DropdownMenuItem<String?>(
+                    value: 'not_uploaded',
                     child: Text('Belum Upload'),
+                  ),
+                  DropdownMenuItem<String?>(
+                    value: 'revisi',
+                    child: Text('Perlu Revisi'),
                   ),
                 ],
                 onChanged: (value) {
@@ -2478,430 +3179,542 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: _dataGridController.selectedRows.isNotEmpty
-          ? Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                FloatingActionButton.extended(
-                  heroTag: 'fab_edit',
-                  onPressed: _handleBulkEditStatus,
-                  icon: const Icon(Icons.edit),
-                  label: const Text('Ubah Status'),
-                  backgroundColor: Colors.orange,
-                ),
-                const SizedBox(width: 16),
-                FloatingActionButton.extended(
-                  heroTag: 'fab_send',
-                  onPressed: _handleBulkGc,
-                  icon: const Icon(Icons.send),
-                  label: Text(
-                    'Kirim GC (${_dataGridController.selectedRows.length})',
-                  ),
-                ),
-              ],
-            )
-          : null,
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-            ? Center(
-                child: Text(
-                  'Gagal memuat data: $_error',
-                  textAlign: TextAlign.center,
-                ),
-              )
-            : Column(
-                children: [
-                  if (_currentUser != null)
-                    Card(
-                      color: Colors.green[50],
-                      margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: Colors.green.shade200),
+    return BlocListener<MapBloc, MapState>(
+      listenWhen: (previous, current) => previous.places != current.places,
+      listener: (context, state) {
+        if (state.status == MapStatus.success) {
+          _loadData();
+        }
+      },
+      child: Scaffold(
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+        floatingActionButton: _dataGridController.selectedRows.isNotEmpty
+            ? Builder(
+                builder: (context) {
+                  // Cek kondisi tombol
+                  bool showCancel = false;
+                  bool showDeleteNew = false;
+                  bool showKirimGc = false;
+                  bool showTambahUsaha = false;
+                  int countKirimGc = 0;
+                  int countTambahUsaha = 0;
+
+                  if (_dataSource != null) {
+                    for (final row in _dataGridController.selectedRows) {
+                      final r = _dataSource!.getRecord(row);
+                      if (r != null) {
+                        if (!showCancel &&
+                            (r.isRevisi || r.isUploaded) &&
+                            r.allowCancel) {
+                          showCancel = true;
+                        }
+                        if (!showDeleteNew &&
+                            r.idsbr.toUpperCase().startsWith('TEMP-')) {
+                          showDeleteNew = true;
+                        }
+
+                        // Logic tombol Kirim GC vs Tambah Usaha
+                        if (!r.isUploaded) {
+                          if (r.gcsResult == '5') {
+                            showTambahUsaha = true;
+                            countTambahUsaha++;
+                          } else if (r.gcsResult.isNotEmpty) {
+                            showKirimGc = true;
+                            countKirimGc++;
+                          }
+                        }
+                      }
+                    }
+                  }
+
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      FloatingActionButton.extended(
+                        heroTag: 'fab_deselect',
+                        onPressed: () {
+                          setState(() {
+                            _dataGridController.selectedRows = [];
+                          });
+                        },
+                        icon: const Icon(Icons.close),
+                        label: const Text('Batal Pilih'),
+                        backgroundColor: Colors.grey,
                       ),
-                      child: ExpansionTile(
-                        tilePadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
+                      const SizedBox(width: 16),
+                      if (!showCancel) ...[
+                        FloatingActionButton.extended(
+                          heroTag: 'fab_edit',
+                          onPressed: _handleBulkEditStatus,
+                          icon: const Icon(Icons.edit),
+                          label: const Text('Ubah Status'),
+                          backgroundColor: Colors.orange,
                         ),
-                        leading: const CircleAvatar(
-                          backgroundColor: Colors.green,
-                          child: Icon(Icons.person, color: Colors.white),
-                        ),
-                        title: const Text(
-                          'Login Berhasil',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.green,
-                            fontWeight: FontWeight.bold,
+                        const SizedBox(width: 16),
+                        if (showKirimGc) ...[
+                          FloatingActionButton.extended(
+                            heroTag: 'fab_send',
+                            onPressed: _handleBulkGc,
+                            icon: const Icon(Icons.send),
+                            label: Text('Kirim GC ($countKirimGc)'),
                           ),
-                        ),
-                        subtitle: Text(
-                          _currentUser!,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: Colors.black87,
+                          const SizedBox(width: 16),
+                        ],
+                        if (showTambahUsaha) ...[
+                          FloatingActionButton.extended(
+                            heroTag: 'fab_add_business',
+                            onPressed: _handleBulkTambahUsaha,
+                            icon: const Icon(
+                              Icons.add_business,
+                              color: Colors.white,
+                            ),
+                            label: Text(
+                              'Tambah Usaha ($countTambahUsaha)',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            backgroundColor: Colors.black,
                           ),
+                          const SizedBox(width: 16),
+                        ],
+                      ] else
+                        FloatingActionButton.extended(
+                          heroTag: 'fab_cancel',
+                          onPressed: _handleBulkCancelGc,
+                          icon: const Icon(Icons.cancel_schedule_send),
+                          label: Text(
+                            'Batalkan Kirim (${_dataGridController.selectedRows.length})',
+                          ),
+                          backgroundColor: Colors.red,
                         ),
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                            alignment: Alignment.centerLeft,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Divider(),
-                                const Text(
-                                  'Detail Sesi (Siap untuk Konfirmasi)',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
+                      if (showDeleteNew) ...[
+                        FloatingActionButton.extended(
+                          heroTag: 'fab_delete_new',
+                          onPressed: _isDeletingNew
+                              ? null
+                              : _handleBulkDeleteNew,
+                          icon: _isDeletingNew
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                _buildInfoRow(
-                                  'GC Token',
-                                  _gcToken != null && _gcToken!.length > 10
-                                      ? '${_gcToken!.substring(0, 10)}...${_gcToken!.substring(_gcToken!.length - 5)}'
-                                      : 'Tidak tersedia',
-                                  isGood: _gcToken != null,
-                                ),
-                                _buildInfoRow(
-                                  'Cookie',
-                                  _gcCookie != null ? 'Tersedia' : 'Kosong',
-                                  isGood: _gcCookie != null,
-                                ),
-                                _buildInfoRow(
-                                  'Mode',
-                                  _userAgent != null &&
-                                          _userAgent!.contains('Android')
-                                      ? 'Mobile (Android 16)'
-                                      : 'Desktop / Default',
-                                  isGood:
-                                      _userAgent != null &&
-                                      _userAgent!.contains('Android'),
-                                ),
-                                const SizedBox(height: 12),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: OutlinedButton.icon(
-                                          onPressed: _handleRefreshSession,
-                                          icon: const Icon(
-                                            Icons.refresh,
-                                            size: 18,
-                                            color: Colors.blue,
-                                          ),
-                                          label: const Text(
-                                            'Refresh Sesi',
-                                            style: TextStyle(
+                                )
+                              : const Icon(Icons.delete_forever),
+                          label: Text(_isDeletingNew ? '' : 'Hapus Baru'),
+                          backgroundColor: Colors.red[900],
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              )
+            : null,
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null
+              ? Center(
+                  child: Text(
+                    'Gagal memuat data: $_error',
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              : Column(
+                  children: [
+                    if (_currentUser != null)
+                      Card(
+                        color: Colors.green[50],
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: Colors.green.shade200),
+                        ),
+                        child: ExpansionTile(
+                          tilePadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          leading: const CircleAvatar(
+                            backgroundColor: Colors.green,
+                            child: Icon(Icons.person, color: Colors.white),
+                          ),
+                          title: const Text(
+                            'Login Berhasil',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.green,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: Text(
+                            _currentUser!,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              alignment: Alignment.centerLeft,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Divider(),
+                                  const Text(
+                                    'Detail Sesi (Siap untuk Konfirmasi)',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _buildInfoRow(
+                                    'GC Token',
+                                    _gcToken != null && _gcToken!.length > 10
+                                        ? '${_gcToken!.substring(0, 10)}...${_gcToken!.substring(_gcToken!.length - 5)}'
+                                        : 'Tidak tersedia',
+                                    isGood: _gcToken != null,
+                                  ),
+                                  _buildInfoRow(
+                                    'Cookie',
+                                    _gcCookie != null ? 'Tersedia' : 'Kosong',
+                                    isGood: _gcCookie != null,
+                                  ),
+                                  _buildInfoRow(
+                                    'Mode',
+                                    _userAgent != null &&
+                                            _userAgent!.contains('Android')
+                                        ? 'Mobile (Android 16)'
+                                        : 'Desktop / Default',
+                                    isGood:
+                                        _userAgent != null &&
+                                        _userAgent!.contains('Android'),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: OutlinedButton.icon(
+                                            onPressed: _handleRefreshSession,
+                                            icon: const Icon(
+                                              Icons.refresh,
+                                              size: 18,
                                               color: Colors.blue,
                                             ),
-                                          ),
-                                          style: OutlinedButton.styleFrom(
-                                            side: const BorderSide(
-                                              color: Colors.blue,
+                                            label: const Text(
+                                              'Refresh Sesi',
+                                              style: TextStyle(
+                                                color: Colors.blue,
+                                              ),
                                             ),
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 12,
+                                            style: OutlinedButton.styleFrom(
+                                              side: const BorderSide(
+                                                color: Colors.blue,
+                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 12,
+                                                  ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: OutlinedButton.icon(
-                                          onPressed: _handleLogout,
-                                          icon: const Icon(
-                                            Icons.logout,
-                                            size: 18,
-                                            color: Colors.red,
-                                          ),
-                                          label: const Text(
-                                            'Logout',
-                                            style: TextStyle(color: Colors.red),
-                                          ),
-                                          style: OutlinedButton.styleFrom(
-                                            side: const BorderSide(
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: OutlinedButton.icon(
+                                            onPressed: _handleLogout,
+                                            icon: const Icon(
+                                              Icons.logout,
+                                              size: 18,
                                               color: Colors.red,
                                             ),
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 12,
+                                            label: const Text(
+                                              'Logout',
+                                              style: TextStyle(
+                                                color: Colors.red,
+                                              ),
+                                            ),
+                                            style: OutlinedButton.styleFrom(
+                                              side: const BorderSide(
+                                                color: Colors.red,
+                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 12,
+                                                  ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: ElevatedButton.icon(
-                        onPressed: _showBpsLoginDialog,
-                        icon: const Icon(Icons.login),
-                        label: const Text('Login ke BPS (Matchapro)'),
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ),
-                  _buildFilterBar(),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: _allRecords.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.cloud_off,
-                                  size: 64,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(height: 16),
-                                const Text(
-                                  'Belum ada data Groundcheck tersimpan.',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Silakan download data untuk memulai.',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                ElevatedButton.icon(
-                                  onPressed: () async {
-                                    setState(() {
-                                      _isLoading = true;
-                                    });
-                                    try {
-                                      final records = await _supabaseService
-                                          .syncRecords();
-                                      if (mounted) {
-                                        _processRecords(records);
-                                      }
-                                    } catch (e) {
-                                      if (mounted) {
-                                        setState(() {
-                                          _isLoading = false;
-                                          _error = e.toString();
-                                        });
-                                      }
-                                    }
-                                  },
-                                  icon: const Icon(Icons.download),
-                                  label: const Text('Download Data'),
-                                ),
-                              ],
-                            ),
-                          )
-                        : Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.grey.withValues(alpha: 0.1),
-                                  spreadRadius: 1,
-                                  blurRadius: 3,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ],
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: SfDataGrid(
-                                source: _dataSource!,
-                                controller: _dataGridController,
-                                selectionMode: SelectionMode.multiple,
-                                showCheckboxColumn: true,
-                                onSelectionChanged: (added, removed) =>
-                                    setState(() {}),
-                                verticalScrollController: _scrollController,
-                                rowHeight: 56,
-                                headerGridLinesVisibility:
-                                    GridLinesVisibility.horizontal,
-                                gridLinesVisibility:
-                                    GridLinesVisibility.horizontal,
-                                columnWidthMode: ColumnWidthMode.fill,
-                                allowSorting: true,
-                                columns: [
-                                  GridColumn(
-                                    columnName: 'idsbr',
-                                    label: Container(
-                                      alignment: Alignment.centerLeft,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                      ),
-                                      color: Colors.blue[50],
-                                      child: const Text(
-                                        'ID SBR',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  GridColumn(
-                                    columnName: 'nama_usaha',
-                                    label: Container(
-                                      alignment: Alignment.centerLeft,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                      ),
-                                      color: Colors.blue[50],
-                                      child: const Text(
-                                        'Nama Usaha',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  GridColumn(
-                                    columnName: 'alamat_usaha',
-                                    label: Container(
-                                      alignment: Alignment.centerLeft,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                      ),
-                                      color: Colors.blue[50],
-                                      child: const Text(
-                                        'Alamat Usaha',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  GridColumn(
-                                    columnName: 'kode_wilayah',
-                                    label: Container(
-                                      alignment: Alignment.centerLeft,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                      ),
-                                      color: Colors.blue[50],
-                                      child: const Text(
-                                        'Kode Wilayah',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  GridColumn(
-                                    columnName: 'status_perusahaan',
-                                    label: Container(
-                                      alignment: Alignment.centerLeft,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                      ),
-                                      color: Colors.blue[50],
-                                      child: const Text(
-                                        'Status Perusahaan',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  GridColumn(
-                                    columnName: 'isUploaded',
-                                    width: 80,
-                                    label: Container(
-                                      alignment: Alignment.center,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                      ),
-                                      color: Colors.blue[50],
-                                      child: const Text(
-                                        'Up?',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  GridColumn(
-                                    columnName: 'gcs_result',
-                                    label: Container(
-                                      alignment: Alignment.centerLeft,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                      ),
-                                      color: Colors.blue[50],
-                                      child: const Text(
-                                        'GCS Result',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  GridColumn(
-                                    columnName: 'gc_action',
-                                    width: 120,
-                                    label: Container(
-                                      alignment: Alignment.center,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                      ),
-                                      color: Colors.blue[50],
-                                      child: const Text(
-                                        'Aksi',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
+                                      ],
                                     ),
                                   ),
                                 ],
                               ),
                             ),
+                          ],
+                        ),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: ElevatedButton.icon(
+                          onPressed: _showBpsLoginDialog,
+                          icon: const Icon(Icons.login),
+                          label: const Text('Login ke BPS (Matchapro)'),
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48),
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
                           ),
-                  ),
-                ],
-              ),
+                        ),
+                      ),
+                    _buildFilterBar(),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: _allRecords.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    Icons.cloud_off,
+                                    size: 64,
+                                    color: Colors.grey,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Text(
+                                    'Belum ada data Groundcheck tersimpan.',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Silakan download data untuk memulai.',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  ElevatedButton.icon(
+                                    onPressed: () async {
+                                      setState(() {
+                                        _isLoading = true;
+                                      });
+                                      try {
+                                        final records = await _supabaseService
+                                            .syncRecords();
+                                        if (mounted) {
+                                          _processRecords(records);
+                                        }
+                                      } catch (e) {
+                                        if (mounted) {
+                                          setState(() {
+                                            _isLoading = false;
+                                            _error = e.toString();
+                                          });
+                                        }
+                                      }
+                                    },
+                                    icon: const Icon(Icons.download),
+                                    label: const Text('Download Data'),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.grey.withValues(alpha: 0.1),
+                                    spreadRadius: 1,
+                                    blurRadius: 3,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: SfDataGrid(
+                                  source: _dataSource!,
+                                  controller: _dataGridController,
+                                  selectionMode: SelectionMode.multiple,
+                                  showCheckboxColumn: true,
+                                  onSelectionChanged: (added, removed) =>
+                                      setState(() {}),
+                                  verticalScrollController: _scrollController,
+                                  rowHeight: 56,
+                                  headerGridLinesVisibility:
+                                      GridLinesVisibility.horizontal,
+                                  gridLinesVisibility:
+                                      GridLinesVisibility.horizontal,
+                                  columnWidthMode: ColumnWidthMode.fill,
+                                  allowSorting: true,
+                                  columns: [
+                                    GridColumn(
+                                      columnName: 'idsbr',
+                                      label: Container(
+                                        alignment: Alignment.centerLeft,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                        ),
+                                        color: Colors.blue[50],
+                                        child: const Text(
+                                          'ID SBR',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    GridColumn(
+                                      columnName: 'nama_usaha',
+                                      label: Container(
+                                        alignment: Alignment.centerLeft,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                        ),
+                                        color: Colors.blue[50],
+                                        child: const Text(
+                                          'Nama Usaha',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    GridColumn(
+                                      columnName: 'alamat_usaha',
+                                      label: Container(
+                                        alignment: Alignment.centerLeft,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                        ),
+                                        color: Colors.blue[50],
+                                        child: const Text(
+                                          'Alamat Usaha',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    GridColumn(
+                                      columnName: 'kode_wilayah',
+                                      label: Container(
+                                        alignment: Alignment.centerLeft,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                        ),
+                                        color: Colors.blue[50],
+                                        child: const Text(
+                                          'Kode Wilayah',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    GridColumn(
+                                      columnName: 'status_perusahaan',
+                                      label: Container(
+                                        alignment: Alignment.centerLeft,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                        ),
+                                        color: Colors.blue[50],
+                                        child: const Text(
+                                          'Status Perusahaan',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    GridColumn(
+                                      columnName: 'isUploaded',
+                                      width: 80,
+                                      label: Container(
+                                        alignment: Alignment.center,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                        ),
+                                        color: Colors.blue[50],
+                                        child: const Text(
+                                          'Up?',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    GridColumn(
+                                      columnName: 'gcs_result',
+                                      label: Container(
+                                        alignment: Alignment.centerLeft,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                        ),
+                                        color: Colors.blue[50],
+                                        child: const Text(
+                                          'GCS Result',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    GridColumn(
+                                      columnName: 'gc_action',
+                                      width: 120,
+                                      label: Container(
+                                        alignment: Alignment.center,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                        ),
+                                        color: Colors.blue[50],
+                                        child: const Text(
+                                          'Aksi',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+        ),
       ),
     );
   }

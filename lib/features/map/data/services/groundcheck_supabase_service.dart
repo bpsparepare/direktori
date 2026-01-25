@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -93,6 +94,20 @@ class GroundcheckSupabaseService {
                 'longitude': e['longitude']?.toString() ?? '',
                 'perusahaan_id': (e['perusahaan_id'] ?? e['idsbr'] ?? '')
                     .toString(),
+                'provinsi_id':
+                    e['kd_prov']?.toString() ??
+                    e['provinsi_id']?.toString() ??
+                    '',
+                'kabupaten_id':
+                    e['kd_kab']?.toString() ??
+                    e['kabupaten_id']?.toString() ??
+                    '',
+                'kecamatan_id':
+                    e['kd_kec']?.toString() ??
+                    e['kecamatan_id']?.toString() ??
+                    '',
+                'desa_id':
+                    e['kd_desa']?.toString() ?? e['desa_id']?.toString() ?? '',
                 'updated_at': DateTime.now().toIso8601String(),
                 'isUploaded': e['isUploaded'] == true,
               },
@@ -167,6 +182,13 @@ class GroundcheckSupabaseService {
             perusahaanId: (json['perusahaan_id'] ?? '')
                 .toString(), // Missing in view
             userId: json['user_id']?.toString(),
+            kdProv:
+                json['kd_prov']?.toString() ?? json['provinsi_id']?.toString(),
+            kdKab:
+                json['kd_kab']?.toString() ?? json['kabupaten_id']?.toString(),
+            kdKec:
+                json['kd_kec']?.toString() ?? json['kecamatan_id']?.toString(),
+            kdDesa: json['kd_desa']?.toString() ?? json['desa_id']?.toString(),
             isRevisi: json['is_revisi'] == true,
           );
         }).toList();
@@ -258,6 +280,25 @@ class GroundcheckSupabaseService {
     }
   }
 
+  Future<bool> deleteRecords(List<String> idsbrList) async {
+    try {
+      if (idsbrList.isEmpty) return true;
+
+      // Delete from Supabase
+      await _client.from(_tableName).delete().filter('idsbr', 'in', idsbrList);
+
+      // Delete from local cache
+      final records = await loadLocalRecords();
+      records.removeWhere((r) => idsbrList.contains(r.idsbr));
+      await saveLocalRecords(records);
+
+      return true;
+    } catch (e) {
+      print('Error deleteRecords: $e');
+      return false;
+    }
+  }
+
   Future<void> updateLocalRecord(GroundcheckRecord record) async {
     try {
       final records = await loadLocalRecords();
@@ -289,7 +330,12 @@ class GroundcheckSupabaseService {
         'latitude': record.latitude,
         'longitude': record.longitude,
         'perusahaan_id': record.perusahaanId,
+        'provinsi_id': record.kdProv,
+        'kabupaten_id': record.kdKab,
+        'kecamatan_id': record.kdKec,
+        'desa_id': record.kdDesa,
         'isUploaded': record.isUploaded,
+        'allow_cancel': record.allowCancel,
       };
 
       // Logic is_revisi: Jika data sudah diupload (isUploaded=true) dan ada update,
@@ -305,6 +351,8 @@ class GroundcheckSupabaseService {
       if (record.userId != null) {
         data['user_id'] = record.userId!;
       }
+
+      debugPrint('updateRecord Payload to Supabase: $data');
 
       await _client.from(_tableName).upsert(data, onConflict: 'idsbr');
 
@@ -347,20 +395,7 @@ class GroundcheckSupabaseService {
       final index = records.indexWhere((r) => r.idsbr == idsbr);
       if (index != -1) {
         final old = records[index];
-        records[index] = GroundcheckRecord(
-          idsbr: old.idsbr,
-          namaUsaha: old.namaUsaha,
-          alamatUsaha: old.alamatUsaha,
-          kodeWilayah: old.kodeWilayah,
-          statusPerusahaan: old.statusPerusahaan,
-          skalaUsaha: old.skalaUsaha,
-          gcsResult: old.gcsResult,
-          latitude: old.latitude,
-          longitude: old.longitude,
-          perusahaanId: old.perusahaanId,
-          userId: old.userId,
-          isUploaded: isUploaded,
-        );
+        records[index] = old.copyWith(isUploaded: isUploaded);
         await saveLocalRecords(records);
       }
       return true;
@@ -538,6 +573,59 @@ class GroundcheckSupabaseService {
 
       return true;
     } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> resetRevisiStatus(String idsbr) async {
+    try {
+      // 1. Update Supabase
+      await _client
+          .from(_tableName)
+          .update({
+            'isUploaded': false,
+            'is_revisi': false,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('idsbr', idsbr);
+
+      // 2. Update Local Cache
+      final records = await loadLocalRecords();
+      final index = records.indexWhere((r) => r.idsbr == idsbr);
+      if (index != -1) {
+        final old = records[index];
+        records[index] = old.copyWith(isUploaded: false, isRevisi: false);
+        await saveLocalRecords(records);
+      }
+      return true;
+    } catch (e) {
+      print('Error resetRevisiStatus: $e');
+      return false;
+    }
+  }
+
+  Future<bool> disableAllowCancel(String idsbr) async {
+    try {
+      // 1. Update Supabase
+      await _client
+          .from(_tableName)
+          .update({
+            'allow_cancel': false,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('idsbr', idsbr);
+
+      // 2. Update Local Cache
+      final records = await loadLocalRecords();
+      final index = records.indexWhere((r) => r.idsbr == idsbr);
+      if (index != -1) {
+        final old = records[index];
+        records[index] = old.copyWith(allowCancel: false);
+        await saveLocalRecords(records);
+      }
+      return true;
+    } catch (e) {
+      print('Error disableAllowCancel: $e');
       return false;
     }
   }

@@ -456,6 +456,136 @@ class BpsGcService {
     }
   }
 
+  Future<Map<String, dynamic>?> getDraftTambahUsaha() async {
+    final url = Uri.parse('$baseUrl/dirgc/rtr-draft-tambah-usaha');
+
+    if (_cookieHeader == null) return null;
+
+    final headers = {
+      'Cookie': _cookieHeader!,
+      'User-Agent': _userAgent,
+      'Accept': 'application/json, text/javascript, */*; q=0.01',
+      'X-Requested-With': 'XMLHttpRequest',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'Origin': baseUrl,
+      'Referer': '$baseUrl/dirgc',
+      'X-CSRF-TOKEN': _csrfToken ?? '',
+    };
+
+    final body = {'_token': _csrfToken ?? ''};
+
+    try {
+      final response = await _client.post(url, headers: headers, body: body);
+      debugPrint('getDraftTambahUsaha: HTTP Status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('getDraftTambahUsaha Error: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> saveDraftTambahUsaha({
+    required String namaUsaha,
+    required String alamat,
+    required String provinsiId,
+    required String kabupatenId,
+    required String kecamatanId,
+    required String desaId,
+    required String latitude,
+    required String longitude,
+  }) async {
+    final url = Uri.parse('$baseUrl/dirgc/draft-tambah-usaha');
+
+    if (_cookieHeader == null) return null;
+
+    final headers = {
+      'Cookie': _cookieHeader!,
+      'User-Agent': _userAgent,
+      'Accept': 'application/json, text/javascript, */*; q=0.01',
+      'X-Requested-With': 'XMLHttpRequest',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'Origin': baseUrl,
+      'Referer': '$baseUrl/dirgc',
+      'X-CSRF-TOKEN': _csrfToken ?? '',
+    };
+
+    final body = {
+      '_token': _csrfToken ?? '',
+      'nama_usaha': namaUsaha,
+      'alamat': alamat,
+      'provinsi': provinsiId,
+      'kabupaten': kabupatenId,
+      'kecamatan': kecamatanId,
+      'desa': desaId,
+      'latitude': latitude,
+      'longitude': longitude,
+      'confirmSubmit': 'true',
+    };
+
+    debugPrint('saveDraftTambahUsaha: Payload: $body');
+
+    try {
+      final response = await _client.post(url, headers: headers, body: body);
+      debugPrint('saveDraftTambahUsaha: HTTP Status: ${response.statusCode}');
+      debugPrint('saveDraftTambahUsaha: Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('saveDraftTambahUsaha Error: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> cancelKonfirmasiUser({
+    required String perusahaanId,
+  }) async {
+    final url = Uri.parse('$baseUrl/dirgc/konfirmasi-user-cancel');
+
+    if (_cookieHeader == null) return null;
+
+    final headers = {
+      'Cookie': _cookieHeader!,
+      'User-Agent': _userAgent,
+      'Accept': 'application/json, text/javascript, */*; q=0.01',
+      'X-Requested-With': 'XMLHttpRequest',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'Origin': baseUrl,
+      'Referer': '$baseUrl/dirgc',
+      'X-CSRF-TOKEN': _csrfToken ?? '',
+    };
+
+    final body = {'perusahaan_id': perusahaanId, '_token': _csrfToken ?? ''};
+
+    try {
+      final response = await _client.post(url, headers: headers, body: body);
+      debugPrint('cancelKonfirmasiUser: HTTP Status: ${response.statusCode}');
+      debugPrint('cancelKonfirmasiUser: HTTP Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        // Response might be empty or JSON, handling safely
+        if (response.body.isNotEmpty) {
+          try {
+            return jsonDecode(response.body) as Map<String, dynamic>;
+          } catch (_) {
+            return {'status': 'success', 'message': 'Cancelled'};
+          }
+        }
+        return {'status': 'success', 'message': 'Cancelled'};
+      }
+      return null;
+    } catch (e) {
+      debugPrint('cancelKonfirmasiUser Error: $e');
+      return null;
+    }
+  }
+
   // Metode helper cookie lama dihapus/diabaikan
   void _mergeSetCookie(Map<String, String> headers) {}
 
@@ -524,6 +654,14 @@ class BpsGcService {
         debugPrint(
           'proses kirim: Gagal (${response.statusCode}). Body: ${response.body}',
         );
+        // Jika 400 dan ada body JSON, kembalikan agar bisa dihandle caller
+        if (response.statusCode == 400 && response.body.isNotEmpty) {
+          try {
+            return jsonDecode(response.body) as Map<String, dynamic>;
+          } catch (_) {
+            return null;
+          }
+        }
         return null;
       }
     } catch (e) {
