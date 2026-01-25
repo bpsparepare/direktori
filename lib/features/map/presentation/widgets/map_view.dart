@@ -29,6 +29,7 @@ class MapView extends StatefulWidget {
   final void Function(LatLngBounds)? onBoundsChanged;
   final void Function(List<Place>)? onNearbyPlacesTap;
   final bool isPolygonSelected; // Add isPolygonSelected property
+  final double baseFontSize; // Base font size for markers
 
   const MapView({
     super.key,
@@ -49,6 +50,7 @@ class MapView extends StatefulWidget {
     this.onBoundsChanged,
     this.onNearbyPlacesTap,
     this.isPolygonSelected = false, // Add default value
+    this.baseFontSize = 12.0,
   });
 
   @override
@@ -71,12 +73,14 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   bool _showMarkerLabels = true;
   bool _showGroundcheckMarkers = true;
   bool _showNonVerifiedGroundchecks = true;
+  double _baseFontSize = 10.0; // Initial font size
   Timer? _boundsDebounce;
   bool _isDragging = false; // Track dragging state
 
   @override
   void initState() {
     super.initState();
+    _baseFontSize = widget.baseFontSize;
     _zoom = widget.config.zoom;
     // Initialize offset with default values from config
     _offsetX = widget.config.defaultOffsetX;
@@ -355,6 +359,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               if ((evt.camera.zoom - _zoom).abs() > 0.001) {
                 _zoom = evt.camera.zoom;
                 shouldSetState = true;
+                debugPrint(
+                  'MapView: Zoom changed to ${_zoom.toStringAsFixed(2)}',
+                );
               }
               if ((evt.camera.rotation - _rotation).abs() > 0.001) {
                 _rotation = evt.camera.rotation;
@@ -477,10 +484,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                 DragMarkers(
                   markers: groundcheckList.map((p) {
                     final isSelected = widget.selectedPlace?.id == p.id;
-                    final double fontSize = (_scaledFontSize() - 8).clamp(
-                      10,
-                      14,
-                    );
+                    final double fontSize = _baseFontSize;
                     return DragMarker(
                       key: ValueKey(p.id),
                       point: p.position,
@@ -628,10 +632,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                 DragMarkers(
                   markers: mainList.map((p) {
                     final isSelected = widget.selectedPlace?.id == p.id;
-                    final double fontSize = (_scaledFontSize() - 8).clamp(
-                      10,
-                      14,
-                    );
+                    final double fontSize = _baseFontSize;
                     return DragMarker(
                       key: ValueKey(p.id),
                       point: p.position,
@@ -818,6 +819,26 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           currentOffsetX: _offsetX,
           currentOffsetY: _offsetY,
           isPolygonSelected: widget.isPolygonSelected, // Pass property
+          onToggleFontSize: () {
+            setState(() {
+              // Cycle: 9 -> 10 -> 11 -> 12 -> 9
+              if (_baseFontSize == 9.0) {
+                _baseFontSize = 10.0;
+              } else if (_baseFontSize == 10.0) {
+                _baseFontSize = 11.0;
+              } else if (_baseFontSize == 11.0) {
+                _baseFontSize = 12.0;
+              } else {
+                _baseFontSize = 9.0;
+              }
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Ukuran font marker: $_baseFontSize'),
+                duration: const Duration(seconds: 1),
+              ),
+            );
+          },
         ),
         // Debug Info Panel (only show for Esri satellite with offset)
         if (_currentMapType == MapType.satellite &&
@@ -926,6 +947,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
         // If selected place is filtered out, we don't add it back for polygon filter
         // because we strictly want to show what's inside.
       }
+      debugPrint(
+        'Map Render (Polygon): Zoom=${_zoom.toStringAsFixed(2)} | Rendered=${filteredByPolygon.length}/${input.length} (No Cap)',
+      );
       return filteredByPolygon;
     }
 
@@ -934,7 +958,12 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     final sourceList = filteredByPolygon;
     final selectedId = widget.selectedPlace?.id;
     final int? cap = _capForZoom(sourceList.length, _zoom);
-    if (cap == null || sourceList.length <= cap) return sourceList;
+    if (cap == null || sourceList.length <= cap) {
+      debugPrint(
+        'Map Render: Zoom=${_zoom.toStringAsFixed(2)} | Rendered=${sourceList.length}/${input.length} (Cap=$cap - Within Limit)',
+      );
+      return sourceList;
+    }
 
     final List<Place> main = [];
     final List<Place> gc = [];
@@ -967,21 +996,32 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
         // Selected place is not in the filtered list (outside polygon), so ignore
       }
     }
+    debugPrint(
+      'Map Render: Zoom=${_zoom.toStringAsFixed(2)} | Rendered=${result.length}/${input.length} (Cap=$cap)',
+    );
     return result;
   }
 
   int? _capForZoom(int total, double z) {
-    // if (z < 11) return 5;
-    // if (z < 12) return 10;
-    // if (z < 13) return 20;
-    // if (z < 14) return 5;
-    if (z < 14) return 35;
-    if (z < 16) return 40;
-    if (z < 17) return 50;
-    if (z < 18) return 60;
-    if (z < 19) return 70;
-    if (z < 20) return 80;
-    return null; // >=19 show all
+    // Zoom levels:
+    // < 14: Level Kecamatan/Kota (Area luas)
+    // 14-16: Level Kelurahan/Lingkungan (Area menengah)
+    // 16-18: Level Blok/Jalan (Detail)
+    // >= 18: Level Bangunan (Sangat detail)
+
+    // Logika Progresif:
+    // Semakin zoom out (angka kecil), semakin sedikit marker (untuk hindari clutter/lag).
+    // Semakin zoom in (angka besar), semakin banyak marker boleh tampil.
+
+    if (z < 14) return 5; // Jauh: Sedikit marker
+    if (z < 15) return 10; // Menengah: Mulai terlihat
+    if (z < 16) return 15; // Menengah-Detail
+    if (z < 17) return 20; // Detail
+    if (z < 18) return 25; // Sangat Detail (Keep low)
+    if (z < 19) return 30; // Hampir Maksimal (Reduced from 70)
+    if (z < 20) return 40; // Extra detail before unlimited
+    // Zoom >= 20: Tampilkan semua (Unlimited)
+    return null;
   }
 
   // Helper methods for responsive marker sizing

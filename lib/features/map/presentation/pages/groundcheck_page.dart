@@ -503,14 +503,58 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     try {
       // 1. Load from local cache immediately
       final local = await _supabaseService.loadLocalRecords();
+
+      // Cek status MapBloc untuk validasi "Data Lokal Kosong"
+      // Jika peta sudah punya data, jangan anggap kosong (cegah dialog muncul salah waktu)
+      final mapState = context.read<MapBloc>().state;
+      // Also check polygonsMeta in case user refers to polygon markers
+      final hasMapData =
+          mapState.places.isNotEmpty || mapState.polygonsMeta.isNotEmpty;
+      // Consider initial state as loading to prevent premature dialog
+      final isMapLoading =
+          mapState.status == MapStatus.loading ||
+          mapState.status == MapStatus.initial;
+
+      // debugPrint(
+      //   'GroundcheckPage _loadData: status=${mapState.status}, places=${mapState.places.length}, polygons=${mapState.polygonsMeta.length}, local=${local.length}',
+      // );
+
       if (local.isNotEmpty && mounted) {
         _processRecords(local);
       } else {
-        // Jika data lokal kosong, JANGAN otomatis sync.
-        // Tampilkan konfirmasi ke user terlebih dahulu.
+        // Jika data lokal kosong...
+
+        if (hasMapData) {
+          // Data ada di Peta tapi tidak terbaca di Local (Inkonsistensi).
+          // Lakukan silent sync untuk mencoba mengisi data lokal/tabel.
+          debugPrint('Local data empty but Map has data. Syncing silently...');
+          if (mounted) {
+            // Tampilkan loading sebentar
+            setState(() => _isLoading = true);
+            try {
+              // Coba sync incremental dulu
+              final records = await _supabaseService.syncRecords();
+              if (mounted) _processRecords(records);
+            } catch (e) {
+              debugPrint('Silent sync failed: $e');
+            } finally {
+              if (mounted) setState(() => _isLoading = false);
+            }
+          }
+          return;
+        }
+
+        if (isMapLoading) {
+          // Map sedang loading, tunggu hasil dari MapBloc (via BlocListener)
+          // Jangan tampilkan dialog konfirmasi dulu.
+          debugPrint('Local data empty, waiting for Map loading...');
+          return;
+        }
+
+        // Jika data benar-benar kosong dan tidak sedang loading,
+        // Tampilkan konfirmasi ke user.
         if (mounted) {
           _processRecords([]);
-          // Tampilkan dialog konfirmasi setelah frame selesai dirender
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _showDownloadConfirmation();
           });
@@ -3180,9 +3224,13 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   @override
   Widget build(BuildContext context) {
     return BlocListener<MapBloc, MapState>(
-      listenWhen: (previous, current) => previous.places != current.places,
+      listenWhen: (previous, current) =>
+          previous.status != current.status &&
+          current.status == MapStatus.success,
       listener: (context, state) {
-        if (state.status == MapStatus.success) {
+        // Hanya reload jika data lokal masih kosong dan peta sukses memuat data
+        // Ini mencegah reload berulang saat geser peta (perubahan bounds)
+        if (state.status == MapStatus.success && _allRecords.isEmpty) {
           _loadData();
         }
       },

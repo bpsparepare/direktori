@@ -40,6 +40,7 @@ class MapControls extends StatefulWidget {
   final bool showNonVerifiedGroundchecks;
   final Function(bool)? onToggleNonVerifiedGroundchecks;
   final bool isPolygonSelected; // Boolean to track if a polygon is selected
+  final VoidCallback? onToggleFontSize; // Callback for font size toggle
 
   const MapControls({
     super.key,
@@ -66,6 +67,7 @@ class MapControls extends StatefulWidget {
     this.showNonVerifiedGroundchecks = true,
     this.onToggleNonVerifiedGroundchecks,
     this.isPolygonSelected = false, // Initialize
+    this.onToggleFontSize,
   });
 
   @override
@@ -694,6 +696,26 @@ class _MapControlsState extends State<MapControls> {
                       : Colors.blue,
                 ),
                 tooltip: 'Filter Status GC (Kode 1)',
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Toggle Font Size Button
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: IconButton(
+                onPressed: widget.onToggleFontSize,
+                icon: const Icon(Icons.text_fields, color: Colors.black87),
+                tooltip: 'Ubah Ukuran Font',
               ),
             ),
             const SizedBox(height: 8),

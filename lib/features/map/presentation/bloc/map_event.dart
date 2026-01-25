@@ -47,7 +47,9 @@ class PlaceCleared extends MapEvent {
 
 class PolygonRequested extends MapEvent {
   final String assetPath;
-  const PolygonRequested({this.assetPath = 'assets/geojson/final_sls.geojson'});
+  const PolygonRequested({
+    this.assetPath = 'assets/geojson/final_sls_optimized.json',
+  });
   @override
   List<Object?> get props => [assetPath];
 }
@@ -55,7 +57,7 @@ class PolygonRequested extends MapEvent {
 class PolygonsListRequested extends MapEvent {
   final String assetPath;
   const PolygonsListRequested({
-    this.assetPath = 'assets/geojson/final_sls.geojson',
+    this.assetPath = 'assets/geojson/final_sls_optimized.json',
   });
   @override
   List<Object?> get props => [assetPath];
