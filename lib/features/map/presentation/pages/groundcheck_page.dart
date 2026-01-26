@@ -12,7 +12,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/services/bps_gc_service.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
 import '../../data/constants/wilayah_mapping.dart';
-import '../widgets/python_login_dialog.dart';
 import '../widgets/inappwebview_login_dialog.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
@@ -1517,82 +1516,24 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   Future<void> _showBpsLoginDialog() async {
     if (!mounted) return;
 
-    final choice = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Pilih Metode Login'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.web),
-              title: const Text('Login via WebView'),
-              subtitle: const Text(
-                'Metode standar. Jika gagal kirim (419), gunakan metode Python.',
-              ),
-              onTap: () => Navigator.pop(ctx, 'webview'),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.terminal),
-              title: const Text('Login via Python Script'),
-              subtitle: const Text(
-                'Jalankan script python & input hasil JSON. (Paling Stabil)',
-              ),
-              onTap: () => Navigator.pop(ctx, 'python'),
-            ),
-          ],
+    // Gunakan InAppWebView yang lebih powerful (bisa ambil HttpOnly cookies)
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => InAppWebViewLoginDialog(
+          onLoginSuccess:
+              (cookie, gcToken, csrfToken, userAgent, userName) async {
+                await _handleLoginSuccess(
+                  cookie,
+                  gcToken,
+                  csrfToken,
+                  userAgent,
+                  userName,
+                );
+              },
         ),
       ),
     );
-
-    if (choice == null || !mounted) return;
-
-    if (choice == 'python') {
-      await showDialog(
-        context: context,
-        builder: (ctx) => PythonLoginDialog(
-          onLoginSuccess: (data) async {
-            final cookie = data['cookie_header'] ?? '';
-            final gcToken = data['gc_token'] ?? '';
-            final csrfToken = data['csrf_token'] ?? '';
-            final userAgent = data['user_agent'] ?? '';
-            final userName = data['user_name'] ?? 'Python User';
-
-            await _handleLoginSuccess(
-              cookie,
-              gcToken,
-              csrfToken,
-              userAgent,
-              userName,
-            );
-          },
-        ),
-      );
-      return;
-    }
-
-    if (choice == 'webview') {
-      // Gunakan InAppWebView yang lebih powerful (bisa ambil HttpOnly cookies)
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          fullscreenDialog: true,
-          builder: (context) => InAppWebViewLoginDialog(
-            onLoginSuccess:
-                (cookie, gcToken, csrfToken, userAgent, userName) async {
-                  await _handleLoginSuccess(
-                    cookie,
-                    gcToken,
-                    csrfToken,
-                    userAgent,
-                    userName,
-                  );
-                },
-          ),
-        ),
-      );
-      return;
-    }
   }
 
   Future<void> _showGcConfirmationDialog(GroundcheckRecord record) async {

@@ -2424,6 +2424,7 @@ class MapPage extends StatelessWidget {
     final idsbrController = TextEditingController();
     final namaUsahaController = TextEditingController();
     final alamatController = TextEditingController();
+    final searchController = TextEditingController();
 
     // Dropdown values
     String? selectedStatus;
@@ -2601,6 +2602,7 @@ class MapPage extends StatelessWidget {
                       children: [
                         if (currentPhase == 1) ...[
                           TextField(
+                            controller: searchController,
                             decoration: InputDecoration(
                               labelText: 'Cari Nama Usaha / IDSBR',
                               prefixIcon: const Icon(Icons.search),
@@ -2616,6 +2618,7 @@ class MapPage extends StatelessWidget {
                                   : null,
                             ),
                             onChanged: (query) {
+                              setState(() {});
                               if (_debounce?.isActive ?? false)
                                 _debounce!.cancel();
                               _debounce = Timer(
@@ -2648,6 +2651,41 @@ class MapPage extends StatelessWidget {
                             },
                           ),
                           const SizedBox(height: 16),
+                          if (searchController.text.isNotEmpty) ...[
+                            ListTile(
+                              leading: const Icon(
+                                Icons.add_circle,
+                                color: Colors.blue,
+                                size: 32,
+                              ),
+                              title: Text(
+                                'Tambah Usaha Baru: "${searchController.text}"',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                              subtitle: const Text(
+                                'Tap untuk buat data baru dengan nama ini',
+                              ),
+                              onTap: () {
+                                setState(() {
+                                  currentPhase = 2;
+                                  editingRecord = null;
+                                  // Clear form
+                                  idsbrController.clear();
+                                  namaUsahaController.text =
+                                      searchController.text;
+                                  alamatController.clear();
+                                  selectedStatus = null;
+                                  selectedSkala = null;
+                                  selectedGcsResult = null;
+                                  useCurrentLocation = true;
+                                });
+                              },
+                            ),
+                            const Divider(),
+                          ],
                           if (searchResults.isNotEmpty)
                             ListView.separated(
                               shrinkWrap: true,
@@ -2825,32 +2863,32 @@ class MapPage extends StatelessWidget {
                               ),
                             ),
                           const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  currentPhase = 2;
-                                  editingRecord = null;
-                                  // Clear form
-                                  idsbrController.clear();
-                                  namaUsahaController.clear();
-                                  alamatController.clear();
-                                  selectedStatus = null;
-                                  selectedSkala = null;
-                                  selectedGcsResult = null;
-                                  useCurrentLocation = true;
-                                });
-                              },
-                              icon: const Icon(Icons.add),
-                              label: const Text('Buat Data Baru'),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
-                              ),
-                            ),
-                          ),
+                          // SizedBox(
+                          //   width: double.infinity,
+                          //   child: ElevatedButton.icon(
+                          //     onPressed: () {
+                          //       setState(() {
+                          //         currentPhase = 2;
+                          //         editingRecord = null;
+                          //         // Clear form
+                          //         idsbrController.clear();
+                          //         namaUsahaController.clear();
+                          //         alamatController.clear();
+                          //         selectedStatus = null;
+                          //         selectedSkala = null;
+                          //         selectedGcsResult = null;
+                          //         useCurrentLocation = true;
+                          //       });
+                          //     },
+                          //     icon: const Icon(Icons.add),
+                          //     label: const Text('Buat Data Baru'),
+                          //     style: ElevatedButton.styleFrom(
+                          //       padding: const EdgeInsets.symmetric(
+                          //         vertical: 16,
+                          //       ),
+                          //     ),
+                          //   ),
+                          // ),
                         ] else ...[
                           // Phase 2: Form
                           if (editingRecord != null)
@@ -5666,6 +5704,42 @@ class MapPage extends StatelessWidget {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.add_business,
+                                color: Colors.green,
+                              ),
+                              tooltip: 'Tambah Usaha di Sini',
+                              onPressed: () {
+                                Navigator.of(dialogContext).pop();
+                                if (mutablePlaces.isEmpty) return;
+
+                                final point = mutablePlaces.first.position;
+                                String idSls = '';
+                                String? namaSls;
+
+                                final state = context.read<MapBloc>().state;
+                                final polygons = state.polygonsMeta;
+
+                                for (final polygon in polygons) {
+                                  if (MapUtils.isPointInPolygon(
+                                    point,
+                                    polygon.points,
+                                  )) {
+                                    idSls = polygon.idsls ?? '';
+                                    namaSls = polygon.name;
+                                    break;
+                                  }
+                                }
+
+                                _showAddGroundcheckForm(
+                                  context,
+                                  point,
+                                  idSls,
+                                  namaSls,
+                                );
+                              },
                             ),
                             IconButton(
                               icon: const Icon(Icons.close),
