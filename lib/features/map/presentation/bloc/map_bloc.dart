@@ -87,7 +87,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   ) async {
     try {
       // 1. Refresh cache (this fetches all places)
-      final allPlaces = await refreshPlaces(onlyToday: event.onlyToday);
+      final allPlaces = await refreshPlaces();
 
       // 2. If we have active bounds, filter the result immediately
       // This prevents the map from suddenly showing all 15k places (or first N of them)

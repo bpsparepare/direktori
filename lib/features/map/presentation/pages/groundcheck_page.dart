@@ -18,6 +18,7 @@ import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
 import '../../data/repositories/map_repository_impl.dart';
+import '../utils/map_download_helper.dart';
 
 // Optional bootstrap via --dart-define (removed)
 
@@ -29,6 +30,7 @@ class GroundcheckRecord {
   final String statusPerusahaan;
   final String skalaUsaha;
   final String gcsResult;
+  final String sumberData;
   final String latitude;
   final String longitude;
   final String perusahaanId;
@@ -49,6 +51,7 @@ class GroundcheckRecord {
     required this.statusPerusahaan,
     required this.skalaUsaha,
     required this.gcsResult,
+    this.sumberData = '',
     required this.latitude,
     required this.longitude,
     required this.perusahaanId,
@@ -75,6 +78,7 @@ class GroundcheckRecord {
       statusPerusahaan: (json['status_perusahaan'] ?? '').toString(),
       skalaUsaha: (json['skala_usaha'] ?? '').toString(),
       gcsResult: (json['gcs_result'] ?? '').toString(),
+      sumberData: (json['sumber_data'] ?? '').toString(),
       latitude: lat,
       longitude: lon,
       perusahaanId: perusahaan,
@@ -98,6 +102,7 @@ class GroundcheckRecord {
       'status_perusahaan': statusPerusahaan,
       'skala_usaha': skalaUsaha,
       'gcs_result': gcsResult,
+      'sumber_data': sumberData,
       'latitude': latitude,
       'longitude': longitude,
       'perusahaan_id': perusahaanId,
@@ -120,6 +125,7 @@ class GroundcheckRecord {
     String? statusPerusahaan,
     String? skalaUsaha,
     String? gcsResult,
+    String? sumberData,
     String? latitude,
     String? longitude,
     String? perusahaanId,
@@ -140,6 +146,7 @@ class GroundcheckRecord {
       statusPerusahaan: statusPerusahaan ?? this.statusPerusahaan,
       skalaUsaha: skalaUsaha ?? this.skalaUsaha,
       gcsResult: gcsResult ?? this.gcsResult,
+      sumberData: sumberData ?? this.sumberData,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       perusahaanId: perusahaanId ?? this.perusahaanId,
@@ -444,6 +451,7 @@ class GroundcheckDataSource extends DataGridSource {
             columnName: 'status_perusahaan',
             value: e.statusPerusahaan,
           ),
+          DataGridCell<String>(columnName: 'sumber_data', value: e.sumberData),
           DataGridCell<bool>(columnName: 'isUploaded', value: e.isUploaded),
           DataGridCell<String>(columnName: 'gcs_result', value: e.gcsResult),
           DataGridCell<String>(columnName: 'gc_action', value: e.perusahaanId),
@@ -474,9 +482,11 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   List<GroundcheckRecord> _allRecords = [];
   List<String> _statusOptions = [];
   List<String> _gcsOptions = [];
+  List<String> _sumberDataOptions = [];
   String _searchQuery = '';
   String? _statusFilter;
   String? _gcsFilter;
+  String? _sumberDataFilter;
   String? _isUploadedFilter;
   bool _isLoading = true;
   bool _isDeletingNew = false;
@@ -486,6 +496,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   String? _currentUser;
   String? _userAgent;
   String? _csrfToken;
+  bool _isDialogShowing = false;
 
   @override
   void initState() {
@@ -496,6 +507,9 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   }
 
   Future<void> _loadData() async {
+    // Prevent re-entry if dialog is showing
+    if (_isDialogShowing) return;
+
     setState(() {
       if (_allRecords.isEmpty) _isLoading = true;
       _error = null;
@@ -505,7 +519,6 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       final local = await _supabaseService.loadLocalRecords();
 
       // Cek status MapBloc untuk validasi "Data Lokal Kosong"
-      // Jika peta sudah punya data, jangan anggap kosong (cegah dialog muncul salah waktu)
       final mapState = context.read<MapBloc>().state;
       // Also check polygonsMeta in case user refers to polygon markers
       final hasMapData =
@@ -515,43 +528,38 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
           mapState.status == MapStatus.loading ||
           mapState.status == MapStatus.initial;
 
-      // debugPrint(
-      //   'GroundcheckPage _loadData: status=${mapState.status}, places=${mapState.places.length}, polygons=${mapState.polygonsMeta.length}, local=${local.length}',
-      // );
-
       if (local.isNotEmpty && mounted) {
         _processRecords(local);
+
+        // 2. Sync with server (fetch only updates) - Background Process
+        // Hanya jalankan auto-sync jika kita SUDAH punya data lokal
+        try {
+          // syncRecords sekarang HANYA melakukan incremental sync.
+          // Jika tidak ada lastSync atau lokal kosong, dia akan return [] atau local.
+          final records = await _supabaseService.syncRecords();
+
+          if (mounted) {
+            if (records.isNotEmpty) {
+              // Ada update baru, refresh tampilan
+              _processRecords(records);
+            }
+            // Jika records kosong, berarti tidak ada update atau sync gagal (fallback ke local).
+            // Kita tidak perlu melakukan apa-apa karena data lokal sudah tampil.
+          }
+        } catch (e) {
+          debugPrint('Error during background sync: $e');
+          // Ignore error, keep showing local data
+        }
       } else {
         // Jika data lokal kosong...
 
-        if (hasMapData) {
-          // Data ada di Peta tapi tidak terbaca di Local (Inkonsistensi).
-          // Lakukan silent sync untuk mencoba mengisi data lokal/tabel.
-          debugPrint('Local data empty but Map has data. Syncing silently...');
-          if (mounted) {
-            // Tampilkan loading sebentar
-            setState(() => _isLoading = true);
-            try {
-              // Coba sync incremental dulu
-              final records = await _supabaseService.syncRecords();
-              if (mounted) _processRecords(records);
-            } catch (e) {
-              debugPrint('Silent sync failed: $e');
-            } finally {
-              if (mounted) setState(() => _isLoading = false);
-            }
-          }
-          return;
-        }
-
         if (isMapLoading) {
           // Map sedang loading, tunggu hasil dari MapBloc (via BlocListener)
-          // Jangan tampilkan dialog konfirmasi dulu.
           debugPrint('Local data empty, waiting for Map loading...');
           return;
         }
 
-        // Jika data benar-benar kosong dan tidak sedang loading,
+        // Jika data benar-benar kosong
         // Tampilkan konfirmasi ke user.
         if (mounted) {
           _processRecords([]);
@@ -560,31 +568,6 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
           });
         }
         return;
-      }
-
-      // 2. Sync with server (fetch only updates)
-      // Hanya jalankan auto-sync jika kita sudah punya data lokal (incremental sync)
-      try {
-        final records = await _supabaseService.syncRecords();
-        if (mounted) {
-          if (records.isEmpty && _allRecords.isNotEmpty) {
-            // Jika sync mengembalikan list kosong (error) tapi kita punya data lokal,
-            // JANGAN ditimpa. Pertahankan data lokal yang sudah tampil.
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Gagal sinkronisasi data terbaru. Menggunakan data lokal.',
-                ),
-                backgroundColor: Colors.orange,
-              ),
-            );
-          } else {
-            _processRecords(records);
-          }
-        }
-      } catch (e) {
-        debugPrint('Error during background sync: $e');
-        // Ignore error, keep showing local data
       }
     } catch (e) {
       setState(() {
@@ -595,69 +578,20 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   }
 
   Future<void> _showDownloadConfirmation() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Data Lokal Kosong'),
-        content: const Text(
-          'Belum ada data tersimpan di HP. Apakah Anda ingin mengunduh data groundcheck dari server sekarang?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Nanti'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Unduh'),
-          ),
-        ],
-      ),
-    );
+    if (_isDialogShowing) return;
+    _isDialogShowing = true;
 
-    if (confirm == true) {
-      setState(() {
-        _isLoading = true;
-      });
-
-      try {
-        // Force full sync karena lokal kosong
-        final records = await _supabaseService.syncRecords(forceFull: true);
+    // Gunakan helper yang sudah distandarisasi
+    await MapDownloadHelper.showInitialDownloadDialog(
+      context,
+      onSuccess: (records) {
         if (mounted) {
           _processRecords(records);
-          if (records.isNotEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Berhasil mengunduh ${records.length} data.'),
-                backgroundColor: Colors.green,
-              ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Data kosong di server atau gagal unduh.'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-          }
         }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Gagal mengunduh: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
-      }
-    }
+      },
+    );
+
+    _isDialogShowing = false;
   }
 
   void _processRecords(List<GroundcheckRecord> records) {
@@ -672,6 +606,13 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     _gcsOptions =
         records
             .map((e) => e.gcsResult)
+            .where((v) => v.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    _sumberDataOptions =
+        records
+            .map((e) => e.sumberData)
             .where((v) => v.isNotEmpty)
             .toSet()
             .toList()
@@ -1835,6 +1776,11 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
           r.gcsResult != _gcsFilter) {
         return false;
       }
+      if (_sumberDataFilter != null &&
+          _sumberDataFilter!.isNotEmpty &&
+          r.sumberData != _sumberDataFilter) {
+        return false;
+      }
       if (_isUploadedFilter != null) {
         if (_isUploadedFilter == 'revisi') {
           if (!r.isRevisi) return false;
@@ -1939,6 +1885,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
             statusPerusahaan: record.statusPerusahaan,
             skalaUsaha: record.skalaUsaha,
             gcsResult: selectedStatus!,
+            sumberData: record.sumberData,
             latitude: record.latitude,
             longitude: record.longitude,
             perusahaanId: record.perusahaanId,
@@ -3116,6 +3063,34 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
             ),
             const SizedBox(width: 12),
             Expanded(
+              child: DropdownButtonFormField<String>(
+                value: _sumberDataFilter ?? '',
+                decoration: const InputDecoration(
+                  labelText: 'Sumber Data',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: '',
+                    child: Text('Semua Sumber'),
+                  ),
+                  ..._sumberDataOptions.map(
+                    (s) => DropdownMenuItem<String>(value: s, child: Text(s)),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _sumberDataFilter = value != null && value.isNotEmpty
+                        ? value
+                        : null;
+                  });
+                  _refreshFilteredData();
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
               child: DropdownButtonFormField<String?>(
                 value: _isUploadedFilter,
                 decoration: const InputDecoration(
@@ -3691,6 +3666,24 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                                         color: Colors.blue[50],
                                         child: const Text(
                                           'Status Perusahaan',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    GridColumn(
+                                      columnName: 'sumber_data',
+                                      label: Container(
+                                        alignment: Alignment.centerLeft,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                        ),
+                                        color: Colors.blue[50],
+                                        child: const Text(
+                                          'Sumber Data',
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 13,

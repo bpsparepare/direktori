@@ -61,5 +61,6 @@ abstract class MapRepository {
   Future<bool> markDirectoryAsDuplicate(String id, String parentIdSbr);
   Future<List<Map<String, dynamic>>> getDirektoriLengkapData();
   Future<List<Map<String, dynamic>>> getDirektoriLengkapSbrData();
-  Future<List<Place>> refreshPlaces({bool onlyToday = false});
+  Future<List<Place>> refreshPlaces();
+  Future<List<Place>> downloadFullPlaces();
 }

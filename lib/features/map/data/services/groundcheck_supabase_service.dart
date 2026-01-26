@@ -9,6 +9,7 @@ import '../../../../core/config/supabase_config.dart';
 import '../../presentation/pages/groundcheck_page.dart';
 import '../../domain/entities/place.dart';
 import 'package:latlong2/latlong.dart';
+import '../../../../core/utils/debug_monitor.dart';
 
 class GroundcheckSupabaseService {
   final SupabaseClient _client = SupabaseConfig.client;
@@ -18,13 +19,20 @@ class GroundcheckSupabaseService {
 
   Future<List<GroundcheckRecord>> fetchRecords({DateTime? updatedSince}) async {
     try {
+      // Select specific columns to reduce bandwidth
+      const columns =
+          'idsbr, nama_usaha, alamat_usaha, kode_wilayah, '
+          'status_perusahaan, skala_usaha, gcs_result, sumber_data, '
+          'latitude, longitude, perusahaan_id, user_id, kdprov, kdkab, '
+          'kdkec, kddesa, is_revisi, allow_cancel, updated_at, isUploaded';
+
       const int batchSize = 1000;
       int start = 0;
       final List<GroundcheckRecord> all = [];
       final sinceStr = updatedSince?.toIso8601String();
 
       while (true) {
-        dynamic query = _client.from(_tableName).select();
+        dynamic query = _client.from(_tableName).select(columns);
 
         if (sinceStr != null) {
           query = query.gt('updated_at', sinceStr);
@@ -37,7 +45,11 @@ class GroundcheckSupabaseService {
             .order('idsbr', ascending: true)
             .range(start, start + batchSize - 1);
 
+        DebugMonitor().logUsage(_tableName, 'SELECT (Batch)', batch);
+
         if (batch is List && batch.isNotEmpty) {
+          // DEBUG: Check keys for troubleshooting
+
           all.addAll(
             batch.map((json) => GroundcheckRecord.fromJson(json)).toList(),
           );
@@ -49,14 +61,19 @@ class GroundcheckSupabaseService {
       }
       return all;
     } catch (e) {
+      debugPrint('DEBUG: fetchRecords Error: $e');
       // If table doesn't exist or empty, return empty list
-      return [];
+      // But for debugging, we should probably know if it failed.
+      // If we return [], syncRecords thinks DB is empty and returns localRecords.
+      // We should rethrow to let syncRecords handle the fallback or error.
+      rethrow;
     }
   }
 
   Future<List<Map<String, dynamic>>> fetchDashboardStats() async {
     try {
       final response = await _client.from('view_dashboard_stats').select();
+      DebugMonitor().logUsage('view_dashboard_stats', 'SELECT', response);
       if (response is List) {
         return List<Map<String, dynamic>>.from(response);
       }
@@ -68,6 +85,7 @@ class GroundcheckSupabaseService {
 
   Future<void> importFromAsset(String assetPath) async {
     try {
+      debugPrint('[SupaSupabase Monitorporting from asset $assetPath...');
       final raw = await rootBundle.loadString(assetPath);
       final List<dynamic> decoded = jsonDecode(raw) as List<dynamic>;
 
@@ -114,6 +132,12 @@ class GroundcheckSupabaseService {
             )
             .toList();
 
+        DebugMonitor().logUsage(
+          _tableName,
+          'UPSERT (Batch)',
+          payload,
+          isResponse: false,
+        );
         await _client.from(_tableName).upsert(payload, onConflict: 'idsbr');
       }
     } catch (e) {
@@ -123,11 +147,14 @@ class GroundcheckSupabaseService {
 
   Future<List<GroundcheckRecord>> searchRecords(String query) async {
     try {
+      debugPrint('[SupaSupabase Monitorarching records for "$query"...');
       final response = await _client
           .from(_tableName)
           .select()
           .or('nama_usaha.ilike.%$query%,idsbr.ilike.%$query%')
           .limit(20);
+
+      DebugMonitor().logUsage(_tableName, 'SELECT (Search)', response);
 
       if (response is List) {
         return response
@@ -207,6 +234,12 @@ class GroundcheckSupabaseService {
           .select()
           .limit(50);
 
+      DebugMonitor().logUsage(
+        'view_groundcheck_leaderboard',
+        'SELECT',
+        response,
+      );
+
       if (response is List) {
         return List<Map<String, dynamic>>.from(response);
       }
@@ -230,6 +263,8 @@ class GroundcheckSupabaseService {
           .select('id')
           .eq('auth_uid', user.id)
           .maybeSingle();
+
+      DebugMonitor().logUsage('users', 'SELECT (ID)', response);
 
       if (response != null && response['id'] != null) {
         return response['id'].toString();
@@ -285,7 +320,11 @@ class GroundcheckSupabaseService {
       if (idsbrList.isEmpty) return true;
 
       // Delete from Supabase
+      debugPrint('[SupaSupabase Monitorleting ${idsbrList.length} records...');
       await _client.from(_tableName).delete().filter('idsbr', 'in', idsbrList);
+      DebugMonitor().logUsage(_tableName, 'DELETE', {
+        'count': idsbrList.length,
+      }, isResponse: false);
 
       // Delete from local cache
       final records = await loadLocalRecords();
@@ -330,10 +369,10 @@ class GroundcheckSupabaseService {
         'latitude': record.latitude,
         'longitude': record.longitude,
         'perusahaan_id': record.perusahaanId,
-        'provinsi_id': record.kdProv,
-        'kabupaten_id': record.kdKab,
-        'kecamatan_id': record.kdKec,
-        'desa_id': record.kdDesa,
+        'kdprov': record.kdProv,
+        'kdkab': record.kdKab,
+        'kdkec': record.kdKec,
+        'kddesa': record.kdDesa,
         'isUploaded': record.isUploaded,
         'allow_cancel': record.allowCancel,
       };
@@ -352,8 +391,12 @@ class GroundcheckSupabaseService {
         data['user_id'] = record.userId!;
       }
 
-      debugPrint('updateRecord Payload to Supabase: $data');
-
+      DebugMonitor().logUsage(
+        _tableName,
+        'UPSERT (Single)',
+        data,
+        isResponse: false,
+      );
       await _client.from(_tableName).upsert(data, onConflict: 'idsbr');
 
       // Update local cache
@@ -778,10 +821,45 @@ class GroundcheckSupabaseService {
     }
   }
 
-  Future<List<GroundcheckRecord>> syncRecords({bool forceFull = false}) async {
+  /// Mengunduh data lengkap dari server (Full Sync).
+  /// Mengganti seluruh cache lokal dengan data baru.
+  /// Digunakan saat "Unduh" pertama kali atau user melakukan "Reset/Unduh Ulang".
+  Future<List<GroundcheckRecord>> downloadFullData() async {
+    try {
+      // 1. Fetch all records from server
+      final records = await fetchRecords();
+
+      if (records.isNotEmpty) {
+        // 2. Save to local cache (Replace all)
+        await saveLocalRecords(records);
+
+        // 3. Update last sync time
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          _lastSyncKey,
+          DateTime.now().toUtc().toIso8601String(),
+        );
+
+        return records;
+      } else {
+        return [];
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Melakukan sinkronisasi inkremental (hanya mengambil data baru/update).
+  /// HANYA berjalan jika sudah ada data lokal dan lastSyncTime.
+  /// Jika belum ada data lokal, fungsi ini TIDAK melakukan apa-apa (return local).
+  Future<List<GroundcheckRecord>> syncRecords() async {
     try {
       // 1. Load local first
       List<GroundcheckRecord> localRecords = await loadLocalRecords();
+
+      if (localRecords.isEmpty) {
+        return [];
+      }
 
       // 2. Get last sync time
       final prefs = await SharedPreferences.getInstance();
@@ -791,48 +869,28 @@ class GroundcheckSupabaseService {
         lastSync = DateTime.tryParse(lastSyncStr);
       }
 
-      // 3. Fetch updates
-      List<GroundcheckRecord> updates = [];
-      bool isIncremental = false;
-
-      if (!forceFull && lastSync != null && localRecords.isNotEmpty) {
-        // Fetch incremental
-        try {
-          updates = await fetchRecords(updatedSince: lastSync);
-          isIncremental = true;
-        } catch (e) {
-          // If incremental fetch fails (e.g. offline), return local
-          return localRecords;
-        }
-      } else {
-        // Fetch all (first time, reset, or forced full sync)
-        try {
-          updates = await fetchRecords();
-          // If we fetched everything successfully, we treat it as a full replacement
-          // unless updates are empty (which might mean error or empty DB)
-        } catch (e) {
-          // If full fetch fails (e.g. offline), return local (which might be empty)
-          return localRecords;
-        }
+      if (lastSync == null) {
+        return localRecords;
       }
 
-      // 4. Merge or Replace
-      if (updates.isNotEmpty) {
-        List<GroundcheckRecord> finalRecords;
+      // 3. Fetch updates only
 
-        if (isIncremental) {
-          // Merge incremental updates
-          final Map<String, GroundcheckRecord> map = {
-            for (var r in localRecords) r.idsbr: r,
-          };
-          for (var u in updates) {
-            map[u.idsbr] = u;
-          }
-          finalRecords = map.values.toList();
-        } else {
-          // Full fetch (forceFull or first sync) -> Replace local cache
-          finalRecords = updates;
+      List<GroundcheckRecord> updates = [];
+      try {
+        updates = await fetchRecords(updatedSince: lastSync);
+      } catch (e) {
+        return localRecords;
+      }
+
+      // 4. Merge updates
+      if (updates.isNotEmpty) {
+        final Map<String, GroundcheckRecord> map = {
+          for (var r in localRecords) r.idsbr: r,
+        };
+        for (var u in updates) {
+          map[u.idsbr] = u;
         }
+        final finalRecords = map.values.toList();
 
         // 5. Save local
         await saveLocalRecords(finalRecords);
@@ -848,7 +906,7 @@ class GroundcheckSupabaseService {
 
       return localRecords;
     } catch (e) {
-      // Fallback
+      debugPrint('[Supabase Monitor] syncRecords: Unexpected error ($e).');
       return [];
     }
   }

@@ -29,6 +29,7 @@ import 'features/contribution/domain/usecases/create_contribution_usecase.dart';
 import 'features/contribution/domain/usecases/get_user_stats_usecase.dart';
 import 'features/contribution/domain/usecases/get_user_contributions_usecase.dart';
 import 'features/contribution/domain/usecases/get_leaderboard_usecase.dart';
+// import 'core/widgets/debug_overlay.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

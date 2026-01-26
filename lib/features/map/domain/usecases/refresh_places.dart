@@ -5,7 +5,7 @@ class RefreshPlaces {
   final MapRepository repository;
   RefreshPlaces(this.repository);
 
-  Future<List<Place>> call({bool onlyToday = false}) {
-    return repository.refreshPlaces(onlyToday: onlyToday);
+  Future<List<Place>> call() {
+    return repository.refreshPlaces();
   }
 }

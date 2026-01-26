@@ -412,9 +412,7 @@ class MapPage extends StatelessWidget {
                                                 minHeight: 48,
                                               ),
                                               onPressed: () {
-                                                print(
-                                                  'DEBUG: Close button pressed',
-                                                ); // Debug log
+                                                // Debug log
                                                 context.read<MapBloc>().add(
                                                   const PlaceCleared(),
                                                 );
@@ -2257,21 +2255,14 @@ class MapPage extends StatelessWidget {
       final polygons =
           bloc.state.polygonsMeta; // Gunakan data yang sudah ada di state
 
-      print(
-        'DEBUG: _findPolygonAtPoint called with point: ${point.latitude}, ${point.longitude}',
-      );
-      print('DEBUG: Total polygons in state for find: ${polygons.length}');
-
       for (final polygon in polygons) {
         if (MapUtils.isPointInPolygon(point, polygon.points)) {
-          print('DEBUG: Found polygon in _findPolygonAtPoint: ${polygon.name}');
           return '${polygon.name} (${polygon.idsls})';
         }
       }
-      print('DEBUG: No polygon found in _findPolygonAtPoint');
+
       return null;
     } catch (e) {
-      print('DEBUG: Error in _findPolygonAtPoint: $e');
       return null;
     }
   }
@@ -2282,15 +2273,9 @@ class MapPage extends StatelessWidget {
       final polygons =
           bloc.state.polygonsMeta; // Gunakan data yang sudah ada di state
 
-      print(
-        'DEBUG: _selectPolygonAtPoint called with point: ${point.latitude}, ${point.longitude}',
-      );
-      print('DEBUG: Total polygons in state: ${polygons.length}');
-
       for (int i = 0; i < polygons.length; i++) {
         final polygon = polygons[i];
         if (MapUtils.isPointInPolygon(point, polygon.points)) {
-          print('DEBUG: Found polygon at index $i: ${polygon.name}');
           // Select the polygon by index seperti pilih polygon biasa
           bloc.add(PolygonSelectedByIndex(i));
 
@@ -2304,7 +2289,6 @@ class MapPage extends StatelessWidget {
         }
       }
 
-      print('DEBUG: No polygon found at point');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Tidak ada SLS di lokasi ini'),
@@ -2312,7 +2296,6 @@ class MapPage extends StatelessWidget {
         ),
       );
     } catch (e) {
-      print('DEBUG: Error in _selectPolygonAtPoint: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Terjadi kesalahan saat memilih SLS'),
@@ -5834,9 +5817,7 @@ class MapPage extends StatelessWidget {
                                               });
                                               // Force refresh map
                                               context.read<MapBloc>().add(
-                                                const PlacesRefreshRequested(
-                                                  onlyToday: true,
-                                                ),
+                                                const PlacesRefreshRequested(),
                                               );
                                               if (mutablePlaces.isEmpty) {
                                                 Navigator.of(

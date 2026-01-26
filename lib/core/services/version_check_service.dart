@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/app_version.dart';
 import '../config/supabase_config.dart';
@@ -23,6 +24,20 @@ class VersionCheckService {
   /// Memeriksa pembaruan aplikasi untuk semua platform.
   Future<UpdateInfo?> checkUpdate() async {
     try {
+      // 1. Cek Throttle (Jeda 2 Jam)
+      final prefs = await SharedPreferences.getInstance();
+      final lastCheck = prefs.getInt('last_version_check_time');
+      final now = DateTime.now().millisecondsSinceEpoch;
+      const throttleDuration = 2 * 60 * 60 * 1000; // 2 Jam dalam milidetik
+
+      if (lastCheck != null) {
+        final diff = now - lastCheck;
+        if (diff < throttleDuration) {
+          // debugPrint('Version check skipped. Next check in: ${(throttleDuration - diff) / 60000} mins');
+          return null;
+        }
+      }
+
       final localVersion = AppVersion.version;
       final localBuildNumber = int.tryParse(AppVersion.buildNumber) ?? 0;
 

@@ -359,9 +359,6 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               if ((evt.camera.zoom - _zoom).abs() > 0.001) {
                 _zoom = evt.camera.zoom;
                 shouldSetState = true;
-                debugPrint(
-                  'MapView: Zoom changed to ${_zoom.toStringAsFixed(2)}',
-                );
               }
               if ((evt.camera.rotation - _rotation).abs() > 0.001) {
                 _rotation = evt.camera.rotation;
@@ -959,9 +956,6 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     final selectedId = widget.selectedPlace?.id;
     final int? cap = _capForZoom(sourceList.length, _zoom);
     if (cap == null || sourceList.length <= cap) {
-      debugPrint(
-        'Map Render: Zoom=${_zoom.toStringAsFixed(2)} | Rendered=${sourceList.length}/${input.length} (Cap=$cap - Within Limit)',
-      );
       return sourceList;
     }
 
@@ -996,9 +990,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
         // Selected place is not in the filtered list (outside polygon), so ignore
       }
     }
-    debugPrint(
-      'Map Render: Zoom=${_zoom.toStringAsFixed(2)} | Rendered=${result.length}/${input.length} (Cap=$cap)',
-    );
+
     return result;
   }
 

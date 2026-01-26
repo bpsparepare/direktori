@@ -18,10 +18,9 @@ class PlacesRequested extends MapEvent {
 }
 
 class PlacesRefreshRequested extends MapEvent {
-  final bool onlyToday;
-  const PlacesRefreshRequested({this.onlyToday = false});
+  const PlacesRefreshRequested();
   @override
-  List<Object?> get props => [onlyToday];
+  List<Object?> get props => [];
 }
 
 class PlacesInBoundsRequested extends MapEvent {

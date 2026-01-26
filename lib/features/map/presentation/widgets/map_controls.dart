@@ -13,6 +13,7 @@ import '../../domain/entities/polygon_data.dart';
 import 'map_type.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../utils/map_download_helper.dart';
 
 class MapControls extends StatefulWidget {
   final MapController mapController;
@@ -217,113 +218,8 @@ class _MapControlsState extends State<MapControls> {
   }
 
   Future<void> _handleFullDownload(BuildContext context) async {
-    // Show confirmation dialog
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Download Semua Data?'),
-        content: const Text(
-          'Ini akan menghapus data lokal dan mendownload ulang 48.000+ data.\n\n'
-          'Proses ini membutuhkan waktu lama dan kuota internet yang besar.\n'
-          'Aplikasi tidak dapat digunakan selama proses ini.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Download Ulang'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    // Show blocking progress dialog
-    if (!context.mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => PopScope(
-        canPop: false,
-        child: Dialog(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: const [
-                CircularProgressIndicator(),
-                SizedBox(height: 20),
-                Text(
-                  'Sedang mendownload data...',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Mohon tunggu, jangan tutup aplikasi.\nIni mungkin memakan waktu beberapa menit.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
-    try {
-      // Trigger full sync via BLoC
-      // We use a completer mechanism or just wait for state change if possible,
-      // but here we just trigger and wait a bit, or ideally await the repository directly if we could.
-      // Since we are in UI, we can call repository directly or rely on Bloc listener.
-      // For simplicity and blocking UI, let's use the repository directly via context.read
-      // BUT, MapBloc handles the state. Let's send event and wait for completion.
-      // Actually, calling repository directly here is cleaner for "awaiting" the result to close dialog.
-
-      final repository = context.read<MapRepositoryImpl>();
-      await repository.refreshPlaces(onlyToday: false); // Force full sync logic
-
-      if (context.mounted) {
-        // Close progress dialog
-        Navigator.pop(context);
-
-        // Refresh UI state via Bloc
-        context.read<MapBloc>().add(const PlacesRequested());
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Download selesai! Data berhasil diperbarui.'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        Navigator.pop(context); // Close progress dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal mendownload data: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  String _getLastSyncText(int? timestamp) {
-    if (timestamp == null) return 'Belum pernah update';
-    final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
-    final now = DateTime.now();
-    final diff = now.difference(date);
-
-    if (diff.inMinutes < 1) return 'Baru saja';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} menit yang lalu';
-    if (diff.inHours < 24) return '${diff.inHours} jam yang lalu';
-    return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    // Gunakan helper yang sudah distandarisasi
+    await MapDownloadHelper.showRedownloadDialog(context);
   }
 
   Future<String> _getLastIncrementalSyncText() async {
@@ -362,31 +258,8 @@ class _MapControlsState extends State<MapControls> {
 
     if (!mounted) return;
 
-    final confirm = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Download Data Awal'),
-        content: const Text(
-          'Database lokal kosong. Perlu mendownload data wilayah (±48.000 data).\n\n'
-          'Proses ini membutuhkan koneksi internet.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Nanti'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Download Sekarang'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true && mounted) {
-      _handleFullDownload(context);
-    }
+    // Gunakan helper yang sudah distandarisasi
+    await MapDownloadHelper.showInitialDownloadDialog(context);
   }
 
   @override
@@ -396,12 +269,16 @@ class _MapControlsState extends State<MapControls> {
       top: 100,
       child: BlocListener<MapBloc, MapState>(
         listener: (context, state) {
+          // Disable auto-prompt for initial download to avoid duplicate dialogs with GroundcheckPage
+          // User can manually trigger download from the menu button
+          /*
           if (!_hasPromptedDownload &&
               state.status == MapStatus.success &&
               state.places.isEmpty) {
             _hasPromptedDownload = true;
             _showInitialDownloadPrompt(context);
           }
+          */
         },
         child: Column(
           children: [
@@ -591,10 +468,7 @@ class _MapControlsState extends State<MapControls> {
                     _handleFullDownload(context);
                   } else if (value == 'refresh') {
                     // Incremental sync (default)
-                    // Use onlyToday: true to signal Incremental Sync (forceFull=false)
-                    context.read<MapBloc>().add(
-                      const PlacesRefreshRequested(onlyToday: true),
-                    );
+                    context.read<MapBloc>().add(const PlacesRefreshRequested());
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Mengambil data terbaru...'),

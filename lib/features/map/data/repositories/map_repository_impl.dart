@@ -14,6 +14,7 @@ import '../../../../core/config/supabase_config.dart';
 import 'package:flutter/foundation.dart';
 import '../../../../core/config/app_constants.dart';
 import '../services/groundcheck_supabase_service.dart';
+import '../../../../core/utils/debug_monitor.dart';
 
 class MapRepositoryImpl implements MapRepository {
   final SupabaseClient _supabaseClient = SupabaseConfig.client;
@@ -67,54 +68,57 @@ class MapRepositoryImpl implements MapRepository {
   @override
   Future<bool> updateDirectory(DirektoriModel directory) async {
     try {
+      final data = {
+        'id_sbr': directory.idSbr,
+        'nama_usaha': directory.namaUsaha,
+        'nama_komersial_usaha': directory.namaKomersialUsaha,
+        'alamat': directory.alamat,
+        'pemilik': directory.pemilik,
+        'nik_pemilik': directory.nikPemilik,
+        'nomor_telepon': directory.nomorTelepon,
+        'nomor_whatsapp': directory.nomorWhatsapp,
+        'email': directory.email,
+        'website': directory.website,
+        'latitude': directory.latitude ?? directory.lat,
+        'longitude': directory.longitude ?? directory.long,
+        'id_sls': directory.idSls,
+        'kd_prov': directory.kdProv,
+        'kd_kab': directory.kdKab,
+        'kd_kec': directory.kdKec,
+        'kd_desa': directory.kdDesa,
+        'kd_sls': directory.kdSls,
+        'kode_pos': directory.kodePos,
+        'nama_sls': directory.nmSls,
+        'skala_usaha': directory.skalaUsaha,
+        'jenis_perusahaan': directory.jenisPerusahaan,
+        'keterangan': directory.keterangan,
+        'nib': directory.nib,
+        'url_gambar': directory.urlGambar,
+        'sumber_data': directory.sumberData,
+        'keberadaan_usaha': directory.keberadaanUsaha ?? 1,
+        'jenis_kepemilikan_usaha': directory.jenisKepemilikanUsaha,
+        'bentuk_badan_hukum_usaha': directory.bentukBadanHukumUsaha,
+        'deskripsi_badan_usaha_lainnya': directory.deskripsiBadanUsahaLainnya,
+        'tahun_berdiri': directory.tahunBerdiri,
+        'jaringan_usaha': directory.jaringanUsaha,
+        'sektor_institusi': directory.sektorInstitusi,
+        'tenaga_kerja': directory.tenagaKerja,
+        'kbli': directory.kbli,
+        'tag': directory.tag,
+        'idsbr_duplikat': directory.idSbrDuplikat,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      DebugMonitor().logUsage('direktori', 'UPDATE', data, isResponse: false);
+
       await _supabaseClient
           .from('direktori')
-          .update({
-            'id_sbr': directory.idSbr,
-            'nama_usaha': directory.namaUsaha,
-            'nama_komersial_usaha': directory.namaKomersialUsaha,
-            'alamat': directory.alamat,
-            'pemilik': directory.pemilik,
-            'nik_pemilik': directory.nikPemilik,
-            'nomor_telepon': directory.nomorTelepon,
-            'nomor_whatsapp': directory.nomorWhatsapp,
-            'email': directory.email,
-            'website': directory.website,
-            'latitude': directory.latitude ?? directory.lat,
-            'longitude': directory.longitude ?? directory.long,
-            'id_sls': directory.idSls,
-            'kd_prov': directory.kdProv,
-            'kd_kab': directory.kdKab,
-            'kd_kec': directory.kdKec,
-            'kd_desa': directory.kdDesa,
-            'kd_sls': directory.kdSls,
-            'kode_pos': directory.kodePos,
-            'nama_sls': directory.nmSls,
-            'skala_usaha': directory.skalaUsaha,
-            'jenis_perusahaan': directory.jenisPerusahaan,
-            'keterangan': directory.keterangan,
-            'nib': directory.nib,
-            'url_gambar': directory.urlGambar,
-            'sumber_data': directory.sumberData,
-            'keberadaan_usaha': directory.keberadaanUsaha ?? 1,
-            'jenis_kepemilikan_usaha': directory.jenisKepemilikanUsaha,
-            'bentuk_badan_hukum_usaha': directory.bentukBadanHukumUsaha,
-            'deskripsi_badan_usaha_lainnya':
-                directory.deskripsiBadanUsahaLainnya,
-            'tahun_berdiri': directory.tahunBerdiri,
-            'jaringan_usaha': directory.jaringanUsaha,
-            'sektor_institusi': directory.sektorInstitusi,
-            'tenaga_kerja': directory.tenagaKerja,
-            'kbli': directory.kbli,
-            'tag': directory.tag,
-            'idsbr_duplikat': directory.idSbrDuplikat,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
+          .update(data)
           .eq('id', directory.id!);
       invalidatePlacesCache();
       return true;
     } catch (e) {
-      print('Error updating directory: $e');
+      debugPrint('MapRepository: Error updating directory: $e');
       return false;
     }
   }
@@ -635,18 +639,8 @@ class MapRepositoryImpl implements MapRepository {
 
       _placesLoadingFuture = (() async {
         final local = await _loadPlacesFromLocal();
-        if (local.isNotEmpty) {
-          _allPlacesCache = local;
-          debugPrint(
-            'MapRepository: Loaded ${local.length} places from local cache',
-          );
-          return local;
-        }
-
-        // If no local cache, do full refresh
-        final refreshed = await refreshPlaces(onlyToday: false);
-        _allPlacesCache = refreshed;
-        return refreshed;
+        _allPlacesCache = local;
+        return local;
       })();
 
       final result = await _placesLoadingFuture!;
@@ -660,24 +654,13 @@ class MapRepositoryImpl implements MapRepository {
   }
 
   @override
-  Future<List<Place>> refreshPlaces({bool onlyToday = false}) async {
+  Future<List<Place>> refreshPlaces() async {
     try {
       final service = GroundcheckSupabaseService();
 
-      // Jika onlyToday=false, gunakan syncRecords (Incremental Sync yang baru)
-      // Logika syncRecords di service sudah menangani load local -> fetch updates -> merge -> save
-      // Jadi kita tinggal panggil itu.
-      // Namun, syncRecords mengembalikan List<GroundcheckRecord>, perlu dikonversi ke List<Place>.
-      // Dan syncRecords juga melakukan fetch semua data (incremental) jika onlyToday=false.
-      // Jika onlyToday=true, kita hanya ingin mengambil data yang berubah hari ini dan menggabungkannya dengan cache saat ini.
-
-      // Logika Baru:
-      // onlyToday=true -> "Perubahan Hari Ini" -> Incremental Sync (forceFull: false)
-      // onlyToday=false -> "Download Semua" -> Full Sync (forceFull: true)
-
-      List<GroundcheckRecord> records = await service.syncRecords(
-        forceFull: !onlyToday,
-      );
+      // Incremental Sync
+      // Hanya mengambil data baru/update dan menggabungkannya dengan cache saat ini.
+      List<GroundcheckRecord> records = await service.syncRecords();
 
       // Convert ke List<Place>
       final places = <Place>[];
@@ -690,6 +673,30 @@ class MapRepositoryImpl implements MapRepository {
       return _allPlacesCache ?? [];
     } catch (e) {
       debugPrint('MapRepository: Error refreshing places: $e');
+      return _allPlacesCache ?? [];
+    }
+  }
+
+  @override
+  Future<List<Place>> downloadFullPlaces() async {
+    try {
+      final service = GroundcheckSupabaseService();
+
+      // Full Sync (Download Semua)
+      // Menimpa seluruh cache lokal dengan data baru dari server.
+      List<GroundcheckRecord> records = await service.downloadFullData();
+
+      // Convert ke List<Place>
+      final places = <Place>[];
+      for (final r in records) {
+        final p = _recordToPlace(r);
+        if (p != null) places.add(p);
+      }
+      _allPlacesCache = places;
+      _boundsCache.clear();
+      return _allPlacesCache ?? [];
+    } catch (e) {
+      debugPrint('MapRepository: Error downloading full places: $e');
       return _allPlacesCache ?? [];
     }
   }
@@ -733,9 +740,6 @@ class MapRepositoryImpl implements MapRepository {
       final key = _boundsKey(south, north, west, east);
       final cached = _boundsCache[key];
       if (cached != null) {
-        debugPrint(
-          'MapRepository: Loaded ${cached.length} places in bounds (cached)',
-        );
         return cached;
       }
 
@@ -746,9 +750,7 @@ class MapRepositoryImpl implements MapRepository {
       }).toList();
 
       _boundsCache[key] = places;
-      debugPrint(
-        'MapRepository: Loaded ${places.length} places in bounds (${south}, ${north}, ${west}, ${east})',
-      );
+
       return places;
     } catch (e) {
       debugPrint('MapRepository: Error getPlacesInBounds: $e');
@@ -768,6 +770,9 @@ class MapRepositoryImpl implements MapRepository {
           .select('judul')
           .eq('kode', kode)
           .single();
+
+      DebugMonitor().logUsage('kbli', 'SELECT (Single)', resp);
+
       if (resp is Map && resp['judul'] != null) {
         final j = resp['judul'];
         if (j is String && j.trim().isNotEmpty) return j.trim();
