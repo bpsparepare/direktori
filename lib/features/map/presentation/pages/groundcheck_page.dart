@@ -593,6 +593,33 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     _isDialogShowing = false;
   }
 
+  Future<void> _refreshLocalData() async {
+    setState(() => _isLoading = true);
+    try {
+      final local = await _supabaseService.loadLocalRecords();
+      if (mounted) {
+        _processRecords(local);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Data lokal berhasil disinkronkan: ${local.length} data',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Gagal sinkronisasi: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   void _processRecords(List<GroundcheckRecord> records) {
     _allRecords = records;
     _statusOptions =
@@ -611,11 +638,23 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
           ..sort();
     _sumberDataOptions =
         records
-            .map((e) => e.sumberData)
+            .map((e) => e.sumberData.trim())
             .where((v) => v.isNotEmpty)
             .toSet()
             .toList()
           ..sort();
+
+    // Validasi filter saat ini agar tetap konsisten dengan opsi baru (trim)
+    if (_sumberDataFilter != null) {
+      final trimmed = _sumberDataFilter!.trim();
+      if (_sumberDataOptions.contains(trimmed)) {
+        _sumberDataFilter = trimmed;
+      } else {
+        // Jika opsi yang dipilih tidak ada lagi (misal data berubah total), reset
+        _sumberDataFilter = null;
+      }
+    }
+
     final filtered = _filteredRecords();
     setState(() {
       _dataSource = GroundcheckDataSource(
@@ -1719,7 +1758,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       }
       if (_sumberDataFilter != null &&
           _sumberDataFilter!.isNotEmpty &&
-          r.sumberData != _sumberDataFilter) {
+          r.sumberData.trim() != _sumberDataFilter) {
         return false;
       }
       if (_isUploadedFilter != null) {
@@ -2938,9 +2977,9 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
             ),
             const SizedBox(width: 8),
             IconButton(
-              onPressed: () => _ensureGcConfig(forceShow: true),
-              icon: const Icon(Icons.settings),
-              tooltip: 'Pengaturan GC',
+              onPressed: _refreshLocalData,
+              icon: const Icon(Icons.sync),
+              tooltip: 'Sinkronkan Data Lokal',
             ),
           ],
         ),
