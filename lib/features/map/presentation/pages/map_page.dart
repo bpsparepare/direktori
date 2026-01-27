@@ -14,6 +14,7 @@ import 'package:uuid/uuid.dart';
 import '../../data/repositories/map_repository_impl.dart';
 import '../../data/repositories/scraping_repository_impl.dart';
 import '../../data/models/direktori_model.dart';
+import '../../domain/entities/groundcheck_record.dart';
 import '../../domain/usecases/get_initial_map_config.dart';
 import '../../domain/usecases/get_places.dart';
 import '../../domain/usecases/get_first_polygon_meta_from_geojson.dart';

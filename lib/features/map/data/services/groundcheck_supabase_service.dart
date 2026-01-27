@@ -6,7 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/config/supabase_config.dart';
-import '../../presentation/pages/groundcheck_page.dart';
+import '../../domain/entities/groundcheck_record.dart';
 import '../../domain/entities/place.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../../core/utils/debug_monitor.dart';

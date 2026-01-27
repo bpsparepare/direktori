@@ -6,12 +6,14 @@ import 'groundcheck_history_page.dart';
 import 'map_page.dart';
 import 'saved_page.dart';
 import 'groundcheck_page.dart';
+import 'spasial_page.dart';
 import '../../../contribution/presentation/pages/contribution_page.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
 import '../../data/repositories/map_repository_impl.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
+import '../../domain/entities/groundcheck_record.dart';
 import '../../domain/entities/place.dart';
 import '../../domain/usecases/get_initial_map_config.dart';
 import '../../domain/usecases/get_places.dart';
@@ -248,7 +250,7 @@ class _MainPageState extends State<MainPage> {
       case 1:
         return DashboardPage(mapController: _sharedMapController);
       case 2:
-        return const ContributionPage();
+        return const GroundcheckHistoryPage();
       case 3:
         // Only accessible if not mitra
         return _isMitra
@@ -284,10 +286,10 @@ class _MainPageState extends State<MainPage> {
                 index: _selectedIndex == 0 ? 0 : _selectedIndex - 1,
                 children: [
                   DashboardPage(mapController: _sharedMapController),
-                  const GroundcheckHistoryPage(), // This seems unused in tabs but part of stack
-                  (!_isMitra && isLargeScreen)
-                      ? GroundcheckPage(onGoToMap: _focusGroundcheckLocation)
-                      : const SizedBox.shrink(), // Hide GC page for mitra or small screen
+                  const GroundcheckHistoryPage(),
+                  if (!_isMitra && isLargeScreen)
+                    GroundcheckPage(onGoToMap: _focusGroundcheckLocation),
+                  if (!_isMitra && isLargeScreen) const SpasialPage(),
                 ],
               ),
             ),
@@ -420,6 +422,11 @@ class _MainPageState extends State<MainPage> {
               const BottomNavigationBarItem(
                 icon: Icon(Icons.fact_check_outlined),
                 label: 'Groundcheck',
+              ),
+            if (!_isMitra && isLargeScreen)
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.map_outlined),
+                label: 'Spasial',
               ),
           ],
         ),

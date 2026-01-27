@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
+import '../../domain/entities/groundcheck_record.dart';
 import 'groundcheck_page.dart';
 
 class DashboardPage extends StatefulWidget {

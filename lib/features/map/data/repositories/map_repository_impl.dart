@@ -8,7 +8,7 @@ import '../../domain/entities/map_config.dart';
 import '../../domain/entities/place.dart';
 import '../../domain/repositories/map_repository.dart';
 import '../../domain/entities/polygon_data.dart';
-import '../../presentation/pages/groundcheck_page.dart';
+import '../../domain/entities/groundcheck_record.dart';
 import '../models/direktori_model.dart';
 import '../../../../core/config/supabase_config.dart';
 import 'package:flutter/foundation.dart';

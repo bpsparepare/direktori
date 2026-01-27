@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
 import '../../data/repositories/map_repository_impl.dart';
-import '../pages/groundcheck_page.dart'; // Import GroundcheckRecord definition
+import '../../domain/entities/groundcheck_record.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 

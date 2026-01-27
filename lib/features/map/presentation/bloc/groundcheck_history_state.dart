@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
+import '../../domain/entities/groundcheck_record.dart';
 import '../pages/groundcheck_page.dart'; // For GroundcheckRecord
 
 abstract class GroundcheckHistoryState extends Equatable {
