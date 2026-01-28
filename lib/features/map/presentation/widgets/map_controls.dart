@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -79,6 +80,7 @@ class _MapControlsState extends State<MapControls> {
   bool _isLoadingLocation = false;
   String _appVersion = '';
   bool _hasPromptedDownload = false;
+  StreamSubscription<Position>? _positionStreamSubscription;
 
   @override
   void initState() {
@@ -86,8 +88,14 @@ class _MapControlsState extends State<MapControls> {
     _loadAppVersion();
     // Auto-detect location when widget is initialized
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _getCurrentLocation();
+      _startLiveLocationUpdates();
     });
+  }
+
+  @override
+  void dispose() {
+    _positionStreamSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadAppVersion() async {
@@ -99,24 +107,20 @@ class _MapControlsState extends State<MapControls> {
     }
   }
 
-  Future<void> _getCurrentLocation() async {
+  Future<void> _startLiveLocationUpdates() async {
     setState(() {
       _isLoadingLocation = true;
     });
 
     try {
-      // Cek apakah location service aktif
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         _showLocationError('Layanan lokasi tidak aktif. Silakan aktifkan GPS.');
         return;
       }
 
-      // Cek permission
       LocationPermission permission = await Geolocator.checkPermission();
-
       if (permission == LocationPermission.denied) {
-        // Request permission
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
           _showLocationError(
@@ -130,76 +134,89 @@ class _MapControlsState extends State<MapControls> {
         _showLocationError(
           'Izin lokasi ditolak permanen. Silakan aktifkan di pengaturan aplikasi.',
         );
-        // Buka pengaturan aplikasi
         await Geolocator.openAppSettings();
         return;
       }
 
-      Position position;
+      // 1. Get initial position immediately
+      Position? position;
       try {
         position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.medium,
-          timeLimit: const Duration(seconds: 30),
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 10),
         );
       } catch (_) {
-        final last = await Geolocator.getLastKnownPosition();
-        if (last != null) {
-          position = last;
-        } else {
-          position = await Geolocator.getPositionStream(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.low,
-              distanceFilter: 10,
+        position = await Geolocator.getLastKnownPosition();
+      }
+
+      if (position != null) {
+        final currentLocation = LatLng(position.latitude, position.longitude);
+        widget.mapController.move(currentLocation, 15.0);
+        if (widget.onLocationUpdate != null) {
+          widget.onLocationUpdate!(currentLocation);
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Lokasi berhasil ditemukan'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
             ),
-          ).first.timeout(const Duration(seconds: 30));
+          );
         }
       }
 
-      // Pindahkan peta ke lokasi saat ini
-      final currentLocation = LatLng(position.latitude, position.longitude);
-      widget.mapController.move(
-        currentLocation,
-        15.0, // Zoom level untuk lokasi saat ini
-      );
-
-      // Update location marker via callback
-      if (widget.onLocationUpdate != null) {
-        widget.onLocationUpdate!(currentLocation);
-      }
-
-      // Tampilkan pesan sukses
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Lokasi berhasil ditemukan'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+      // 2. Start streaming for updates
+      _positionStreamSubscription?.cancel();
+      _positionStreamSubscription =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 10,
+            ),
+          ).listen(
+            (Position position) {
+              final currentLocation = LatLng(
+                position.latitude,
+                position.longitude,
+              );
+              // Only update marker, don't force move camera on every update (user might be panning)
+              if (widget.onLocationUpdate != null) {
+                widget.onLocationUpdate!(currentLocation);
+              }
+            },
+            onError: (e) {
+              debugPrint('Location stream error: $e');
+            },
+          );
     } catch (e) {
-      String errorMessage = 'Gagal mendapatkan lokasi';
-
-      if (e.toString().contains('location_service_disabled')) {
-        errorMessage = 'Layanan lokasi tidak aktif. Silakan aktifkan GPS.';
-      } else if (e.toString().contains('permission_denied')) {
-        errorMessage = 'Izin lokasi diperlukan untuk fitur ini.';
-      } else if (e.toString().contains('timeout')) {
-        errorMessage = 'Timeout mendapatkan lokasi. Coba lagi.';
-      } else if (e.toString().contains('kCLErrorDomain') ||
-          e.toString().contains('LOCATION UPDATE FAILURE')) {
-        errorMessage = 'Lokasi belum tersedia. Coba lagi beberapa saat.';
-      } else {
-        errorMessage = 'Gagal mendapatkan lokasi: ${e.toString()}';
-      }
-
-      _showLocationError(errorMessage);
+      debugPrint('Error getting location: $e');
+      _showLocationError('Gagal mendapatkan lokasi: $e');
     } finally {
       if (mounted) {
         setState(() {
           _isLoadingLocation = false;
         });
       }
+    }
+  }
+
+  Future<void> _getCurrentLocation() async {
+    // If stream is active, just recenter. If not, restart stream.
+    if (_positionStreamSubscription != null &&
+        !_positionStreamSubscription!.isPaused) {
+      // Try to get current position for immediate recenter
+      try {
+        final position = await Geolocator.getCurrentPosition();
+        final currentLocation = LatLng(position.latitude, position.longitude);
+        widget.mapController.move(currentLocation, 15.0);
+        widget.onLocationUpdate?.call(currentLocation);
+      } catch (_) {
+        // If fails, just restart stream logic
+        _startLiveLocationUpdates();
+      }
+    } else {
+      _startLiveLocationUpdates();
     }
   }
 

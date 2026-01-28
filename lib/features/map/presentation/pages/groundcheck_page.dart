@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_datagrid/datagrid.dart';
@@ -1276,7 +1277,6 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
 
     // Khusus update status upload (jika true) menggunakan fungsi terpisah
     if (isUploaded) {
-      debugPrint('Mengupdate status upload untuk ${record.idsbr}...');
       await _supabaseService.updateUploadStatus(record.idsbr, true);
     }
 
@@ -2704,12 +2704,14 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
             final lat = double.tryParse(record.latitude) ?? 0.0;
             final lon = double.tryParse(record.longitude) ?? 0.0;
 
-            final resp = await _gcService.konfirmasiUser(
-              perusahaanId: record.perusahaanId,
-              latitude: lat.toString(),
-              longitude: lon.toString(),
-              hasilGc: record.gcsResult,
-            );
+            final resp = await _gcService
+                .konfirmasiUser(
+                  perusahaanId: record.perusahaanId,
+                  latitude: lat.toString(),
+                  longitude: lon.toString(),
+                  hasilGc: record.gcsResult,
+                )
+                .timeout(const Duration(seconds: 30));
 
             if (resp != null) {
               final status = resp['status']?.toString().toLowerCase();
@@ -2757,7 +2759,11 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
               failNotifier.value++; // Tambah counter gagal
             }
           } catch (e) {
-            debugPrint('Bulk GC Exception untuk ${record.idsbr}: $e');
+            if (e is TimeoutException) {
+              debugPrint('Bulk GC Timeout (15s) untuk ${record.idsbr}');
+            } else {
+              debugPrint('Bulk GC Exception untuk ${record.idsbr}: $e');
+            }
             pendingRecords.add(record); // Masukkan kembali ke antrean
             failNotifier.value++; // Tambah counter gagal
           }

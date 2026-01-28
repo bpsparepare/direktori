@@ -310,7 +310,7 @@ class _SyncUsahaBaruDialogState extends State<SyncUsahaBaruDialog> {
           try {
             final repo = MapRepositoryImpl();
             final polygons = await repo.getAllPolygonsMetaFromGeoJson(
-              'assets/geojson/final_sls.geojson',
+              'assets/geojson/final_sls_optimized.json',
             );
             for (final polygon in polygons) {
               if (_isPointInPolygon(LatLng(lat, lng), polygon.points)) {
@@ -396,7 +396,7 @@ class _SyncUsahaBaruDialogState extends State<SyncUsahaBaruDialog> {
         try {
           final repo = MapRepositoryImpl();
           final polygons = await repo.getAllPolygonsMetaFromGeoJson(
-            'assets/geojson/final_sls.geojson',
+            'assets/geojson/final_sls_optimized.json',
           );
           for (final polygon in polygons) {
             if (_isPointInPolygon(LatLng(lat, lng), polygon.points)) {

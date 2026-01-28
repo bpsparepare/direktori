@@ -109,51 +109,53 @@ class _SpasialPageState extends State<SpasialPage> {
       int outsideGanda = 0;
       int outsideUsahaBaru = 0;
 
-      for (var record in records) {
-        final lat = double.tryParse(record.latitude);
-        final lng = double.tryParse(record.longitude);
+      int noCoordCount = 0;
+      int noCoordBelumGc = 0;
+      int noCoordDitemukan = 0;
+      int noCoordTidakDitemukan = 0;
+      int noCoordTutup = 0;
+      int noCoordGanda = 0;
+      int noCoordUsahaBaru = 0;
 
-        if (lat != null && lng != null && lat != 0 && lng != 0) {
+      for (var record in records) {
+        final lat = double.tryParse(record.latitude) ?? 0.0;
+        final lng = double.tryParse(record.longitude) ?? 0.0;
+
+        // Determine status code
+        // Mapping logic from groundcheck_page.dart
+        // '' -> Belum GC
+        // '99' or contains 'tidak ditemukan' -> Tidak Ditemukan
+        // '1' or contains 'ditemukan' -> Ditemukan
+        // '3' or contains 'tutup' -> Tutup
+        // '4' or contains 'ganda' -> Ganda
+        // '5' or contains 'usaha baru' -> Usaha Baru
+
+        final lower = record.gcsResult.toLowerCase();
+        int statusCode =
+            0; // 0: Belum GC, 1: Ditemukan, 3: Tutup, 4: Ganda, 5: Usaha Baru, 99: Tidak Ditemukan
+
+        if (lower == '' || lower == 'null') {
+          statusCode = 0;
+        } else if (lower == '99' || lower.contains('tidak ditemukan')) {
+          statusCode = 99;
+        } else if (lower == '1' || lower.contains('ditemukan')) {
+          statusCode = 1;
+        } else if (lower == '3' || lower.contains('tutup')) {
+          statusCode = 3;
+        } else if (lower == '4' || lower.contains('ganda')) {
+          statusCode = 4;
+        } else if (lower == '5' || lower.contains('usaha baru')) {
+          statusCode = 5;
+        } else {
+          // Default/Fallback
+          if (record.isUploaded) {
+            statusCode = 0;
+          }
+        }
+
+        if (lat != 0 && lng != 0) {
           final point = LatLng(lat, lng);
           bool found = false;
-
-          // Determine status code
-          // Mapping logic from groundcheck_page.dart
-          // '' -> Belum GC
-          // '99' or contains 'tidak ditemukan' -> Tidak Ditemukan
-          // '1' or contains 'ditemukan' -> Ditemukan
-          // '3' or contains 'tutup' -> Tutup
-          // '4' or contains 'ganda' -> Ganda
-          // '5' or contains 'usaha baru' -> Usaha Baru
-
-          final lower = record.gcsResult.toLowerCase();
-          int statusCode =
-              0; // 0: Belum GC, 1: Ditemukan, 3: Tutup, 4: Ganda, 5: Usaha Baru, 99: Tidak Ditemukan
-
-          if (lower == '' || lower == 'null') {
-            statusCode = 0;
-          } else if (lower == '99' || lower.contains('tidak ditemukan')) {
-            statusCode = 99;
-          } else if (lower == '1' || lower.contains('ditemukan')) {
-            statusCode = 1;
-          } else if (lower == '3' || lower.contains('tutup')) {
-            statusCode = 3;
-          } else if (lower == '4' || lower.contains('ganda')) {
-            statusCode = 4;
-          } else if (lower == '5' || lower.contains('usaha baru')) {
-            statusCode = 5;
-          } else {
-            // Default/Fallback
-            if (record.isUploaded) {
-              // Assume uploaded means done, but what kind?
-              // If not matched above, maybe treat as 'Ditemukan' or just keep as is?
-              // Let's assume 0 (Belum GC) if really unknown, or map strictly.
-              // For now, let's stick to the explicit rules.
-              // If gcsResult is something else, maybe it counts towards total but not specific breakdown?
-              // Let's map to Belum GC (0) if unknown.
-              statusCode = 0;
-            }
-          }
 
           // Find which polygon
           for (var poly in polygons) {
@@ -199,6 +201,22 @@ class _SpasialPageState extends State<SpasialPage> {
               outsideUsahaBaru++;
             }
           }
+        } else {
+          // No coordinates
+          noCoordCount++;
+          if (statusCode == 0) {
+            noCoordBelumGc++;
+          } else if (statusCode == 1) {
+            noCoordDitemukan++;
+          } else if (statusCode == 99) {
+            noCoordTidakDitemukan++;
+          } else if (statusCode == 3) {
+            noCoordTutup++;
+          } else if (statusCode == 4) {
+            noCoordGanda++;
+          } else if (statusCode == 5) {
+            noCoordUsahaBaru++;
+          }
         }
       }
 
@@ -241,6 +259,23 @@ class _SpasialPageState extends State<SpasialPage> {
             countTutup: outsideTutup,
             countGanda: outsideGanda,
             countUsahaBaru: outsideUsahaBaru,
+          ),
+        );
+      }
+
+      // Add "Tanpa Koordinat" if > 0
+      if (noCoordCount > 0) {
+        results.add(
+          SpasialSummary(
+            kecamatan: 'LAINNYA',
+            desa: 'TANPA KOORDINAT',
+            count: noCoordCount,
+            countBelumGc: noCoordBelumGc,
+            countDitemukan: noCoordDitemukan,
+            countTidakDitemukan: noCoordTidakDitemukan,
+            countTutup: noCoordTutup,
+            countGanda: noCoordGanda,
+            countUsahaBaru: noCoordUsahaBaru,
           ),
         );
       }

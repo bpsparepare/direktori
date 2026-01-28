@@ -992,7 +992,7 @@ class MapRepositoryImpl implements MapRepository {
       try {
         debugPrint('GeoJSON(points): loading optimized geometries...');
         final jsonStr = await rootBundle.loadString(
-          'assets/geojson/final_sls.geojson',
+          'assets/geojson/final_sls_optimized.geojson',
         );
         _cachedGeometries = await compute(_parseOptimizedGeoJson, jsonStr);
         debugPrint(

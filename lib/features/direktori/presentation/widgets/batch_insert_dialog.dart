@@ -180,7 +180,7 @@ class _BatchInsertDialogState extends State<BatchInsertDialog> {
                         try {
                           final polygons = await repo
                               .getAllPolygonsMetaFromGeoJson(
-                                'assets/geojson/final_sls.geojson',
+                                'assets/geojson/final_sls_optimized.json',
                               );
                           for (final p in polygons) {
                             if (_isPointInPolygon(

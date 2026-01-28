@@ -268,8 +268,6 @@ class BpsGcService {
     required String longitude,
     required String hasilGc,
   }) async {
-    debugPrint('proses kirim: --- Mulai Pengiriman Data ---');
-
     if (!hasCredentials) {
       debugPrint('proses kirim: Gagal. Belum login / credentials kosong.');
       return null;
@@ -280,19 +278,13 @@ class BpsGcService {
     final hasXsrf = _cookieHeader?.contains('XSRF-TOKEN') ?? false;
 
     if (hasSession && hasXsrf) {
-      debugPrint('proses kirim: Menggunakan HTTP Request Biasa (Direct)');
       return _konfirmasiUserViaHttp(
         perusahaanId: perusahaanId,
         latitude: latitude,
         longitude: longitude,
         hasilGc: hasilGc,
       );
-    } else {
-      debugPrint('proses kirim: Cookie tidak lengkap untuk HTTP Biasa.');
-      debugPrint(
-        'proses kirim: Fallback ke WebView Injection (Mengandalkan Cookie Internal WebView).',
-      );
-    }
+    } else {}
 
     // 2. Fallback: Kirim data konfirmasi user via WebView JS Injection.
     try {

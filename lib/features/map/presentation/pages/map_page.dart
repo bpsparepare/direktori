@@ -2632,7 +2632,7 @@ class MapPage extends StatelessWidget {
                                       showSuggestions = true;
                                     });
                                     GroundcheckSupabaseService()
-                                        .searchRecords(query)
+                                        .searchLocalRecords(query)
                                         .then((results) {
                                           if (!context.mounted) return;
                                           setState(() {

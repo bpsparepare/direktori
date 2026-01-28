@@ -167,6 +167,26 @@ class GroundcheckSupabaseService {
     }
   }
 
+  Future<List<GroundcheckRecord>> searchLocalRecords(String query) async {
+    try {
+      final records = await loadLocalRecords();
+      if (query.isEmpty) return [];
+
+      final q = query.toLowerCase();
+      return records
+          .where((r) {
+            return r.idsbr.toLowerCase().contains(q) ||
+                r.namaUsaha.toLowerCase().contains(q) ||
+                (r.alamatUsaha.isNotEmpty &&
+                    r.alamatUsaha.toLowerCase().contains(q));
+          })
+          .take(50)
+          .toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
   Future<List<GroundcheckRecord>> fetchUserRecords(String userId) async {
     try {
       final response = await _client
