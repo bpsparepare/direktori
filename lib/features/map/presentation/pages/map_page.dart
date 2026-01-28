@@ -2443,6 +2443,7 @@ class MapPage extends StatelessWidget {
     GroundcheckRecord? editingRecord;
     bool useCurrentLocation =
         true; // For editing: update location to clicked point?
+    bool isSaving = false; // Loading state for save button
 
     // Helper to normalize status for dropdown
     String? _normalizeStatus(String status) {
@@ -2918,9 +2919,21 @@ class MapPage extends StatelessWidget {
                           const SizedBox(height: 16),
                           TextField(
                             controller: alamatController,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'Alamat Usaha',
-                              border: OutlineInputBorder(),
+                              border: const OutlineInputBorder(),
+                              suffixIcon: IconButton(
+                                icon: const Icon(Icons.paste),
+                                tooltip: 'Paste dari Clipboard',
+                                onPressed: () async {
+                                  final data = await Clipboard.getData(
+                                    Clipboard.kTextPlain,
+                                  );
+                                  if (data?.text != null) {
+                                    alamatController.text = data!.text!;
+                                  }
+                                },
+                              ),
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -2939,87 +2952,135 @@ class MapPage extends StatelessWidget {
                               const SizedBox(width: 16),
                               Expanded(
                                 child: ElevatedButton(
-                                  onPressed: () async {
-                                    if (namaUsahaController.text.isEmpty) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Nama Usaha wajib diisi',
+                                  onPressed: isSaving
+                                      ? null
+                                      : () async {
+                                          // Dismiss keyboard first to avoid jank on close
+                                          FocusManager.instance.primaryFocus
+                                              ?.unfocus();
+
+                                          if (namaUsahaController
+                                              .text
+                                              .isEmpty) {
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Nama Usaha wajib diisi',
+                                                ),
+                                              ),
+                                            );
+                                            return;
+                                          }
+
+                                          setState(() {
+                                            isSaving = true;
+                                          });
+
+                                          try {
+                                            // Auto-generate IDSBR if empty or if creating new
+                                            String finalIdsbr;
+                                            if (editingRecord != null) {
+                                              finalIdsbr = editingRecord!.idsbr;
+                                            } else {
+                                              // If creating new, generate temp ID
+                                              finalIdsbr =
+                                                  'TEMP-${DateTime.now().millisecondsSinceEpoch}';
+                                            }
+
+                                            final service =
+                                                GroundcheckSupabaseService();
+                                            final userId =
+                                                editingRecord?.userId ??
+                                                await service
+                                                    .fetchCurrentUserId();
+                                            final record = GroundcheckRecord(
+                                              idsbr: finalIdsbr,
+                                              namaUsaha:
+                                                  namaUsahaController.text,
+                                              alamatUsaha:
+                                                  alamatController.text,
+                                              kodeWilayah:
+                                                  idSls, // Use the region where the point is
+                                              statusPerusahaan: 'Aktif',
+                                              skalaUsaha:
+                                                  '', // Null/empty as requested
+                                              gcsResult: editingRecord != null
+                                                  ? '1' // Ditemukan
+                                                  : '5', // Tambahan
+                                              latitude: useCurrentLocation
+                                                  ? point.latitude.toString()
+                                                  : (editingRecord?.latitude ??
+                                                        point.latitude
+                                                            .toString()),
+                                              longitude: useCurrentLocation
+                                                  ? point.longitude.toString()
+                                                  : (editingRecord?.longitude ??
+                                                        point.longitude
+                                                            .toString()),
+                                              perusahaanId:
+                                                  editingRecord?.perusahaanId ??
+                                                  finalIdsbr,
+                                              userId: userId,
+                                            );
+
+                                            await service.updateRecord(record);
+
+                                            // Refresh map to show new/updated marker
+                                            try {
+                                              MapRepositoryImpl()
+                                                  .invalidatePlacesCache();
+                                            } catch (_) {}
+                                            if (context.mounted) {
+                                              context.read<MapBloc>().add(
+                                                const PlacesRequested(),
+                                              );
+                                            }
+
+                                            if (context.mounted) {
+                                              Navigator.of(context).pop();
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Data berhasil disimpan',
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                          } catch (e) {
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    'Gagal menyimpan: $e',
+                                                  ),
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              );
+                                            }
+                                          } finally {
+                                            if (context.mounted) {
+                                              setState(() {
+                                                isSaving = false;
+                                              });
+                                            }
+                                          }
+                                        },
+                                  child: isSaving
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
                                           ),
-                                        ),
-                                      );
-                                      return;
-                                    }
-
-                                    // Auto-generate IDSBR if empty or if creating new
-                                    String finalIdsbr;
-                                    if (editingRecord != null) {
-                                      finalIdsbr = editingRecord!.idsbr;
-                                    } else {
-                                      // If creating new, generate temp ID
-                                      finalIdsbr =
-                                          'TEMP-${DateTime.now().millisecondsSinceEpoch}';
-                                    }
-
-                                    final service =
-                                        GroundcheckSupabaseService();
-                                    final userId =
-                                        editingRecord?.userId ??
-                                        await service.fetchCurrentUserId();
-                                    final record = GroundcheckRecord(
-                                      idsbr: finalIdsbr,
-                                      namaUsaha: namaUsahaController.text,
-                                      alamatUsaha: alamatController.text,
-                                      kodeWilayah:
-                                          idSls, // Use the region where the point is
-                                      statusPerusahaan: 'Aktif',
-                                      skalaUsaha: '', // Null/empty as requested
-                                      gcsResult: editingRecord != null
-                                          ? '1' // Ditemukan
-                                          : '5', // Tambahan
-                                      latitude: useCurrentLocation
-                                          ? point.latitude.toString()
-                                          : (editingRecord?.latitude ??
-                                                point.latitude.toString()),
-                                      longitude: useCurrentLocation
-                                          ? point.longitude.toString()
-                                          : (editingRecord?.longitude ??
-                                                point.longitude.toString()),
-                                      perusahaanId:
-                                          editingRecord?.perusahaanId ??
-                                          finalIdsbr,
-                                      userId: userId,
-                                    );
-
-                                    await service.updateRecord(record);
-
-                                    // Refresh map to show new/updated marker
-                                    try {
-                                      MapRepositoryImpl()
-                                          .invalidatePlacesCache();
-                                    } catch (_) {}
-                                    if (context.mounted) {
-                                      context.read<MapBloc>().add(
-                                        const PlacesRequested(),
-                                      );
-                                    }
-
-                                    if (context.mounted) {
-                                      Navigator.of(context).pop();
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Data berhasil disimpan',
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  child: const Text('Simpan'),
+                                        )
+                                      : const Text('Simpan'),
                                 ),
                               ),
                             ],
