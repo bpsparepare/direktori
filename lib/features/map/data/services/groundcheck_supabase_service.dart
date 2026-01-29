@@ -10,12 +10,17 @@ import '../../domain/entities/groundcheck_record.dart';
 import '../../domain/entities/place.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../../core/utils/debug_monitor.dart';
+import '../../../../core/services/storage/storage_service.dart';
+import '../../../../core/services/storage/storage_interface.dart';
 
 class GroundcheckSupabaseService {
   final SupabaseClient _client = SupabaseConfig.client;
   static const String _tableName = 'groundcheck_list';
   static const String _localFileName = 'groundcheck_list_cache.json';
   static const String _lastSyncKey = 'groundcheck_last_sync_time';
+
+  // Storage Service abstraction
+  final StorageService _storage = StorageServiceFactory.create();
 
   Future<List<GroundcheckRecord>> fetchRecords({DateTime? updatedSince}) async {
     try {
@@ -814,30 +819,29 @@ class GroundcheckSupabaseService {
     return double.tryParse(v.toString());
   }
 
-  Future<File> get _localFile async {
-    final directory = await getApplicationDocumentsDirectory();
-    return File('${directory.path}/$_localFileName');
-  }
+  // Helper _localFile dihapus karena digantikan oleh StorageService abstraction
 
   Future<List<GroundcheckRecord>> loadLocalRecords() async {
     try {
-      final file = await _localFile;
-      if (!await file.exists()) return [];
-      final content = await file.readAsString();
+      final content = await _storage.read(_localFileName);
+
+      if (content == null || content.isEmpty) return [];
       final List<dynamic> jsonList = jsonDecode(content);
       return jsonList.map((json) => GroundcheckRecord.fromJson(json)).toList();
     } catch (e) {
+      debugPrint('GroundcheckSupabaseService: Error loading local records: $e');
       return [];
     }
   }
 
   Future<void> saveLocalRecords(List<GroundcheckRecord> records) async {
     try {
-      final file = await _localFile;
       final jsonList = records.map((e) => e.toJson()).toList();
-      await file.writeAsString(jsonEncode(jsonList));
+      final jsonString = jsonEncode(jsonList);
+
+      await _storage.write(_localFileName, jsonString);
     } catch (e) {
-      // Ignore error
+      debugPrint('GroundcheckSupabaseService: Error saving local records: $e');
     }
   }
 

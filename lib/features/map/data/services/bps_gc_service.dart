@@ -428,7 +428,7 @@ class BpsGcService {
       final status = map['status'];
       final bodyStr = map['body'];
 
-      if (status == 200) {
+      if (status == 200 || status == 429) {
         try {
           return jsonDecode(bodyStr) as Map<String, dynamic>;
         } catch (e) {
@@ -630,7 +630,7 @@ class BpsGcService {
       debugPrint('proses kirim: HTTP Status: ${response.statusCode}');
       debugPrint('proses kirim: HTTP Body: ${response.body}');
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 429) {
         try {
           return jsonDecode(response.body) as Map<String, dynamic>;
         } catch (e) {

@@ -2714,6 +2714,65 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                 .timeout(const Duration(seconds: 30));
 
             if (resp != null) {
+              // Handle Rate Limit (429)
+              if (resp.containsKey('retry_after')) {
+                final retryVal = resp['retry_after'];
+                int waitSeconds = 20; // Default fallback
+                if (retryVal is int) {
+                  waitSeconds = retryVal;
+                } else if (retryVal is String) {
+                  waitSeconds = int.tryParse(retryVal) ?? 20;
+                }
+
+                // Parse message for explicit wait time (e.g. "tunggu 10 menit")
+                final msg = resp['message']?.toString().toLowerCase() ?? '';
+                try {
+                  // Cek pola "X menit"
+                  final minuteRegex = RegExp(r'(\d+)\s*menit');
+                  final minuteMatch = minuteRegex.firstMatch(msg);
+                  if (minuteMatch != null) {
+                    final minutes =
+                        int.tryParse(minuteMatch.group(1) ?? '') ?? 0;
+                    if (minutes > 0) {
+                      final secondsFromMsg = minutes * 60;
+                      if (secondsFromMsg > waitSeconds) {
+                        waitSeconds = secondsFromMsg;
+                      }
+                    }
+                  }
+
+                  // Cek pola "X detik"
+                  final secondRegex = RegExp(r'(\d+)\s*detik');
+                  final secondMatch = secondRegex.firstMatch(msg);
+                  if (secondMatch != null) {
+                    final seconds =
+                        int.tryParse(secondMatch.group(1) ?? '') ?? 0;
+                    if (seconds > waitSeconds) {
+                      waitSeconds = seconds;
+                    }
+                  }
+                } catch (_) {
+                  // Ignore regex parsing errors
+                }
+
+                // Safety minimum wait
+                if (waitSeconds < 1) waitSeconds = 5;
+
+                // Tampilkan countdown
+                for (int t = waitSeconds; t > 0; t--) {
+                  if (isCancelledNotifier.value) break;
+                  statusNotifier.value =
+                      'Terlalu banyak permintaan.\nMenunggu ${t}s sebelum lanjut...';
+                  await Future.delayed(const Duration(seconds: 1));
+                }
+
+                if (isCancelledNotifier.value) break;
+
+                // Ulangi item ini (decrement index agar loop memproses index ini lagi)
+                i--;
+                continue;
+              }
+
               final status = resp['status']?.toString().toLowerCase();
               final msg = resp['message']?.toString().toLowerCase() ?? '';
               if (status == 'success' ||
