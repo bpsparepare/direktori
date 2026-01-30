@@ -20,9 +20,51 @@ class BpsGcService {
   String _userAgent =
       'Mozilla/5.0 (Linux; Android 16; ONEPLUS 15 Build/SKQ1.211202.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/143.0.7499.192 Mobile Safari/537.36';
 
+  final List<String> _availableUserAgents = [
+    "Mozilla/5.0 (Linux; Android 16; ONEPLUS 15 Build/SKQ1.211202.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/143.0.7499.192 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 15; SM-S928B Build/TP1A.220624.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/133.0.6943.88 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8a Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.6723.102 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 15; POCO X7 Pro Build/UKQ1.231003.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/133.0.6943.45 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 16; SM-A556E Build/TP1A.220624.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/134.0.6998.88 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; ONEPLUS PJZ110 Build/SKQ1.210216.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/132.0.6834.102 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 15; Redmi Note 14 Pro Build/UKQ1.231003.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/133.0.6943.127 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 16; Pixel 9 Pro Build/TP1A.220624.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/134.0.6998.45 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; moto g85 5G Build/S3SGS32.12-78-7; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/131.0.6778.200 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 15; SM-G991B Build/TP1A.220624.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/132.0.6834.88 Mobile Safari/537.36",
+  ];
+
   BpsGcService({http.Client? client}) : _client = client ?? http.Client();
 
-  Future<void> _initWebView() async {
+  void _rotateUserAgent() {
+    _userAgent = (_availableUserAgents..shuffle()).first;
+    debugPrint('proses kirim: Rotated User-Agent to $_userAgent');
+  }
+
+  Future<void> _disposeWebView() async {
+    if (_headlessWebView != null) {
+      try {
+        await _headlessWebView?.dispose();
+      } catch (e) {
+        debugPrint('proses kirim: Error disposing WebView: $e');
+      }
+      _headlessWebView = null;
+      _isWebViewInitialized = false;
+      // Reset completer agar init berikutnya bisa berjalan
+      if (_initCompleter.isCompleted) {
+        // Kita tidak bisa me-reset completer yang sudah complete, jadi kita biarkan.
+        // Tapi kita perlu flag baru atau cara baru handling init status.
+        // Untuk sederhananya, kita anggap initCompleter hanya untuk first init.
+        // Tapi jika kita dispose, kita harus bisa re-init.
+        // Sebaiknya kita tidak mengandalkan _initCompleter untuk re-init.
+      }
+    }
+  }
+
+  Future<void> _initWebView({bool forceRecreate = false}) async {
+    if (forceRecreate) {
+      await _disposeWebView();
+    }
+
     if (_isWebViewInitialized && _headlessWebView != null) return;
 
     try {
@@ -34,9 +76,13 @@ class BpsGcService {
           userAgent: _userAgent,
           useShouldOverrideUrlLoading: true,
           mediaPlaybackRequiresUserGesture: false,
+          clearCache: true, // Auto clear cache on init
+          cacheEnabled: false, // Disable cache
         ),
         onWebViewCreated: (controller) {
           debugPrint('proses kirim: Background Headless WebView created.');
+          // Clear cookies on create
+          CookieManager.instance().deleteAllCookies();
         },
         onLoadStop: (controller, url) {
           debugPrint('proses kirim: Background Headless WebView loaded: $url');
@@ -105,6 +151,208 @@ class BpsGcService {
 
   String? get currentGcToken => _gcToken;
   String? get cookieHeader => _cookieHeader;
+  String? get userAgent => _userAgent;
+
+  /// Login otomatis menggunakan Headless WebView (meniru Python Playwright)
+  Future<Map<String, dynamic>> automatedLogin({
+    required String username,
+    required String password,
+  }) async {
+    debugPrint('proses kirim: Memulai automated login untuk $username...');
+
+    // Rotate UA first
+    _rotateUserAgent();
+
+    // FORCE Re-init WebView untuk memastikan sesi bersih
+    // Ini krusial untuk ganti akun agar tidak nyangkut di sesi lama
+    await _initWebView(forceRecreate: true);
+
+    final controller = _headlessWebView?.webViewController;
+    if (controller == null) {
+      return {'status': 'error', 'message': 'WebView not initialized'};
+    }
+
+    try {
+      // Clear All Storage & Cookies Explicitly
+      debugPrint('proses kirim: Clearing all cookies and storage...');
+      await CookieManager.instance().deleteAllCookies();
+      try {
+        await WebStorageManager.instance().deleteAllData();
+      } catch (e) {
+        // Ignore if not supported
+      }
+
+      // Clear cache again via controller if possible
+      try {
+        await controller.clearCache();
+      } catch (e) {
+        debugPrint('proses kirim: Warning: Failed to clear cache: $e');
+      }
+
+      // Update Settings with new UA
+      await controller.setSettings(
+        settings: InAppWebViewSettings(userAgent: _userAgent),
+      );
+
+      // Go to Login Page
+      debugPrint('proses kirim: Navigasi ke login page...');
+      await controller.loadUrl(
+        urlRequest: URLRequest(url: WebUri('$baseUrl/login')),
+      );
+
+      // Helper to wait for selector
+      Future<bool> waitForSelector(
+        String selector, {
+        int timeoutMs = 15000,
+      }) async {
+        int elapsed = 0;
+        while (elapsed < timeoutMs) {
+          final result = await controller.evaluateJavascript(
+            source: "document.querySelector('$selector') != null",
+          );
+          if (result == true) return true;
+          await Future.delayed(const Duration(milliseconds: 500));
+          elapsed += 500;
+        }
+        return false;
+      }
+
+      // Wait for #login-sso
+      if (!await waitForSelector('#login-sso')) {
+        debugPrint('proses kirim: Login page timeout or SSO button missing');
+        return {'status': 'error', 'message': 'Login page timeout'};
+      }
+
+      // Click SSO
+      debugPrint('proses kirim: Clicking SSO...');
+      await controller.evaluateJavascript(
+        source: "document.querySelector('#login-sso').click();",
+      );
+
+      // Wait for Username Input (SSO Page)
+      if (!await waitForSelector('input[name="username"]')) {
+        debugPrint('proses kirim: SSO page timeout');
+        return {'status': 'error', 'message': 'SSO page timeout'};
+      }
+
+      // Fill Credentials
+      debugPrint('proses kirim: Filling credentials...');
+      final safeUser = username.replaceAll("'", "\\'");
+      final safePass = password.replaceAll("'", "\\'");
+
+      await controller.evaluateJavascript(
+        source:
+            """
+        document.querySelector('input[name="username"]').value = '$safeUser';
+        document.querySelector('input[name="password"]').value = '$safePass';
+        document.querySelector('input[type="submit"]').click();
+      """,
+      );
+
+      // Wait for Redirect back to Matchapro
+      debugPrint('proses kirim: Waiting for redirect to dashboard...');
+      int elapsed = 0;
+      bool loggedIn = false;
+      while (elapsed < 60000) {
+        // 60s timeout
+        final url = (await controller.getUrl())?.toString() ?? '';
+
+        // Cek OTP
+        final hasOtp = await controller.evaluateJavascript(
+          source: "document.querySelector('input[name=\"otp\"]') != null",
+        );
+        if (hasOtp == true) {
+          // Jika butuh OTP, kita tidak bisa lanjut otomatis di background
+          return {
+            'status': 'error',
+            'message': 'OTP Diperlukan. Silakan gunakan Login Manual.',
+          };
+        }
+
+        if (url.contains('matchapro.web.bps.go.id') &&
+            !url.contains('login') &&
+            !url.contains('sso')) {
+          loggedIn = true;
+          break;
+        }
+
+        // Cek jika ada error di halaman
+        final isError = await controller.evaluateJavascript(
+          source:
+              "document.body.innerText.includes('Kombinasi username/email dan password salah')",
+        );
+        if (isError == true) {
+          return {'status': 'error', 'message': 'Password salah'};
+        }
+
+        await Future.delayed(const Duration(seconds: 1));
+        elapsed += 1000;
+      }
+
+      if (!loggedIn) {
+        return {'status': 'error', 'message': 'Login timeout (stuck)'};
+      }
+
+      debugPrint('proses kirim: Login berhasil, extracting tokens...');
+
+      // Extract Tokens
+      final cookies = await CookieManager.instance().getCookies(
+        url: WebUri(baseUrl),
+      );
+      final cookieStr = cookies.map((c) => '${c.name}=${c.value}').join('; ');
+
+      final tokens = await controller.evaluateJavascript(
+        source: """
+        (function() {
+            let gc_token = '';
+            let csrf_token = '';
+            let user_name = '';
+            
+            try {
+                let match = document.body.innerHTML.match(/let\\s+gcSubmitToken\\s*=\s*(['"])([^'"]+)\\1/);
+                if (match) gc_token = match[2];
+            } catch(e) {}
+            
+            if (!gc_token) {
+                let el = document.querySelector('input[name="gc_token"]');
+                if (el) gc_token = el.value;
+            }
+            
+            let meta = document.querySelector('meta[name="csrf-token"]');
+            if (meta) csrf_token = meta.content;
+            
+            let userEl = document.querySelector('.user-name.fw-bolder') || 
+                         document.querySelector('.dropdown-user .username') || 
+                         document.querySelector('.user-panel .info p');
+            if (userEl) user_name = userEl.innerText.trim();
+            
+            return {gc_token, csrf_token, user_name};
+        })();
+      """,
+      );
+
+      if (tokens != null && tokens is Map) {
+        setCredentials(
+          cookie: cookieStr,
+          csrfToken: tokens['csrf_token'] ?? '',
+          gcToken: tokens['gc_token'] ?? '',
+          userAgent: _userAgent,
+        );
+        return {
+          'status': 'success',
+          'userName': tokens['user_name'],
+          'loginId': username,
+          'gcToken': tokens['gc_token'],
+          'csrfToken': tokens['csrf_token'],
+        };
+      }
+
+      return {'status': 'error', 'message': 'Failed to extract tokens'};
+    } catch (e) {
+      debugPrint('proses kirim: Automated Login Exception: $e');
+      return {'status': 'error', 'message': 'Exception: $e'};
+    }
+  }
 
   /// Refresh session: Mengambil ulang data user dan token dari halaman dashboard
   Future<Map<String, String>?> refreshSession() async {
@@ -244,13 +492,17 @@ class BpsGcService {
         _gcToken = null;
 
         // Clear WebView cookies & Storage
-        await CookieManager.instance().deleteAllCookies();
-        await controller.clearCache();
+        try {
+          await CookieManager.instance().deleteAllCookies();
+          await WebStorageManager.instance().deleteAllData();
+        } catch (e) {
+          debugPrint(
+            'proses kirim: Warning: Failed to clear cookies/storage (logout): $e',
+          );
+        }
 
-        // Load blank page
-        await controller.loadUrl(
-          urlRequest: URLRequest(url: WebUri('about:blank')),
-        );
+        // Dispose WebView agar sesi benar-benar mati
+        await _disposeWebView();
 
         return {'status': 'success', 'message': 'Logout berhasil'};
       }

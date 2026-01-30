@@ -19,6 +19,7 @@ import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
 import '../../data/repositories/map_repository_impl.dart';
 import '../utils/map_download_helper.dart';
+import '../../../../../core/services/account_manager_service.dart';
 
 // Optional bootstrap via --dart-define (removed)
 
@@ -356,6 +357,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   String? _gcCookie;
   String? _gcToken;
   String? _currentUser;
+  String? _currentLoginId; // Username login asli (e.g. muharram-pppk)
   String? _userAgent;
   String? _csrfToken;
   bool _isDialogShowing = false;
@@ -541,6 +543,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     setState(() {
       _gcToken = prefs.getString('gc_token');
       _gcCookie = prefs.getString('gc_cookie');
+      _currentLoginId = prefs.getString('current_login_id');
     });
   }
 
@@ -548,6 +551,8 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     final prefs = await SharedPreferences.getInstance();
     if (_gcToken != null) await prefs.setString('gc_token', _gcToken!);
     if (_gcCookie != null) await prefs.setString('gc_cookie', _gcCookie!);
+    if (_currentLoginId != null)
+      await prefs.setString('current_login_id', _currentLoginId!);
   }
 
   Future<void> _handleRefreshSession() async {
@@ -1363,8 +1368,9 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     String gcToken,
     String csrfToken,
     String userAgent,
-    String userName,
-  ) async {
+    String userName, {
+    String? loginId,
+  }) async {
     debugPrint('Login Success: $userName');
     debugPrint('proses kirim: Login Cookie Visible (JS): $cookie');
 
@@ -1392,6 +1398,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       _gcCookie = cookie;
       _gcToken = gcToken;
       _currentUser = userName.isNotEmpty ? userName : 'Pengguna Terautentikasi';
+      if (loginId != null) _currentLoginId = loginId;
     });
 
     _gcService.setCredentials(
@@ -1414,7 +1421,270 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     }
   }
 
-  Future<void> _showBpsLoginDialog() async {
+  void _showAccountManagerDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final usernameController = TextEditingController();
+        final passwordController = TextEditingController();
+        final manager = AccountManagerService();
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Kelola Akun Otomatis'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Daftar akun ini akan digunakan untuk login otomatis saat terkena Rate Limit (429).',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                    // Input Form
+                    TextField(
+                      controller: usernameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Username / NIP',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: passwordController,
+                      decoration: const InputDecoration(
+                        labelText: 'Password',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      obscureText: true,
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: () {
+                        if (usernameController.text.isNotEmpty &&
+                            passwordController.text.isNotEmpty) {
+                          manager.addAccount(
+                            usernameController.text,
+                            passwordController.text,
+                          );
+                          usernameController.clear();
+                          passwordController.clear();
+                          setState(() {});
+                        }
+                      },
+                      child: const Text('Tambah Akun'),
+                    ),
+                    const Divider(),
+                    // List Accounts
+                    Flexible(
+                      child: manager.accounts.isEmpty
+                          ? const Text(
+                              'Belum ada akun tersimpan.',
+                              style: TextStyle(fontStyle: FontStyle.italic),
+                            )
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: manager.accounts.length,
+                              itemBuilder: (context, index) {
+                                final account = manager.accounts[index];
+                                final isLimited = account.isRateLimited;
+                                return ListTile(
+                                  dense: true,
+                                  title: Row(
+                                    children: [
+                                      Text(
+                                        account.username,
+                                        style: TextStyle(
+                                          color: isLimited ? Colors.red : null,
+                                          fontWeight: isLimited
+                                              ? FontWeight.bold
+                                              : null,
+                                        ),
+                                      ),
+                                      if (isLimited) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red[50],
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.red,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            account.rateLimitStatus,
+                                            style: const TextStyle(
+                                              color: Colors.red,
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  subtitle: const Text('Password: ***'),
+                                  trailing: IconButton(
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                      size: 20,
+                                    ),
+                                    onPressed: () {
+                                      manager.removeAccount(account.username);
+                                      setState(() {});
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Tutup'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _handleBpsLoginButton() async {
+    final accounts = AccountManagerService().accounts;
+    if (accounts.isEmpty) {
+      await _performManualLogin();
+    } else if (accounts.length == 1) {
+      await _performAutoLogin(accounts.first);
+    } else {
+      if (!mounted) return;
+      await showModalBottomSheet(
+        context: context,
+        builder: (ctx) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Pilih Akun',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+              ),
+              ...accounts.map(
+                (acc) => ListTile(
+                  leading: const Icon(Icons.person),
+                  title: Text(acc.username),
+                  subtitle: acc.name != null ? Text(acc.name!) : null,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _performAutoLogin(acc);
+                  },
+                ),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.login),
+                title: const Text('Login Manual (WebView)'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _performManualLogin();
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          );
+        },
+      );
+    }
+  }
+
+  Future<void> _performAutoLogin(BpsAccount account) async {
+    if (!mounted) return;
+
+    // Show Loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Login otomatis...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final result = await _gcService.automatedLogin(
+        username: account.username,
+        password: account.password,
+      );
+
+      // Close Loading
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
+      if (result['status'] == 'success') {
+        if (mounted) {
+          await _handleLoginSuccess(
+            _gcService.cookieHeader ?? '',
+            result['gcToken'] ?? '',
+            result['csrfToken'] ?? '',
+            _gcService.userAgent ?? '',
+            result['userName'] ?? 'User',
+            loginId: result['loginId'],
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Login otomatis gagal: ${result['message']}'),
+              backgroundColor: Colors.red,
+              action: SnackBarAction(
+                label: 'Coba Manual',
+                textColor: Colors.white,
+                onPressed: _performManualLogin,
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _performManualLogin() async {
     if (!mounted) return;
 
     // Gunakan InAppWebView yang lebih powerful (bisa ambil HttpOnly cookies)
@@ -1435,6 +1705,10 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _showBpsLoginDialog() async {
+    await _handleBpsLoginButton();
   }
 
   Future<void> _showGcConfirmationDialog(GroundcheckRecord record) async {
@@ -2342,9 +2616,6 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
           pendingRecords.add(record);
         }
 
-        successNotifier.value = successCount;
-        failNotifier.value = failCount + pendingRecords.length;
-
         // Small delay
         if (i < currentBatch.length - 1) {
           await Future.delayed(const Duration(milliseconds: 200));
@@ -2758,6 +3029,104 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                 // Safety minimum wait
                 if (waitSeconds < 1) waitSeconds = 5;
 
+                // --- AUTO SWITCH ACCOUNT LOGIC ---
+                if (AccountManagerService().accounts.isNotEmpty) {
+                  // 1. Tandai akun saat ini terkena limit
+                  if (_currentLoginId != null) {
+                    AccountManagerService().markAccountRateLimited(
+                      _currentLoginId!,
+                      Duration(seconds: waitSeconds),
+                    );
+                  }
+
+                  // 2. Cek apakah ada akun tersedia
+                  if (AccountManagerService().isAllAccountsRateLimited) {
+                    statusNotifier.value =
+                        'Semua akun limit. Menghentikan proses...';
+                    await Future.delayed(const Duration(seconds: 2));
+                    throw 'Semua akun sedang dalam masa tunggu (limit). Silakan coba lagi nanti.';
+                  }
+
+                  // 3. Cari akun berikutnya
+                  final nextAccount = AccountManagerService()
+                      .getNextAvailableAccount(_currentLoginId);
+
+                  if (nextAccount != null) {
+                    statusNotifier.value =
+                        'Akun limit (${waitSeconds}d). Ganti ke ${nextAccount.username}...';
+                    await Future.delayed(const Duration(seconds: 1));
+
+                    try {
+                      // 1. Logout explicit
+                      statusNotifier.value = 'Logout dari akun lama...';
+                      await _gcService.logout();
+
+                      // Clear local storage
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.remove('gc_token');
+                      await prefs.remove('gc_cookie');
+                      await prefs.remove('current_login_id');
+
+                      // 2. Login new account
+                      statusNotifier.value =
+                          'Login ke akun ${nextAccount.username}...';
+                      final loginResult = await _gcService.automatedLogin(
+                        username: nextAccount.username,
+                        password: nextAccount.password,
+                      );
+
+                      if (loginResult['status'] == 'success') {
+                        statusNotifier.value =
+                            'Ganti akun berhasil: ${loginResult['userName']}';
+
+                        // Update UI state local & Save Prefs
+                        if (mounted) {
+                          setState(() {
+                            _currentUser = loginResult['userName'];
+                            _currentLoginId = loginResult['loginId'];
+                            _gcToken = loginResult['gcToken'];
+                            _csrfToken = loginResult['csrfToken'];
+                          });
+
+                          // Save new credentials
+                          if (_gcToken != null)
+                            await prefs.setString('gc_token', _gcToken!);
+                          if (_gcService.cookieHeader != null) {
+                            await prefs.setString(
+                              'gc_cookie',
+                              _gcService.cookieHeader!,
+                            );
+                          }
+                          if (_currentLoginId != null) {
+                            await prefs.setString(
+                              'current_login_id',
+                              _currentLoginId!,
+                            );
+                          }
+                        }
+
+                        await Future.delayed(const Duration(seconds: 2));
+
+                        // Retry immediately
+                        i--;
+                        continue;
+                      } else {
+                        statusNotifier.value =
+                            'Ganti akun gagal: ${loginResult['message']}. Menunggu...';
+                        await Future.delayed(const Duration(seconds: 2));
+                      }
+                    } catch (e) {
+                      debugPrint('Error switching account: $e');
+                    }
+                  } else {
+                    // Fallback jika tidak ada next account tapi belum semua limit
+                    statusNotifier.value =
+                        'Menunggu durasi limit (${waitSeconds}d)...';
+                    await Future.delayed(Duration(seconds: waitSeconds));
+                  }
+                }
+                // ---------------------------------
+
                 // Tampilkan countdown
                 for (int t = waitSeconds; t > 0; t--) {
                   if (isCancelledNotifier.value) break;
@@ -2827,11 +3196,12 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
             failNotifier.value++; // Tambah counter gagal
           }
 
-          // Jeda antar record (tetap ada agar tidak spam)
-          // Kecuali ini record terakhir di batch
-          if (i < currentBatch.length - 1) {
-            final delay = 1000 + random.nextInt(1001); // 1-2 detik
-            await Future.delayed(Duration(milliseconds: delay));
+          // Jeda 10 detik antar record (Wajib untuk semua item)
+          for (int t = 10; t > 0; t--) {
+            if (isCancelledNotifier.value) break;
+            statusNotifier.value =
+                'Cooldown ${t}s sebelum proses berikutnya...';
+            await Future.delayed(const Duration(seconds: 1));
           }
         }
 
@@ -3339,7 +3709,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                                               color: Colors.blue,
                                             ),
                                             label: const Text(
-                                              'Refresh Sesi',
+                                              'Refresh',
                                               style: TextStyle(
                                                 color: Colors.blue,
                                               ),
@@ -3347,6 +3717,33 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                                             style: OutlinedButton.styleFrom(
                                               side: const BorderSide(
                                                 color: Colors.blue,
+                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 12,
+                                                  ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: OutlinedButton.icon(
+                                            onPressed:
+                                                _showAccountManagerDialog,
+                                            icon: const Icon(
+                                              Icons.manage_accounts,
+                                              size: 18,
+                                              color: Colors.green,
+                                            ),
+                                            label: const Text(
+                                              'Akun',
+                                              style: TextStyle(
+                                                color: Colors.green,
+                                              ),
+                                            ),
+                                            style: OutlinedButton.styleFrom(
+                                              side: const BorderSide(
+                                                color: Colors.green,
                                               ),
                                               padding:
                                                   const EdgeInsets.symmetric(
@@ -3393,15 +3790,33 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                     else
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: ElevatedButton.icon(
-                          onPressed: _showBpsLoginDialog,
-                          icon: const Icon(Icons.login),
-                          label: const Text('Login ke BPS (Matchapro)'),
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(48),
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                          ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: ElevatedButton.icon(
+                                onPressed: _showBpsLoginDialog,
+                                icon: const Icon(Icons.login),
+                                label: const Text('Login BPS'),
+                                style: ElevatedButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(48),
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _showAccountManagerDialog,
+                                icon: const Icon(Icons.manage_accounts),
+                                label: const Text('Akun'),
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(48),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     _buildFilterBar(),
