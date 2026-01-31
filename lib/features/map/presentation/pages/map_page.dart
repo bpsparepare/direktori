@@ -9,6 +9,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../../../core/config/supabase_config.dart';
 import 'package:uuid/uuid.dart';
 import '../../data/repositories/map_repository_impl.dart';
@@ -1926,6 +1927,18 @@ class MapPage extends StatelessWidget {
                 }
 
                 _showAddGroundcheckForm(context, point, idSls, namaSls);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.mic, color: Colors.redAccent),
+              title: const Text('Voice Groundcheck (Mode Berkendara)'),
+              subtitle: const Text('Sebut nama usaha, otomatis simpan'),
+              onTap: () {
+                Navigator.pop(context);
+                parentContext.read<MapBloc>().add(
+                  const TemporaryMarkerRemoved(),
+                );
+                _showVoiceModeDialog(parentContext);
               },
             ),
             ListTile(
@@ -7427,5 +7440,435 @@ class MapPage extends StatelessWidget {
         ),
       );
     }
+  }
+
+  void _showVoiceModeDialog(BuildContext parentContext) {
+    showDialog(
+      context: parentContext,
+      barrierDismissible: false,
+      builder: (context) {
+        return VoiceGroundcheckDialog(parentContext: parentContext);
+      },
+    );
+  }
+}
+
+class VoiceGroundcheckDialog extends StatefulWidget {
+  final BuildContext parentContext;
+  const VoiceGroundcheckDialog({super.key, required this.parentContext});
+
+  @override
+  State<VoiceGroundcheckDialog> createState() => _VoiceGroundcheckDialogState();
+}
+
+class _VoiceGroundcheckDialogState extends State<VoiceGroundcheckDialog> {
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _isListening = false;
+  bool _shouldListen = true;
+  String _currentText = '';
+  final List<String> _logs = [];
+  final ScrollController _scrollController = ScrollController();
+  bool _isInitializing = true;
+
+  // Anti-leak features
+  Timer? _saveTimer;
+  int _countdown = 0;
+  String? _pendingText;
+  bool _isPaused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initSpeech();
+  }
+
+  @override
+  void dispose() {
+    _shouldListen = false;
+    _saveTimer?.cancel();
+    _speech.stop();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _initSpeech() async {
+    try {
+      bool available = await _speech.initialize(
+        onStatus: (status) {
+          if (status == 'done' || status == 'notListening') {
+            if (mounted &&
+                _shouldListen &&
+                !_isPaused &&
+                _pendingText == null) {
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted && _shouldListen && !_isListening && !_isPaused) {
+                  _startListening();
+                }
+              });
+            }
+            if (mounted) {
+              setState(() => _isListening = false);
+            }
+          } else if (status == 'listening') {
+            if (mounted) {
+              setState(() => _isListening = true);
+            }
+          }
+        },
+        onError: (errorNotification) {
+          // Ignore no-match errors
+        },
+      );
+      if (available) {
+        setState(() => _isInitializing = false);
+        _startListening();
+      } else {
+        _addLog('Mikrofon tidak tersedia/ditolak');
+        setState(() => _isInitializing = false);
+      }
+    } catch (e) {
+      _addLog('Init Error: $e');
+      setState(() => _isInitializing = false);
+    }
+  }
+
+  void _startListening() {
+    if (!_speech.isAvailable ||
+        _isListening ||
+        _isPaused ||
+        _pendingText != null)
+      return;
+
+    try {
+      _speech.listen(
+        onResult: (result) {
+          setState(() {
+            _currentText = result.recognizedWords;
+          });
+
+          if (result.finalResult && _currentText.isNotEmpty) {
+            if (_currentText.trim().length < 3) {
+              // _addLog('⚠️ Diabaikan (terlalu pendek): $_currentText');
+              setState(() => _currentText = '');
+              return;
+            }
+            _startSaveCountdown(_currentText);
+          }
+        },
+        localeId: 'id_ID',
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 2),
+        partialResults: true,
+        cancelOnError: false,
+        listenMode: stt.ListenMode.dictation,
+      );
+      setState(() => _isListening = true);
+    } catch (e) {
+      _addLog('Start Error: $e');
+    }
+  }
+
+  void _startSaveCountdown(String text) {
+    _speech.stop();
+    setState(() {
+      _isListening = false;
+      _pendingText = text;
+      _countdown = 4;
+      _currentText = '';
+    });
+
+    _saveTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      setState(() {
+        _countdown--;
+      });
+
+      if (_countdown <= 0) {
+        timer.cancel();
+        _saveData(_pendingText!);
+        setState(() {
+          _pendingText = null;
+        });
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted && _shouldListen && !_isPaused) _startListening();
+        });
+      }
+    });
+  }
+
+  void _cancelSave() {
+    _saveTimer?.cancel();
+    setState(() {
+      _pendingText = null;
+      _currentText = '';
+      _countdown = 0;
+    });
+    _addLog('⛔ Dibatalkan User');
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted && _shouldListen && !_isPaused) _startListening();
+    });
+  }
+
+  void _togglePause() {
+    setState(() {
+      _isPaused = !_isPaused;
+    });
+    if (_isPaused) {
+      _stopListening();
+      _addLog('⏸️ PAUSED');
+    } else {
+      _addLog('▶️ RESUMED');
+      _startListening();
+    }
+  }
+
+  void _stopListening() {
+    _speech.stop();
+    setState(() => _isListening = false);
+  }
+
+  Future<void> _saveData(String namaUsaha) async {
+    _addLog('⏳ Memproses: $namaUsaha...');
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      final point = LatLng(position.latitude, position.longitude);
+
+      String alamatOtomatis = '';
+      try {
+        List<Placemark> placemarks = await placemarkFromCoordinates(
+          position.latitude,
+          position.longitude,
+        );
+        if (placemarks.isNotEmpty) {
+          final p = placemarks.first;
+          alamatOtomatis = [
+            p.street,
+            p.subLocality,
+            p.locality,
+          ].where((e) => e != null && e.isNotEmpty).join(', ');
+        }
+      } catch (e) {
+        // Ignore geocoding error
+      }
+
+      String idSls = '';
+      final polygons = widget.parentContext.read<MapBloc>().state.polygonsMeta;
+      for (final polygon in polygons) {
+        if (MapUtils.isPointInPolygon(point, polygon.points)) {
+          idSls = polygon.idsls ?? '';
+          break;
+        }
+      }
+
+      final service = GroundcheckSupabaseService();
+      final userId = await service.fetchCurrentUserId();
+      final idsbr = 'VOICE-${DateTime.now().millisecondsSinceEpoch}';
+
+      final record = GroundcheckRecord(
+        idsbr: idsbr,
+        namaUsaha: namaUsaha,
+        alamatUsaha: alamatOtomatis,
+        kodeWilayah: idSls,
+        statusPerusahaan: 'Aktif',
+        skalaUsaha: '',
+        gcsResult: '5',
+        latitude: point.latitude.toString(),
+        longitude: point.longitude.toString(),
+        perusahaanId: idsbr,
+        userId: userId,
+      );
+
+      await service.updateRecord(record);
+      _addLog('✅ TERSIMPAN: $namaUsaha\n   📍 $alamatOtomatis');
+    } catch (e) {
+      _addLog('❌ Gagal: $e');
+    }
+  }
+
+  void _addLog(String message) {
+    if (!mounted) return;
+    setState(() {
+      _logs.insert(
+        0,
+        "${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second} - $message",
+      );
+    });
+    // Auto scroll
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: true,
+      onPopInvoked: (didPop) {
+        _shouldListen = false;
+        _stopListening();
+      },
+      child: AlertDialog(
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Mode Berkendara'),
+            IconButton(
+              icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
+              color: _isPaused ? Colors.green : Colors.orange,
+              onPressed: _togglePause,
+              tooltip: _isPaused ? "Lanjutkan" : "Jeda (Pause)",
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 350,
+          child: Column(
+            children: [
+              if (_pendingText != null)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade100,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.orange, width: 2),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        "Akan menyimpan dalam:",
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        "$_countdown",
+                        style: const TextStyle(
+                          fontSize: 40,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.deepOrange,
+                        ),
+                      ),
+                      Text(
+                        '"$_pendingText"',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      ElevatedButton.icon(
+                        onPressed: _cancelSave,
+                        icon: const Icon(Icons.cancel, color: Colors.white),
+                        label: const Text(
+                          "BATALKAN (Salah Dengar)",
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          minimumSize: const Size(double.infinity, 45),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: _isPaused
+                        ? Colors.grey.withOpacity(0.2)
+                        : (_isListening
+                              ? Colors.red.withOpacity(0.1)
+                              : Colors.blue.withOpacity(0.1)),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: _isPaused
+                          ? Colors.grey
+                          : (_isListening ? Colors.red : Colors.blue),
+                      width: 2,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        _isPaused
+                            ? Icons.pause_circle_filled
+                            : (_isListening ? Icons.mic : Icons.mic_none),
+                        size: 40,
+                        color: _isPaused
+                            ? Colors.grey
+                            : (_isListening ? Colors.red : Colors.blue),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _isPaused
+                            ? "PAUSED (Tap Play untuk lanjut)"
+                            : (_isListening
+                                  ? "Mendengarkan..."
+                                  : "Memproses..."),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _currentText.isEmpty
+                            ? (_isPaused ? "-" : "Sebutkan nama usaha...")
+                            : _currentText,
+                        style: const TextStyle(fontSize: 18),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+
+              const SizedBox(height: 16),
+              const Divider(),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "Log Aktivitas:",
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ),
+              Expanded(
+                child: Container(
+                  color: Colors.grey.shade50,
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    itemCount: _logs.length,
+                    itemBuilder: (context, index) => Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 2,
+                        horizontal: 4,
+                      ),
+                      child: Text(
+                        _logs[index],
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _shouldListen = false;
+              _stopListening();
+              Navigator.pop(context);
+            },
+            child: const Text('TUTUP', style: TextStyle(fontSize: 16)),
+          ),
+        ],
+      ),
+    );
   }
 }

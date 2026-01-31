@@ -3265,7 +3265,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
           }
 
           // Jeda 10 detik antar record (Wajib untuk semua item)
-          for (int t = 10; t > 0; t--) {
+          for (int t = 5; t > 0; t--) {
             if (isCancelledNotifier.value) break;
             statusNotifier.value =
                 'Cooldown ${t}s sebelum proses berikutnya...';
