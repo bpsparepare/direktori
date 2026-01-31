@@ -2743,6 +2743,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       }
 
       int successCount = 0;
+      int itemsSentWithCurrentAccount = 0; // Counter untuk rotasi akun otomatis
       final total = validRecords.length;
       final random = Random();
 
@@ -3076,6 +3077,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                       );
 
                       if (loginResult['status'] == 'success') {
+                        itemsSentWithCurrentAccount = 0; // Reset counter rotasi
                         statusNotifier.value =
                             'Ganti akun berhasil: ${loginResult['userName']}';
 
@@ -3179,6 +3181,72 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
               successCount++;
               successNotifier.value = successCount;
               progressNotifier.value = successCount;
+
+              // --- PROACTIVE ROTATION LOGIC (Every 30 items) ---
+              itemsSentWithCurrentAccount++;
+              // Hanya rotasi jika ada lebih dari 1 akun tersedia
+              if (itemsSentWithCurrentAccount >= 30 &&
+                  AccountManagerService().accounts.length > 1) {
+                final nextAccount = AccountManagerService()
+                    .getNextAvailableAccount(_currentLoginId);
+
+                if (nextAccount != null) {
+                  statusNotifier.value =
+                      'Rotasi akun rutin (30 data). Ganti ke ${nextAccount.username}...';
+                  await Future.delayed(const Duration(seconds: 1));
+
+                  try {
+                    statusNotifier.value = 'Logout dari akun lama...';
+                    await _gcService.logout();
+
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.remove('gc_token');
+                    await prefs.remove('gc_cookie');
+                    await prefs.remove('current_login_id');
+
+                    statusNotifier.value =
+                        'Login ke akun ${nextAccount.username}...';
+                    final loginResult = await _gcService.automatedLogin(
+                      username: nextAccount.username,
+                      password: nextAccount.password,
+                    );
+
+                    if (loginResult['status'] == 'success') {
+                      itemsSentWithCurrentAccount = 0; // Reset counter
+                      if (mounted) {
+                        setState(() {
+                          _currentUser = loginResult['userName'];
+                          _currentLoginId = loginResult['loginId'];
+                          _gcToken = loginResult['gcToken'];
+                          _csrfToken = loginResult['csrfToken'];
+                        });
+
+                        if (_gcToken != null)
+                          await prefs.setString('gc_token', _gcToken!);
+                        if (_gcService.cookieHeader != null) {
+                          await prefs.setString(
+                            'gc_cookie',
+                            _gcService.cookieHeader!,
+                          );
+                        }
+                        if (_currentLoginId != null) {
+                          await prefs.setString(
+                            'current_login_id',
+                            _currentLoginId!,
+                          );
+                        }
+                      }
+                      statusNotifier.value =
+                          'Rotasi berhasil: ${_currentUser}. Lanjut proses...';
+                    } else {
+                      statusNotifier.value =
+                          'Rotasi gagal: ${loginResult['message']}. Lanjut akun lama...';
+                    }
+                  } catch (e) {
+                    debugPrint('Error rotating account: $e');
+                  }
+                }
+              }
             } else {
               debugPrint('Bulk GC Gagal untuk ${record.idsbr}: $resp');
               pendingRecords.add(

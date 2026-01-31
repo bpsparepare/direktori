@@ -165,7 +165,11 @@ class BpsGcService {
 
     // FORCE Re-init WebView untuk memastikan sesi bersih
     // Ini krusial untuk ganti akun agar tidak nyangkut di sesi lama
-    await _initWebView(forceRecreate: true);
+    // NOTE: On Windows, disposing WebView often causes crash (dealloc error).
+    // So we reuse it on Windows.
+    await _initWebView(
+      forceRecreate: defaultTargetPlatform != TargetPlatform.windows,
+    );
 
     final controller = _headlessWebView?.webViewController;
     if (controller == null) {
@@ -175,11 +179,35 @@ class BpsGcService {
     try {
       // Clear All Storage & Cookies Explicitly
       debugPrint('proses kirim: Clearing all cookies and storage...');
-      await CookieManager.instance().deleteAllCookies();
-      try {
-        await WebStorageManager.instance().deleteAllData();
-      } catch (e) {
-        // Ignore if not supported
+      // CookieManager and WebStorageManager can cause crashes on Windows with headless webview
+      if (defaultTargetPlatform != TargetPlatform.windows) {
+        try {
+          await CookieManager.instance().deleteAllCookies();
+        } catch (e) {
+          debugPrint('proses kirim: Error clearing cookies: $e');
+        }
+
+        try {
+          await WebStorageManager.instance().deleteAllData();
+        } catch (e) {
+          // Ignore if not supported
+        }
+      } else {
+        // Windows Workaround: Clear cookies & storage via JS since we reuse WebView
+        try {
+          await controller.evaluateJavascript(
+            source: """
+            document.cookie.split(";").forEach(function(c) { 
+              document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+            });
+            localStorage.clear();
+            sessionStorage.clear();
+          """,
+          );
+          debugPrint('proses kirim: Cleared cookies/storage via JS on Windows');
+        } catch (e) {
+          debugPrint('proses kirim: Error clearing JS cookies: $e');
+        }
       }
 
       // Clear cache again via controller if possible
