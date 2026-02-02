@@ -167,9 +167,19 @@ class BpsGcService {
     // Ini krusial untuk ganti akun agar tidak nyangkut di sesi lama
     // NOTE: On Windows, disposing WebView often causes crash (dealloc error).
     // So we reuse it on Windows.
-    await _initWebView(
-      forceRecreate: defaultTargetPlatform != TargetPlatform.windows,
-    );
+    try {
+      await _initWebView(
+        forceRecreate: defaultTargetPlatform != TargetPlatform.windows,
+      );
+    } catch (e) {
+      debugPrint('proses kirim: Error init webview: $e');
+      if (e.toString().contains('MissingPluginException') && defaultTargetPlatform == TargetPlatform.windows) {
+         return {
+          'status': 'error',
+          'message': 'Komponen Background WebView tidak didukung di Windows ini. Gunakan Login Manual.'
+        };
+      }
+    }
 
     final controller = _headlessWebView?.webViewController;
     if (controller == null) {
@@ -195,18 +205,22 @@ class BpsGcService {
       } else {
         // Windows Workaround: Clear cookies & storage via JS since we reuse WebView
         try {
-          await controller.evaluateJavascript(
-            source: """
-            document.cookie.split(";").forEach(function(c) { 
-              document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
-            });
-            localStorage.clear();
-            sessionStorage.clear();
-          """,
+           await controller.setSettings(
+            settings: InAppWebViewSettings(
+              userAgent: _userAgent, // Set UA here directly
+              clearCache: true,
+              cacheEnabled: false,
+              isInspectable: kDebugMode,
+            ),
           );
-          debugPrint('proses kirim: Cleared cookies/storage via JS on Windows');
         } catch (e) {
-          debugPrint('proses kirim: Error clearing JS cookies: $e');
+           debugPrint('proses kirim: Error setting settings on Windows: $e');
+           if (e.toString().contains('MissingPluginException')) {
+             return {
+              'status': 'error',
+              'message': 'Gagal inisialisasi WebView (MissingPlugin). Silakan gunakan "Login Manual".'
+             };
+           }
         }
       }
 

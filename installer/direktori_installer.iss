@@ -26,7 +26,12 @@ WizardStyle=modern
 Name: "desktopicon"; Description: "Buat shortcut di Desktop"; Flags: unchecked
 
 [Files]
-Source: "d:\flutter\direktori\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+Source: "d:\flutter\direktori\build\windows\x64\runner\Release\direktori.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "d:\flutter\direktori\build\windows\x64\runner\Release\flutter_windows.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "d:\flutter\direktori\build\windows\x64\runner\Release\WebView2Loader.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "d:\flutter\direktori\build\windows\x64\runner\Release\flutter_inappwebview_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "d:\flutter\direktori\build\windows\x64\runner\Release\data\*"; DestDir: "{app}\data"; Flags: ignoreversion recursesubdirs
+Source: "d:\flutter\direktori\build\windows\x64\runner\Release\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Direktori"; Filename: "{app}\direktori.exe"; WorkingDir: "{app}"

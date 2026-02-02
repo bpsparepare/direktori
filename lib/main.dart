@@ -1,3 +1,7 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -33,6 +37,24 @@ import 'features/contribution/domain/usecases/get_leaderboard_usecase.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+    try {
+      final supportDir = await getApplicationSupportDirectory();
+      final webViewDataDir = Directory('${supportDir.path}\\webview_data');
+      if (!await webViewDataDir.exists()) {
+        await webViewDataDir.create(recursive: true);
+      }
+
+      await WebViewEnvironment.create(
+        settings: WebViewEnvironmentSettings(
+          userDataFolder: webViewDataDir.path,
+        ),
+      );
+    } catch (e) {
+      debugPrint("Failed to initialize WebViewEnvironment: $e");
+    }
+  }
 
   try {
     await dotenv.load(fileName: 'assets/env');
