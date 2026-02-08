@@ -45,6 +45,36 @@ class GroundcheckDataSource extends DataGridSource {
   GroundcheckRecord? getRecord(DataGridRow row) => _rowToRecord[row];
 
   @override
+  int compare(DataGridRow? a, DataGridRow? b, SortColumnDetails sortColumn) {
+    if (sortColumn.name == 'nama_usaha') {
+      final value1 = a
+          ?.getCells()
+          .firstWhere((element) => element.columnName == sortColumn.name)
+          .value
+          ?.toString();
+      final value2 = b
+          ?.getCells()
+          .firstWhere((element) => element.columnName == sortColumn.name)
+          .value
+          ?.toString();
+
+      if (value1 == null || value2 == null) {
+        return 0;
+      }
+
+      final int comparison = value1.toLowerCase().compareTo(
+        value2.toLowerCase(),
+      );
+
+      if (sortColumn.sortDirection == DataGridSortDirection.descending) {
+        return -comparison;
+      }
+      return comparison;
+    }
+    return super.compare(a, b, sortColumn);
+  }
+
+  @override
   DataGridRowAdapter buildRow(DataGridRow row) {
     final record = _rowToRecord[row];
     return DataGridRowAdapter(
