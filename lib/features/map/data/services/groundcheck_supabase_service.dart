@@ -378,6 +378,10 @@ class GroundcheckSupabaseService {
     }
   }
 
+  Future<void> upsertRecord(GroundcheckRecord record) async {
+    await updateRecord(record);
+  }
+
   Future<void> updateRecord(
     GroundcheckRecord record, {
     bool updateTimestamp = true,

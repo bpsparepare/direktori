@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:async';
 
+import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_datagrid/datagrid.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -356,6 +358,20 @@ class GroundcheckDataSource extends DataGridSource {
   }
 }
 
+class _Metadata {
+  final String nmKec;
+  final String nmDesa;
+
+  _Metadata({required this.nmKec, required this.nmDesa});
+}
+
+class _SlsPolygon {
+  final String idsls;
+  final List<LatLng> points;
+
+  _SlsPolygon({required this.idsls, required this.points});
+}
+
 class GroundcheckPage extends StatefulWidget {
   final void Function(GroundcheckRecord)? onGoToMap;
 
@@ -381,7 +397,13 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   String? _gcsFilter;
   String? _sumberDataFilter;
   String? _isUploadedFilter;
+  String? _regionFilter;
+  List<String> _regionOptions = [];
+  Map<String, String> _recordToRegionMap = {}; // idsbr -> region name
+  List<_SlsPolygon> _polygons = [];
+  Map<String, _Metadata> _metadataMap = {};
   bool _isLoading = true;
+  bool _isSpatialLoading = true;
   bool _isDeletingNew = false;
   String? _error;
   String? _gcCookie;
@@ -395,9 +417,162 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   @override
   void initState() {
     super.initState();
+    _loadSpatialData();
     _loadStoredGcCredentials().then((_) {
       _loadData();
     });
+  }
+
+  Future<void> _loadSpatialData() async {
+    try {
+      // 1. Load Metadata
+      final metadataString = await rootBundle.loadString(
+        'assets/json/sls_metadata.json',
+      );
+      final List<dynamic> metadataJson = jsonDecode(metadataString);
+      // Map<KecCode+DesaCode, Metadata>
+      final Map<String, _Metadata> metadataMap = {};
+
+      for (var item in metadataJson) {
+        final idsls = item['idsls'] as String;
+        // 73 72 011 001 (10 chars)
+        if (idsls.length >= 10) {
+          final key = idsls.substring(0, 10);
+          if (!metadataMap.containsKey(key)) {
+            metadataMap[key] = _Metadata(
+              nmKec: item['nmkec'] ?? '',
+              nmDesa: item['nmdesa'] ?? '',
+            );
+          }
+        }
+      }
+
+      // 2. Load GeoJSON
+      final geoJsonString = await rootBundle.loadString(
+        'assets/geojson/final_sls_optimized.json',
+      );
+      final geoJson = jsonDecode(geoJsonString);
+      final features = geoJson['features'] as List;
+
+      final List<_SlsPolygon> polygons = [];
+
+      for (var feature in features) {
+        final props = feature['properties'];
+        final idsls = props['idsls'] as String;
+        final geometry = feature['geometry'];
+        final type = geometry['type'];
+        final coordinates = geometry['coordinates'] as List;
+
+        if (type == 'MultiPolygon') {
+          for (var poly in coordinates) {
+            // poly is List<List<Position>> (Ring)
+            // usually index 0 is outer ring
+            final outerRing = poly[0] as List;
+            final points = outerRing.map((p) {
+              return LatLng((p[1] as num).toDouble(), (p[0] as num).toDouble());
+            }).toList();
+            polygons.add(_SlsPolygon(idsls: idsls, points: points));
+          }
+        } else if (type == 'Polygon') {
+          final outerRing = coordinates[0] as List;
+          final points = outerRing.map((p) {
+            return LatLng((p[1] as num).toDouble(), (p[0] as num).toDouble());
+          }).toList();
+          polygons.add(_SlsPolygon(idsls: idsls, points: points));
+        }
+      }
+
+      if (mounted) {
+        final Set<String> allRegions = {};
+        for (var meta in metadataMap.values) {
+          allRegions.add('${meta.nmKec} - ${meta.nmDesa}');
+        }
+
+        // Tambahkan opsi 'Luar Wilayah' secara eksplisit
+        allRegions.add('Luar Wilayah');
+
+        setState(() {
+          _metadataMap = metadataMap;
+          _polygons = polygons;
+          _regionOptions = allRegions.toList()..sort();
+          _isSpatialLoading = false;
+        });
+        // Jika data record sudah ada, hitung ulang mapping wilayah
+        if (_allRecords.isNotEmpty) {
+          _calculateRecordRegions();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading spatial data: $e');
+      if (mounted) {
+        setState(() {
+          _isSpatialLoading = false;
+        });
+      }
+    }
+  }
+
+  void _calculateRecordRegions() {
+    if (_polygons.isEmpty) return;
+
+    final Map<String, String> mapping = {};
+    final Set<String> availableRegions = {};
+
+    for (var record in _allRecords) {
+      final lat = double.tryParse(record.latitude);
+      final lng = double.tryParse(record.longitude);
+
+      if (lat != null && lng != null && lat != 0 && lng != 0) {
+        final point = LatLng(lat, lng);
+        String regionName = 'Luar Wilayah';
+
+        for (var poly in _polygons) {
+          if (_isPointInPolygon(point, poly.points)) {
+            if (poly.idsls.length >= 10) {
+              final key = poly.idsls.substring(0, 10);
+              if (_metadataMap.containsKey(key)) {
+                final meta = _metadataMap[key]!;
+                regionName = '${meta.nmKec} - ${meta.nmDesa}';
+                break; // Found
+              }
+            }
+          }
+        }
+        mapping[record.idsbr] = regionName;
+        availableRegions.add(regionName);
+      } else {
+        mapping[record.idsbr] = 'Tanpa Koordinat';
+        availableRegions.add('Tanpa Koordinat');
+      }
+    }
+
+    setState(() {
+      _recordToRegionMap = mapping;
+      // Jangan timpa _regionOptions agar tetap berisi semua wilayah dari metadata
+      // _regionOptions = availableRegions.toList()..sort();
+    });
+
+    // Refresh jika ada filter aktif
+    if (_regionFilter != null) {
+      _refreshFilteredData();
+    }
+  }
+
+  // Ray Casting Algorithm
+  bool _isPointInPolygon(LatLng point, List<LatLng> polygon) {
+    bool c = false;
+    for (int i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      if (((polygon[i].latitude > point.latitude) !=
+              (polygon[j].latitude > point.latitude)) &&
+          (point.longitude <
+              (polygon[j].longitude - polygon[i].longitude) *
+                      (point.latitude - polygon[i].latitude) /
+                      (polygon[j].latitude - polygon[i].latitude) +
+                  polygon[i].longitude)) {
+        c = !c;
+      }
+    }
+    return c;
   }
 
   Future<void> _loadData() async {
@@ -549,6 +724,9 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
         _sumberDataFilter = null;
       }
     }
+
+    // Recalculate regions when new data arrives
+    _calculateRecordRegions();
 
     final filtered = _filteredRecords();
     setState(() {
@@ -1938,6 +2116,12 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
           if (r.isUploaded || r.isRevisi) return false;
         }
       }
+
+      if (_regionFilter != null) {
+        final region = _recordToRegionMap[r.idsbr];
+        if (region != _regionFilter) return false;
+      }
+
       return true;
     }).toList();
   }
@@ -2354,6 +2538,231 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
           );
         }
       }
+    }
+  }
+
+  Future<LatLng?> _geocodeAddress(String originalAddress) async {
+    // Helper function for making requests
+    Future<LatLng?> tryGeocode(String queryAddress) async {
+      try {
+        final query = Uri.encodeComponent(
+          '$queryAddress, Parepare, Sulawesi Selatan, Indonesia',
+        );
+        final url = Uri.parse(
+          'https://nominatim.openstreetmap.org/search?q=$query&format=json&limit=1',
+        );
+
+        debugPrint('[Geocoding] Request: $url');
+
+        final response = await http.get(
+          url,
+          headers: {'User-Agent': 'DirektoriParepare/1.0'},
+        );
+
+        debugPrint('[Geocoding] Response Code: ${response.statusCode}');
+
+        if (response.statusCode == 200) {
+          final List data = jsonDecode(response.body);
+          if (data.isNotEmpty) {
+            final lat = double.parse(data[0]['lat']);
+            final lon = double.parse(data[0]['lon']);
+            debugPrint(
+              '[Geocoding] Success: $lat, $lon (Query: $queryAddress)',
+            );
+            return LatLng(lat, lon);
+          } else {
+            debugPrint('[Geocoding] Empty results for: $queryAddress');
+          }
+        } else {
+          debugPrint('[Geocoding] HTTP Error: ${response.statusCode}');
+        }
+      } catch (e) {
+        debugPrint('[Geocoding] Error: $e');
+      }
+      return null;
+    }
+
+    // 1. Try original address
+    var result = await tryGeocode(originalAddress);
+    if (result != null) return result;
+
+    // 2. Try cleaned address (remove common noise words that confuse Nominatim)
+    // Remove "Ruko", "No.", "Lantai", "Blok" and associated numbers
+    String cleaned = originalAddress
+        .replaceAll(RegExp(r'\bRuko\b', caseSensitive: false), '')
+        .replaceAll(
+          RegExp(r'\bNo\.?\s*[\d\w/-]+', caseSensitive: false),
+          '',
+        ) // No. 12, No 12A, No. 12/B
+        .replaceAll(RegExp(r'\bLantai\s*\d+', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\bBlok\s*[\d\w]+', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s+'), ' ') // Collapse multiple spaces
+        .trim();
+
+    // If cleaning resulted in a different, non-empty string, try it
+    if (cleaned != originalAddress && cleaned.length > 3) {
+      debugPrint('[Geocoding] Retrying with cleaned address: "$cleaned"');
+      // Delay slightly before retry to respect API limits (though we have main loop delay, this is a sub-retry)
+      await Future.delayed(const Duration(milliseconds: 1000));
+      result = await tryGeocode(cleaned);
+      if (result != null) return result;
+    }
+
+    debugPrint(
+      '[Geocoding] Failed to find coordinates for: $originalAddress after retries',
+    );
+    return null;
+  }
+
+  Future<void> _handleBulkGeocoding() async {
+    final selected = _dataGridController.selectedRows;
+    if (selected.isEmpty) return;
+
+    final records = <GroundcheckRecord>[];
+    if (_dataSource != null) {
+      for (final row in selected) {
+        final r = _dataSource!.getRecord(row);
+        if (r != null) records.add(r);
+      }
+    }
+
+    if (records.isEmpty) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Geocoding ${records.length} Data'),
+        content: const Text(
+          'Akan mencari koordinat berdasarkan alamat usaha menggunakan Nominatim (OpenStreetMap).\n\n'
+          'Proses ini memerlukan waktu (1.5 detik per data) untuk mematuhi kebijakan penggunaan.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Mulai'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // Progress Dialog Setup
+    final ValueNotifier<int> progressNotifier = ValueNotifier(0);
+    final ValueNotifier<String> statusNotifier = ValueNotifier('Menyiapkan...');
+    bool isCancelled = false;
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('Proses Geocoding'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ValueListenableBuilder<String>(
+                  valueListenable: statusNotifier,
+                  builder: (_, val, __) =>
+                      Text(val, textAlign: TextAlign.center),
+                ),
+                const SizedBox(height: 16),
+                ValueListenableBuilder<int>(
+                  valueListenable: progressNotifier,
+                  builder: (_, val, __) => LinearProgressIndicator(
+                    value: records.isNotEmpty ? val / records.length : 0,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton(
+                  onPressed: () {
+                    isCancelled = true;
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Batal'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    int success = 0;
+    int fail = 0;
+
+    for (int i = 0; i < records.length; i++) {
+      if (isCancelled) break;
+      final record = records[i];
+
+      // Skip if address is empty
+      if (record.alamatUsaha.isEmpty) {
+        fail++;
+        progressNotifier.value = i + 1;
+        debugPrint(
+          '[Geocoding] Skipped: Empty address for ${record.namaUsaha}',
+        );
+        continue;
+      }
+
+      statusNotifier.value =
+          'Memproses (${i + 1}/${records.length})\n${record.namaUsaha}';
+
+      debugPrint(
+        '[Geocoding] Processing: ${record.namaUsaha} (${record.alamatUsaha})',
+      );
+
+      final coord = await _geocodeAddress(record.alamatUsaha);
+
+      if (coord != null) {
+        final newRecord = record.copyWith(
+          latitude: coord.latitude.toString(),
+          longitude: coord.longitude.toString(),
+        );
+
+        // Update local and DB
+        try {
+          await _supabaseService.updateRecord(newRecord);
+          await _supabaseService.updateLocalRecord(newRecord);
+          debugPrint('[Geocoding] Database Updated for ${record.namaUsaha}');
+          success++;
+        } catch (e) {
+          debugPrint('[Geocoding] DB Update Error for ${record.namaUsaha}: $e');
+          fail++;
+        }
+      } else {
+        debugPrint(
+          '[Geocoding] Failed to find coordinates for ${record.namaUsaha}',
+        );
+        fail++;
+      }
+
+      progressNotifier.value = i + 1;
+
+      // Delay to respect Nominatim usage policy (1 request/sec)
+      await Future.delayed(const Duration(milliseconds: 1500));
+    }
+
+    if (!isCancelled && mounted) {
+      Navigator.pop(context); // Close progress dialog
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Geocoding selesai: $success sukses, $fail gagal. Cek debug console untuk detail.',
+          ),
+          backgroundColor: success > 0 ? Colors.green : Colors.orange,
+        ),
+      );
+
+      // Refresh Data & Map
+      _loadData();
     }
   }
 
@@ -3496,6 +3905,37 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                 },
               ),
             ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DropdownButtonFormField<String?>(
+                value: _regionFilter,
+                decoration: const InputDecoration(
+                  labelText: 'Wilayah',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Semua Wilayah'),
+                  ),
+                  ..._regionOptions.map(
+                    (r) => DropdownMenuItem<String?>(
+                      value: r,
+                      child: Text(r, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                ],
+                onChanged: _isSpatialLoading
+                    ? null
+                    : (value) {
+                        setState(() {
+                          _regionFilter = value;
+                        });
+                        _refreshFilteredData();
+                      },
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -3638,6 +4078,14 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                         icon: const Icon(Icons.close),
                         label: const Text('Batal Pilih'),
                         backgroundColor: Colors.grey,
+                      ),
+                      const SizedBox(width: 16),
+                      FloatingActionButton.extended(
+                        heroTag: 'fab_geocode',
+                        onPressed: _handleBulkGeocoding,
+                        icon: const Icon(Icons.map),
+                        label: const Text('Geocoding'),
+                        backgroundColor: Colors.teal,
                       ),
                       const SizedBox(width: 16),
                       if (!showCancel) ...[
