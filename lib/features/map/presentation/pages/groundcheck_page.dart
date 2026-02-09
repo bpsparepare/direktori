@@ -367,9 +367,18 @@ class _Metadata {
 
 class _SlsPolygon {
   final String idsls;
+  final String nmsls;
   final List<LatLng> points;
 
-  _SlsPolygon({required this.idsls, required this.points});
+  _SlsPolygon({required this.idsls, this.nmsls = '', required this.points});
+}
+
+class _GeocodeResult {
+  final LatLng location;
+  final LatLng? viewportNE;
+  final LatLng? viewportSW;
+
+  _GeocodeResult(this.location, {this.viewportNE, this.viewportSW});
 }
 
 class GroundcheckPage extends StatefulWidget {
@@ -459,6 +468,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       for (var feature in features) {
         final props = feature['properties'];
         final idsls = props['idsls'] as String;
+        final nmsls = props['nmsls'] as String? ?? '';
         final geometry = feature['geometry'];
         final type = geometry['type'];
         final coordinates = geometry['coordinates'] as List;
@@ -471,14 +481,16 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
             final points = outerRing.map((p) {
               return LatLng((p[1] as num).toDouble(), (p[0] as num).toDouble());
             }).toList();
-            polygons.add(_SlsPolygon(idsls: idsls, points: points));
+            polygons.add(
+              _SlsPolygon(idsls: idsls, nmsls: nmsls, points: points),
+            );
           }
         } else if (type == 'Polygon') {
           final outerRing = coordinates[0] as List;
           final points = outerRing.map((p) {
             return LatLng((p[1] as num).toDouble(), (p[0] as num).toDouble());
           }).toList();
-          polygons.add(_SlsPolygon(idsls: idsls, points: points));
+          polygons.add(_SlsPolygon(idsls: idsls, nmsls: nmsls, points: points));
         }
       }
 
@@ -490,6 +502,8 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
 
         // Tambahkan opsi 'Luar Wilayah' secara eksplisit
         allRegions.add('Luar Wilayah');
+        allRegions.add('Tidak Sesuai');
+        allRegions.add('Tidak ada Koordinat');
 
         setState(() {
           _metadataMap = metadataMap;
@@ -533,6 +547,36 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
               if (_metadataMap.containsKey(key)) {
                 final meta = _metadataMap[key]!;
                 regionName = '${meta.nmKec} - ${meta.nmDesa}';
+
+                // Cek Kesesuaian Kode Wilayah
+                // Kode Wilayah di record bisa format 72.01.010 (ada titik) atau 7201010
+                // Kode polygon (idsls) format 7201010... (tanpa titik)
+                String recCode = record.kodeWilayah.replaceAll('.', '').trim();
+                String polyCode = poly.idsls.trim();
+
+                bool isMatch = false;
+                // Logika pencocokan:
+                // 1. Jika kode record >= 10 digit, bandingkan 10 digit pertama (Desa)
+                // 2. Jika kode record >= 7 digit, bandingkan 7 digit pertama (Kecamatan)
+                // 3. Fallback: startsWith
+
+                if (recCode.length >= 10 && polyCode.length >= 10) {
+                  isMatch =
+                      recCode.substring(0, 10) == polyCode.substring(0, 10);
+                } else if (recCode.length >= 7 && polyCode.length >= 7) {
+                  // Cek level kecamatan (7 digit)
+                  isMatch = recCode.substring(0, 7) == polyCode.substring(0, 7);
+                } else {
+                  // Best effort
+                  isMatch =
+                      polyCode.startsWith(recCode) ||
+                      recCode.startsWith(polyCode);
+                }
+
+                if (!isMatch) {
+                  regionName = 'Tidak Sesuai';
+                }
+
                 break; // Found
               }
             }
@@ -541,8 +585,8 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
         mapping[record.idsbr] = regionName;
         availableRegions.add(regionName);
       } else {
-        mapping[record.idsbr] = 'Tanpa Koordinat';
-        availableRegions.add('Tanpa Koordinat');
+        mapping[record.idsbr] = 'Tidak ada Koordinat';
+        availableRegions.add('Tidak ada Koordinat');
       }
     }
 
@@ -716,12 +760,17 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
 
     // Validasi filter saat ini agar tetap konsisten dengan opsi baru (trim)
     if (_sumberDataFilter != null) {
-      final trimmed = _sumberDataFilter!.trim();
-      if (_sumberDataOptions.contains(trimmed)) {
-        _sumberDataFilter = trimmed;
+      // Allow empty string as valid filter (meaning "No Source/Null")
+      if (_sumberDataFilter!.isEmpty) {
+        // Keep it as is
       } else {
-        // Jika opsi yang dipilih tidak ada lagi (misal data berubah total), reset
-        _sumberDataFilter = null;
+        final trimmed = _sumberDataFilter!.trim();
+        if (_sumberDataOptions.contains(trimmed)) {
+          _sumberDataFilter = trimmed;
+        } else {
+          // Jika opsi yang dipilih tidak ada lagi (misal data berubah total), reset
+          _sumberDataFilter = null;
+        }
       }
     }
 
@@ -2095,15 +2144,21 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
           r.statusPerusahaan != _statusFilter) {
         return false;
       }
-      if (_gcsFilter != null &&
-          _gcsFilter!.isNotEmpty &&
-          r.gcsResult != _gcsFilter) {
-        return false;
+      if (_gcsFilter != null && _gcsFilter!.isNotEmpty) {
+        if (_gcsFilter == 'NULL') {
+          // Filter data yang belum ada hasil GCS (kosong)
+          if (r.gcsResult.isNotEmpty) return false;
+        } else if (r.gcsResult != _gcsFilter) {
+          return false;
+        }
       }
-      if (_sumberDataFilter != null &&
-          _sumberDataFilter!.isNotEmpty &&
-          r.sumberData.trim() != _sumberDataFilter) {
-        return false;
+      if (_sumberDataFilter != null) {
+        if (_sumberDataFilter!.isEmpty) {
+          // Filter data yang kosong/null
+          if (r.sumberData.trim().isNotEmpty) return false;
+        } else if (r.sumberData.trim() != _sumberDataFilter) {
+          return false;
+        }
       }
       if (_isUploadedFilter != null) {
         if (_isUploadedFilter == 'revisi') {
@@ -2541,77 +2596,314 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     }
   }
 
-  Future<LatLng?> _geocodeAddress(String originalAddress) async {
-    // Helper function for making requests
-    Future<LatLng?> tryGeocode(String queryAddress) async {
-      try {
-        final query = Uri.encodeComponent(
-          '$queryAddress, Parepare, Sulawesi Selatan, Indonesia',
-        );
-        final url = Uri.parse(
-          'https://nominatim.openstreetmap.org/search?q=$query&format=json&limit=1',
-        );
+  Future<_GeocodeResult?> _geocodeAddress(String address) async {
+    const apiKey = 'AIzaSyDnmzg1NGiODI5clNzFd0G3SkpQm_HavUE';
+    try {
+      // Pastikan konteks wilayah Parepare disertakan dalam query
+      String searchAddress = address;
+      if (!searchAddress.toLowerCase().contains('parepare')) {
+        searchAddress = '$searchAddress, Parepare';
+      }
+      searchAddress = '$searchAddress, Sulawesi Selatan, Indonesia';
 
-        debugPrint('[Geocoding] Request: $url');
+      // Gunakan komponen filter untuk membatasi hasil di Parepare
+      final url = Uri.https('maps.googleapis.com', '/maps/api/geocode/json', {
+        'address': searchAddress,
+        'components': 'locality:Parepare|country:ID',
+        'key': apiKey,
+      });
 
-        final response = await http.get(
-          url,
-          headers: {'User-Agent': 'DirektoriParepare/1.0'},
-        );
+      debugPrint('[Geocoding] Request: $url');
 
-        debugPrint('[Geocoding] Response Code: ${response.statusCode}');
+      final response = await http.get(url);
 
-        if (response.statusCode == 200) {
-          final List data = jsonDecode(response.body);
-          if (data.isNotEmpty) {
-            final lat = double.parse(data[0]['lat']);
-            final lon = double.parse(data[0]['lon']);
-            debugPrint(
-              '[Geocoding] Success: $lat, $lon (Query: $queryAddress)',
+      debugPrint('[Geocoding] Response Code: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['status'] == 'OK') {
+          final results = data['results'] as List;
+          if (results.isNotEmpty) {
+            final geometry = results[0]['geometry'];
+            final location = geometry['location'];
+            final lat = location['lat'];
+            final lng = location['lng'];
+
+            LatLng? ne;
+            LatLng? sw;
+            if (geometry['viewport'] != null) {
+              final viewport = geometry['viewport'];
+              ne = LatLng(
+                viewport['northeast']['lat'],
+                viewport['northeast']['lng'],
+              );
+              sw = LatLng(
+                viewport['southwest']['lat'],
+                viewport['southwest']['lng'],
+              );
+            }
+
+            debugPrint('[Geocoding] Success: $lat, $lng (Address: $address)');
+            return _GeocodeResult(
+              LatLng(lat, lng),
+              viewportNE: ne,
+              viewportSW: sw,
             );
-            return LatLng(lat, lon);
-          } else {
-            debugPrint('[Geocoding] Empty results for: $queryAddress');
           }
         } else {
-          debugPrint('[Geocoding] HTTP Error: ${response.statusCode}');
+          debugPrint('[Geocoding] API Error Status: ${data['status']}');
+          debugPrint('[Geocoding] Error Message: ${data['error_message']}');
         }
-      } catch (e) {
-        debugPrint('[Geocoding] Error: $e');
+      } else {
+        debugPrint('[Geocoding] HTTP Error: ${response.statusCode}');
       }
-      return null;
+    } catch (e) {
+      debugPrint('[Geocoding] Error: $e');
     }
-
-    // 1. Try original address
-    var result = await tryGeocode(originalAddress);
-    if (result != null) return result;
-
-    // 2. Try cleaned address (remove common noise words that confuse Nominatim)
-    // Remove "Ruko", "No.", "Lantai", "Blok" and associated numbers
-    String cleaned = originalAddress
-        .replaceAll(RegExp(r'\bRuko\b', caseSensitive: false), '')
-        .replaceAll(
-          RegExp(r'\bNo\.?\s*[\d\w/-]+', caseSensitive: false),
-          '',
-        ) // No. 12, No 12A, No. 12/B
-        .replaceAll(RegExp(r'\bLantai\s*\d+', caseSensitive: false), '')
-        .replaceAll(RegExp(r'\bBlok\s*[\d\w]+', caseSensitive: false), '')
-        .replaceAll(RegExp(r'\s+'), ' ') // Collapse multiple spaces
-        .trim();
-
-    // If cleaning resulted in a different, non-empty string, try it
-    if (cleaned != originalAddress && cleaned.length > 3) {
-      debugPrint('[Geocoding] Retrying with cleaned address: "$cleaned"');
-      // Delay slightly before retry to respect API limits (though we have main loop delay, this is a sub-retry)
-      await Future.delayed(const Duration(milliseconds: 1000));
-      result = await tryGeocode(cleaned);
-      if (result != null) return result;
-    }
-
-    debugPrint(
-      '[Geocoding] Failed to find coordinates for: $originalAddress after retries',
-    );
     return null;
+  }
+
+  // Helper untuk mencari polygon yang sesuai dengan kode wilayah
+  List<_SlsPolygon> _findTargetPolygons(String kodeWilayah) {
+    String recCode = kodeWilayah.replaceAll('.', '').trim();
+    List<_SlsPolygon> matches = [];
+
+    for (var poly in _polygons) {
+      String polyCode = poly.idsls.trim();
+      bool isMatch = false;
+
+      if (recCode.length >= 10 && polyCode.length >= 10) {
+        if (recCode.substring(0, 10) == polyCode.substring(0, 10))
+          isMatch = true;
+      } else if (recCode.length >= 7 && polyCode.length >= 7) {
+        if (recCode.substring(0, 7) == polyCode.substring(0, 7)) isMatch = true;
+      } else {
+        if (polyCode.startsWith(recCode) || recCode.startsWith(polyCode))
+          isMatch = true;
+      }
+
+      if (isMatch) matches.add(poly);
+    }
+    return matches;
+  }
+
+  // Helper untuk mencari titik terdekat di dalam polygon dari sebuah titik referensi
+  LatLng _findClosestPointInPolygon(LatLng target, List<LatLng> polygon) {
+    double minDistance = double.infinity;
+    LatLng closest = polygon[0];
+
+    for (var p in polygon) {
+      // Hitung jarak Euclidean sederhana (cukup untuk skala kecil)
+      double dist =
+          (p.latitude - target.latitude) * (p.latitude - target.latitude) +
+          (p.longitude - target.longitude) * (p.longitude - target.longitude);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closest = p;
+      }
+    }
+    return closest;
+  }
+
+  // Helper cek intersection antara bounding box polygon dan viewport
+  bool _isPolygonInViewport(List<LatLng> polygon, LatLng ne, LatLng sw) {
+    // Hitung bounds polygon
+    double minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+    for (var p in polygon) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+
+    // Cek overlap bounding box
+    // Viewport bounds:
+    double vMinLat = sw.latitude;
+    double vMaxLat = ne.latitude;
+    double vMinLng = sw.longitude;
+    double vMaxLng = ne.longitude;
+
+    bool latOverlap = (minLat <= vMaxLat) && (maxLat >= vMinLat);
+    bool lngOverlap = (minLng <= vMaxLng) && (maxLng >= vMinLng);
+
+    return latOverlap && lngOverlap;
+  }
+
+  // Helper: Ekstrak RT/RW dari alamat dan normalisasi ke format "RT 001 RW 002"
+  String? _extractRtRw(String address) {
+    // Regex untuk menangkap RT dan RW (case insensitive)
+    // Contoh match: "RT 01 RW 02", "Rt.1 Rw.2", "RT 001/RW 002"
+    final regex = RegExp(
+      r'RT\s*[.]?\s*(\d+).*?RW\s*[.]?\s*(\d+)',
+      caseSensitive: false,
+    );
+    final match = regex.firstMatch(address);
+
+    if (match != null) {
+      String rt = match.group(1)!;
+      String rw = match.group(2)!;
+
+      // Pad dengan 0 di depan jika panjang < 3
+      rt = rt.padLeft(3, '0');
+      rw = rw.padLeft(3, '0');
+
+      return 'RT $rt RW $rw';
+    }
+    return null;
+  }
+
+  // Helper: Bersihkan alamat dari RT/RW agar lebih ramah Google Maps
+  String _cleanAddressForGoogleMaps(String address) {
+    // Hapus pola RT 1 RW 2, RT.001 RW.002, RT/RW, dll.
+    // Termasuk menangani RT 0/RW 0, RT - / RW - (dummy data)
+
+    // Regex:
+    // \b(rt|rw)\b : Kata RT atau RW
+    // [.\s/-]* : Pemisah (titik, spasi, slash, dash) boleh ada boleh tidak
+    // [\d-]* : Angka atau dash (untuk menangani RT -)
+    final rtRwRegex = RegExp(
+      r'\b(rt|rw)\b[.\s/-]*[\d-]*',
+      caseSensitive: false,
+    );
+
+    // Hapus RT/RW beserta angkanya
+    String cleaned = address.replaceAll(rtRwRegex, '');
+
+    // Bersihkan sisa karakter pemisah yang berlebihan (koma ganda, spasi ganda, slash sisa)
+    cleaned = cleaned.replaceAll(
+      RegExp(r'\s+'),
+      ' ',
+    ); // Spasi ganda -> satu spasi
+    cleaned = cleaned.replaceAll(
+      RegExp(r'[,/.-]\s*[,/.-]'),
+      ',',
+    ); // Tanda baca beruntun -> satu koma
+    cleaned = cleaned.replaceAll(
+      RegExp(r'^[\s,./-]+|[\s,./-]+$'),
+      '',
+    ); // Trim koma/spasi/slash di awal/akhir
+
+    return cleaned.trim();
+  }
+
+  // Helper: Cari polygon berdasarkan Kode Desa dan Nama SLS (RT/RW)
+  _SlsPolygon? _findPolygonBySls(String kodeWilayah, String nmsls) {
+    // Pastikan kodeWilayah minimal 10 digit (Kode Desa)
+    String cleanKode = kodeWilayah.replaceAll('.', '').trim();
+    if (cleanKode.length < 10) return null;
+    final kodeDesa = cleanKode.substring(0, 10);
+
+    for (final poly in _polygons) {
+      if (poly.idsls.startsWith(kodeDesa) &&
+          poly.nmsls.toUpperCase() == nmsls.toUpperCase()) {
+        return poly;
+      }
+    }
+    return null;
+  }
+
+  // Helper: Dapatkan titik representatif dalam polygon (Centroid atau titik pertama)
+  LatLng _getFallbackPoint(List<LatLng> points) {
+    if (points.isEmpty) return const LatLng(0, 0);
+
+    // Hitung centroid sederhana
+    double sumLat = 0;
+    double sumLng = 0;
+    for (var p in points) {
+      sumLat += p.latitude;
+      sumLng += p.longitude;
+    }
+    final centroid = LatLng(sumLat / points.length, sumLng / points.length);
+
+    // Cek apakah centroid ada di dalam polygon
+    if (_isPointInPolygon(centroid, points)) {
+      return centroid;
+    }
+
+    // Jika tidak (polygon cekung ekstrem), kembalikan titik pertama saja
+    return points.first;
+  }
+
+  // Helper validasi hasil geocoding terhadap wilayah
+  ({bool isValid, LatLng? point, String message}) _validateLocation(
+    String kodeWilayah,
+    _GeocodeResult result,
+  ) {
+    LatLng finalPoint = result.location;
+    String logMsg = "";
+    bool isValid = false;
+
+    // Validasi Wilayah
+    final targetPolys = _findTargetPolygons(kodeWilayah);
+
+    if (targetPolys.isNotEmpty) {
+      // 1. Cek apakah titik utama masuk SALAH SATU polygon?
+      bool inAnyPoly = false;
+      for (final poly in targetPolys) {
+        if (_isPointInPolygon(finalPoint, poly.points)) {
+          inAnyPoly = true;
+          break;
+        }
+      }
+
+      if (inAnyPoly) {
+        isValid = true;
+        logMsg = "Titik masuk polygon wilayah.";
+      } else {
+        // 2. Jika tidak masuk, cek Range (Viewport) terhadap SEMUA polygon
+        if (result.viewportNE != null && result.viewportSW != null) {
+          _SlsPolygon? closestPoly;
+          double minPolyDist = double.infinity;
+
+          for (final poly in targetPolys) {
+            if (_isPolygonInViewport(
+              poly.points,
+              result.viewportNE!,
+              result.viewportSW!,
+            )) {
+              // Cari titik terdekat di dalam polygon ini
+              final closestInPoly = _findClosestPointInPolygon(
+                finalPoint,
+                poly.points,
+              );
+              // Hitung jarak squared (cukup untuk perbandingan)
+              final dLat = closestInPoly.latitude - finalPoint.latitude;
+              final dLng = closestInPoly.longitude - finalPoint.longitude;
+              final distSq = dLat * dLat + dLng * dLng;
+
+              if (distSq < minPolyDist) {
+                minPolyDist = distSq;
+                closestPoly = poly;
+              }
+            }
+          }
+
+          if (closestPoly != null) {
+            // Gunakan titik terdekat dari polygon yang paling dekat
+            finalPoint = _findClosestPointInPolygon(
+              finalPoint,
+              closestPoly.points,
+            );
+            isValid = true;
+            logMsg =
+                "Titik digeser ke polygon ${closestPoly.nmsls} (jarak terdekat).";
+          } else {
+            logMsg = "Titik di luar wilayah dan di luar range.";
+          }
+        } else {
+          logMsg = "Titik di luar wilayah (tidak ada info range).";
+        }
+      }
+    } else {
+      // Jika polygon target tidak ditemukan di metadata kita
+      logMsg = "Polygon wilayah target tidak ditemukan.";
+    }
+
+    return (
+      isValid: isValid,
+      point: isValid ? finalPoint : null,
+      message: logMsg,
+    );
   }
 
   Future<void> _handleBulkGeocoding() async {
@@ -2633,8 +2925,12 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       builder: (ctx) => AlertDialog(
         title: Text('Geocoding ${records.length} Data'),
         content: const Text(
-          'Akan mencari koordinat berdasarkan alamat usaha menggunakan Nominatim (OpenStreetMap).\n\n'
-          'Proses ini memerlukan waktu (1.5 detik per data) untuk mematuhi kebijakan penggunaan.',
+          'Akan mencari koordinat dengan prioritas:\n'
+          '1. Pencocokan RT/RW (SLS) Lokal\n'
+          '2. Google Maps API (Nama Usaha + Alamat)\n'
+          '3. Google Maps API (Alamat saja)\n'
+          '4. Google Maps API (Nama Usaha saja)\n\n'
+          'Sistem akan memprioritaskan titik tengah RT/RW jika ditemukan. Jika tidak, akan menggunakan Google Maps dengan validasi wilayah (harus masuk polygon atau dekat).',
         ),
         actions: [
           TextButton(
@@ -2653,6 +2949,8 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
 
     // Progress Dialog Setup
     final ValueNotifier<int> progressNotifier = ValueNotifier(0);
+    final ValueNotifier<int> successNotifier = ValueNotifier(0);
+    final ValueNotifier<int> failNotifier = ValueNotifier(0);
     final ValueNotifier<String> statusNotifier = ValueNotifier('Menyiapkan...');
     bool isCancelled = false;
 
@@ -2679,6 +2977,51 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                     value: records.isNotEmpty ? val / records.length : 0,
                   ),
                 ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    ValueListenableBuilder<int>(
+                      valueListenable: successNotifier,
+                      builder: (_, val, __) => Column(
+                        children: [
+                          const Text(
+                            'Sukses',
+                            style: TextStyle(
+                              color: Colors.green,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text('$val'),
+                        ],
+                      ),
+                    ),
+                    ValueListenableBuilder<int>(
+                      valueListenable: failNotifier,
+                      builder: (_, val, __) => Column(
+                        children: [
+                          const Text(
+                            'Gagal',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text('$val'),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      children: [
+                        const Text(
+                          'Total',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text('${records.length}'),
+                      ],
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 16),
                 OutlinedButton(
                   onPressed: () {
@@ -2701,52 +3044,210 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       if (isCancelled) break;
       final record = records[i];
 
-      // Skip if address is empty
-      if (record.alamatUsaha.isEmpty) {
-        fail++;
-        progressNotifier.value = i + 1;
-        debugPrint(
-          '[Geocoding] Skipped: Empty address for ${record.namaUsaha}',
-        );
-        continue;
-      }
-
       statusNotifier.value =
           'Memproses (${i + 1}/${records.length})\n${record.namaUsaha}';
 
-      debugPrint(
-        '[Geocoding] Processing: ${record.namaUsaha} (${record.alamatUsaha})',
-      );
+      bool recordSuccess = false;
+      String lastLogMsg = "Tidak ada strategi pencarian yang valid.";
 
-      final coord = await _geocodeAddress(record.alamatUsaha);
+      // Strategi 1: Hybrid SLS + Google Maps
+      // 1. Cari polygon SLS target
+      // 2. Cari di Google Maps
+      // 3. Jika Google Maps ketemu & masuk polygon SLS -> Pakai Google Maps (Akurat)
+      // 4. Jika Google Maps ketemu tapi luar polygon -> Pakai titik tengah SLS (Estimasi)
+      // 5. Jika Google Maps gagal -> Pakai titik tengah SLS (Estimasi)
 
-      if (coord != null) {
-        final newRecord = record.copyWith(
-          latitude: coord.latitude.toString(),
-          longitude: coord.longitude.toString(),
-        );
+      if (!isCancelled) {
+        debugPrint('[Geocoding] Trying SLS Matching for ${record.namaUsaha}');
+        final nmsls = _extractRtRw(record.alamatUsaha);
 
-        // Update local and DB
-        try {
-          await _supabaseService.updateRecord(newRecord);
-          await _supabaseService.updateLocalRecord(newRecord);
-          debugPrint('[Geocoding] Database Updated for ${record.namaUsaha}');
-          success++;
-        } catch (e) {
-          debugPrint('[Geocoding] DB Update Error for ${record.namaUsaha}: $e');
-          fail++;
+        _SlsPolygon? targetSlsPoly;
+        if (nmsls != null) {
+          targetSlsPoly = _findPolygonBySls(record.kodeWilayah, nmsls);
         }
-      } else {
+
+        // Jika SLS ditemukan, kita punya "target area" yang lebih spesifik
+        if (targetSlsPoly != null) {
+          debugPrint(
+            '[Geocoding] SLS Polygon found: $nmsls. Trying Google Maps for precision...',
+          );
+
+          // Coba cari di Google Maps dulu untuk presisi
+          LatLng? googlePoint;
+          bool googlePointValid = false;
+
+          final strategies = <String>[];
+          final cleanAddress = _cleanAddressForGoogleMaps(record.alamatUsaha);
+
+          if (record.namaUsaha.isNotEmpty && cleanAddress.isNotEmpty) {
+            strategies.add('${record.namaUsaha}, $cleanAddress');
+          }
+          if (cleanAddress.isNotEmpty) {
+            strategies.add(cleanAddress);
+          }
+
+          for (final query in strategies) {
+            if (isCancelled) break;
+            final result = await _geocodeAddress(query);
+            if (result != null) {
+              // 1. Cek Exact Match: Apakah titik pusat Google Maps ada di dalam Polygon SLS?
+              if (_isPointInPolygon(result.location, targetSlsPoly.points)) {
+                googlePoint = result.location;
+                googlePointValid = true;
+                debugPrint(
+                  '[Geocoding] Google Maps point is INSIDE target SLS. Using high precision point.',
+                );
+                break;
+              }
+              // 2. Cek Intersection: Apakah Area Jalan (Viewport) beririsan dengan Polygon SLS?
+              else if (result.viewportNE != null && result.viewportSW != null) {
+                if (_isPolygonInViewport(
+                  targetSlsPoly.points,
+                  result.viewportNE!,
+                  result.viewportSW!,
+                )) {
+                  // Jalan melintasi SLS! Ambil titik di dalam SLS yang paling dekat dengan pusat jalan.
+                  final closestInPoly = _findClosestPointInPolygon(
+                    result.location,
+                    targetSlsPoly.points,
+                  );
+
+                  googlePoint = closestInPoly;
+                  googlePointValid = true;
+                  debugPrint(
+                    '[Geocoding] Google Maps Viewport INTERSECTS target SLS. Snapped to closest point in SLS.',
+                  );
+                  break;
+                } else {
+                  debugPrint(
+                    '[Geocoding] Google Maps Viewport DOES NOT intersect target SLS.',
+                  );
+                }
+              } else {
+                debugPrint(
+                  '[Geocoding] Google Maps point is OUTSIDE target SLS and no Viewport info. Ignoring.',
+                );
+              }
+            }
+            await Future.delayed(const Duration(milliseconds: 200));
+          }
+
+          // Tentukan titik akhir: Google Maps (jika valid) atau Fallback SLS
+          final LatLng finalPoint = googlePointValid
+              ? googlePoint!
+              : _getFallbackPoint(targetSlsPoly.points);
+
+          final msg = googlePointValid
+              ? "Ditemukan presisi via Google Maps di dalam SLS $nmsls"
+              : "Ditemukan via estimasi titik tengah SLS $nmsls (Google Maps tidak akurat/gagal)";
+
+          final newRecord = record.copyWith(
+            latitude: finalPoint.latitude.toString(),
+            longitude: finalPoint.longitude.toString(),
+          );
+
+          try {
+            await _supabaseService.updateRecord(newRecord);
+            await _supabaseService.updateLocalRecord(newRecord);
+            debugPrint('[Geocoding] Success: $msg');
+            success++;
+            recordSuccess = true;
+            lastLogMsg = msg;
+          } catch (e) {
+            debugPrint('[Geocoding] DB Error: $e');
+            lastLogMsg = "Error simpan DB: $e";
+          }
+        }
+      }
+
+      if (recordSuccess) {
+        progressNotifier.value = i + 1;
+        continue;
+      }
+
+      // Strategi Pencarian Google (Fallback)
+      final strategies = <String>[];
+      final cleanAddress = _cleanAddressForGoogleMaps(record.alamatUsaha);
+
+      // Gunakan alamat bersih (tanpa RT/RW dummy) untuk strategi pencarian
+      if (record.namaUsaha.isNotEmpty && cleanAddress.isNotEmpty) {
+        strategies.add('${record.namaUsaha}, $cleanAddress');
+      }
+      if (cleanAddress.isNotEmpty) {
+        strategies.add(cleanAddress);
+      }
+      // Tetap simpan alamat asli sebagai cadangan jika bersihnya jadi kosong (jarang terjadi)
+      if (strategies.isEmpty && record.alamatUsaha.isNotEmpty) {
+        strategies.add(record.alamatUsaha);
+      }
+
+      if (record.namaUsaha.isNotEmpty) {
+        strategies.add(record.namaUsaha);
+      }
+
+      // Hapus duplikat dan kosong
+      final activeStrategies = strategies
+          .where((s) => s.trim().isNotEmpty)
+          .toSet()
+          .toList();
+
+      if (activeStrategies.isEmpty) {
         debugPrint(
-          '[Geocoding] Failed to find coordinates for ${record.namaUsaha}',
+          '[Geocoding] Skipped: No search terms for ${record.namaUsaha}',
         );
         fail++;
+        progressNotifier.value = i + 1;
+        continue;
+      }
+
+      for (final query in activeStrategies) {
+        if (isCancelled) break;
+
+        debugPrint('[Geocoding] Trying: $query');
+        final result = await _geocodeAddress(query);
+
+        if (result != null) {
+          final validation = _validateLocation(record.kodeWilayah, result);
+          if (validation.isValid) {
+            final finalPoint = validation.point!;
+            final newRecord = record.copyWith(
+              latitude: finalPoint.latitude.toString(),
+              longitude: finalPoint.longitude.toString(),
+            );
+
+            try {
+              await _supabaseService.updateRecord(newRecord);
+              await _supabaseService.updateLocalRecord(newRecord);
+              debugPrint(
+                '[Geocoding] Success: ${validation.message} (${record.namaUsaha})',
+              );
+              success++;
+              successNotifier.value = success;
+              recordSuccess = true;
+              lastLogMsg = validation.message;
+            } catch (e) {
+              debugPrint('[Geocoding] DB Error: $e');
+              lastLogMsg = "Error simpan DB: $e";
+            }
+            break; // Keluar dari loop strategi
+          } else {
+            lastLogMsg = validation.message;
+          }
+        } else {
+          lastLogMsg = "Tidak ditemukan di Google Maps.";
+        }
+
+        // Delay antar strategi
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+
+      if (!recordSuccess) {
+        debugPrint('[Geocoding] Failed: $lastLogMsg (${record.namaUsaha})');
+        fail++;
+        failNotifier.value = fail;
       }
 
       progressNotifier.value = i + 1;
-
-      // Delay to respect Nominatim usage policy (1 request/sec)
-      await Future.delayed(const Duration(milliseconds: 1500));
     }
 
     if (!isCancelled && mounted) {
@@ -3831,6 +4332,10 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                     value: '',
                     child: Text('Semua GCS'),
                   ),
+                  const DropdownMenuItem<String>(
+                    value: 'NULL',
+                    child: Text('Belum GC'),
+                  ),
                   ..._gcsOptions.map(
                     (s) => DropdownMenuItem<String>(value: s, child: Text(s)),
                   ),
@@ -3847,27 +4352,29 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: DropdownButtonFormField<String>(
-                value: _sumberDataFilter ?? '',
+              child: DropdownButtonFormField<String?>(
+                value: _sumberDataFilter,
                 decoration: const InputDecoration(
                   labelText: 'Sumber Data',
                   isDense: true,
                   border: OutlineInputBorder(),
                 ),
                 items: [
-                  const DropdownMenuItem<String>(
-                    value: '',
+                  const DropdownMenuItem<String?>(
+                    value: null,
                     child: Text('Semua Sumber'),
                   ),
+                  const DropdownMenuItem<String?>(
+                    value: '',
+                    child: Text('Tidak Ada Sumber'),
+                  ),
                   ..._sumberDataOptions.map(
-                    (s) => DropdownMenuItem<String>(value: s, child: Text(s)),
+                    (s) => DropdownMenuItem<String?>(value: s, child: Text(s)),
                   ),
                 ],
                 onChanged: (value) {
                   setState(() {
-                    _sumberDataFilter = value != null && value.isNotEmpty
-                        ? value
-                        : null;
+                    _sumberDataFilter = value;
                   });
                   _refreshFilteredData();
                 },
