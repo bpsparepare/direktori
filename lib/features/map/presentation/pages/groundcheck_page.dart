@@ -423,6 +423,17 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   String? _csrfToken;
   bool _isDialogShowing = false;
 
+  // Active Upload State
+  ValueNotifier<int>? _activeProgressNotifier;
+  ValueNotifier<String>? _activeStatusNotifier;
+  ValueNotifier<int>? _activeSuccessNotifier;
+  ValueNotifier<int>? _activeFailNotifier;
+  ValueNotifier<int>? _activePendingUiNotifier;
+  ValueNotifier<bool>? _activeIsFinishedNotifier;
+  ValueNotifier<bool>? _activeIsCancelledNotifier;
+  int _activeTotalUploadCount = 0;
+  bool _isUploadHidden = false;
+
   @override
   void initState() {
     super.initState();
@@ -3587,6 +3598,21 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   }
 
   Future<void> _handleBulkGc() async {
+    // Guard: Jangan mulai upload baru jika ada yang sedang berjalan (hidden atau active)
+    if (_activeProgressNotifier != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Harap selesaikan atau tutup proses upload yang sedang berjalan terlebih dahulu.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
     final selected = _dataGridController.selectedRows;
     if (selected.isEmpty) return;
 
@@ -3697,190 +3723,20 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       ); // Data yang belum disentuh
       final isFinishedNotifier = ValueNotifier<bool>(false);
       final isCancelledNotifier = ValueNotifier<bool>(false);
-      bool isDialogVisible = true;
+
+      // Assign to class variables for "Resume" capability
+      _activeProgressNotifier = progressNotifier;
+      _activeStatusNotifier = statusNotifier;
+      _activeSuccessNotifier = successNotifier;
+      _activeFailNotifier = failNotifier;
+      _activePendingUiNotifier = pendingUiNotifier;
+      _activeIsFinishedNotifier = isFinishedNotifier;
+      _activeIsCancelledNotifier = isCancelledNotifier;
+      _activeTotalUploadCount = total;
+      _isUploadHidden = false;
 
       if (mounted) {
-        // Show Progress Dialog
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) {
-            return WillPopScope(
-              onWillPop: () async => false,
-              child: AlertDialog(
-                title: ValueListenableBuilder<bool>(
-                  valueListenable: isFinishedNotifier,
-                  builder: (context, isFinished, child) {
-                    return Text(
-                      isFinished ? 'Selesai Mengirim Data' : 'Mengirim Data',
-                    );
-                  },
-                ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ValueListenableBuilder<int>(
-                      valueListenable: progressNotifier,
-                      builder: (context, val, child) {
-                        return LinearProgressIndicator(
-                          value: total > 0 ? val / total : 0,
-                          backgroundColor: Colors.grey[200],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    ValueListenableBuilder<String>(
-                      valueListenable: statusNotifier,
-                      builder: (context, val, child) {
-                        return Text(
-                          val,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    ValueListenableBuilder<int>(
-                      valueListenable: progressNotifier,
-                      builder: (context, val, child) {
-                        // Tampilkan info progress yang lebih detail jika perlu
-                        return Text(
-                          '$val dari $total data sukses',
-                          style: const TextStyle(color: Colors.grey),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        // Kolom Sukses
-                        ValueListenableBuilder<int>(
-                          valueListenable: successNotifier,
-                          builder: (context, val, child) {
-                            return Column(
-                              children: [
-                                const Text(
-                                  'Sukses',
-                                  style: TextStyle(color: Colors.green),
-                                ),
-                                Text(
-                                  '$val',
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                        // Kolom Gagal
-                        ValueListenableBuilder<int>(
-                          valueListenable: failNotifier,
-                          builder: (context, val, child) {
-                            return Column(
-                              children: [
-                                const Text(
-                                  'Gagal',
-                                  style: TextStyle(color: Colors.red),
-                                ),
-                                Text(
-                                  '$val',
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                        // Kolom Belum
-                        ValueListenableBuilder<int>(
-                          valueListenable: pendingUiNotifier,
-                          builder: (context, val, child) {
-                            return Column(
-                              children: [
-                                const Text(
-                                  'Belum',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                                Text(
-                                  '$val',
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                actions: [
-                  ValueListenableBuilder<bool>(
-                    valueListenable: isFinishedNotifier,
-                    builder: (context, isFinished, child) {
-                      if (!isFinished) {
-                        return TextButton(
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Pengiriman berjalan di latar belakang...',
-                                  ),
-                                ),
-                              );
-                            }
-                          },
-                          child: const Text('Sembunyikan'),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                  ValueListenableBuilder<bool>(
-                    valueListenable: isFinishedNotifier,
-                    builder: (context, isFinished, child) {
-                      if (!isFinished) {
-                        return TextButton(
-                          onPressed: () {
-                            isCancelledNotifier.value = true;
-                          },
-                          child: const Text(
-                            'Batal',
-                            style: TextStyle(color: Colors.red),
-                          ),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                  ValueListenableBuilder<bool>(
-                    valueListenable: isFinishedNotifier,
-                    builder: (context, isFinished, child) {
-                      if (isFinished) {
-                        return TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Tutup'),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                ],
-              ),
-            );
-          },
-        ).then((_) {
-          isDialogVisible = false;
-        });
+        _showUploadProgressDialog();
       }
 
       List<GroundcheckRecord> pendingRecords = List.from(validRecords);
@@ -3912,15 +3768,29 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
 
           bool isSuccess = false;
           try {
-            // Gunakan koordinat yang ada di record jika valid, atau fallback ke 0
-            final lat = double.tryParse(record.latitude) ?? 0.0;
-            final lon = double.tryParse(record.longitude) ?? 0.0;
+            // Logika baru: Validasi koordinat, kirim null/empty jika invalid (sesuai request user)
+            // Referensi: gc_koprol.py (yang strict untuk hasilgc=1), tapi user minta "jadikan null saja"
+
+            String latToSend = '';
+            String lonToSend = '';
+
+            final lat = double.tryParse(record.latitude);
+            final lon = double.tryParse(record.longitude);
+
+            if (lat != null && lon != null) {
+              latToSend = record.latitude;
+              lonToSend = record.longitude;
+            } else {
+              // Jika invalid/kosong, kirim string kosong (server mungkin terima sebagai null)
+              latToSend = '';
+              lonToSend = '';
+            }
 
             final resp = await _gcService
                 .konfirmasiUser(
                   perusahaanId: record.perusahaanId,
-                  latitude: lat.toString(),
-                  longitude: lon.toString(),
+                  latitude: latToSend,
+                  longitude: lonToSend,
                   hasilGc: record.gcsResult,
                 )
                 .timeout(const Duration(seconds: 30));
@@ -4243,7 +4113,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       _dataGridController.selectedRows = [];
       setState(() {});
 
-      if (!isDialogVisible && mounted) {
+      if (_isUploadHidden && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -4518,6 +4388,209 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     );
   }
 
+  void _showUploadProgressDialog() {
+    if (_activeProgressNotifier == null) return;
+
+    // Reset hidden flag because we are showing it now
+    _isUploadHidden = false;
+
+    setState(() {
+      _isDialogShowing = true;
+    });
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return WillPopScope(
+          onWillPop: () async => false,
+          child: AlertDialog(
+            title: ValueListenableBuilder<bool>(
+              valueListenable: _activeIsFinishedNotifier!,
+              builder: (context, isFinished, child) {
+                return Text(
+                  isFinished ? 'Selesai Mengirim Data' : 'Mengirim Data',
+                );
+              },
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ValueListenableBuilder<int>(
+                  valueListenable: _activeProgressNotifier!,
+                  builder: (context, val, child) {
+                    return LinearProgressIndicator(
+                      value: _activeTotalUploadCount > 0
+                          ? val / _activeTotalUploadCount
+                          : 0,
+                      backgroundColor: Colors.grey[200],
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                ValueListenableBuilder<String>(
+                  valueListenable: _activeStatusNotifier!,
+                  builder: (context, val, child) {
+                    return Text(
+                      val,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                ValueListenableBuilder<int>(
+                  valueListenable: _activeProgressNotifier!,
+                  builder: (context, val, child) {
+                    return Text(
+                      '$val dari $_activeTotalUploadCount data sukses',
+                      style: const TextStyle(color: Colors.grey),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    // Kolom Sukses
+                    ValueListenableBuilder<int>(
+                      valueListenable: _activeSuccessNotifier!,
+                      builder: (context, val, child) {
+                        return Column(
+                          children: [
+                            const Text(
+                              'Sukses',
+                              style: TextStyle(color: Colors.green),
+                            ),
+                            Text(
+                              '$val',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                    // Kolom Gagal
+                    ValueListenableBuilder<int>(
+                      valueListenable: _activeFailNotifier!,
+                      builder: (context, val, child) {
+                        return Column(
+                          children: [
+                            const Text(
+                              'Gagal',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                            Text(
+                              '$val',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                    // Kolom Belum
+                    ValueListenableBuilder<int>(
+                      valueListenable: _activePendingUiNotifier!,
+                      builder: (context, val, child) {
+                        return Column(
+                          children: [
+                            const Text(
+                              'Belum',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                            Text(
+                              '$val',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              ValueListenableBuilder<bool>(
+                valueListenable: _activeIsFinishedNotifier!,
+                builder: (context, isFinished, child) {
+                  if (!isFinished) {
+                    return TextButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        setState(() {
+                          _isUploadHidden = true;
+                          _isDialogShowing = false;
+                        });
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Pengiriman berjalan di latar belakang...',
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      child: const Text('Sembunyikan'),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+              ValueListenableBuilder<bool>(
+                valueListenable: _activeIsFinishedNotifier!,
+                builder: (context, isFinished, child) {
+                  if (!isFinished) {
+                    return TextButton(
+                      onPressed: () {
+                        _activeIsCancelledNotifier!.value = true;
+                      },
+                      child: const Text(
+                        'Batal',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+              ValueListenableBuilder<bool>(
+                valueListenable: _activeIsFinishedNotifier!,
+                builder: (context, isFinished, child) {
+                  if (isFinished) {
+                    return TextButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        setState(() {
+                          _isDialogShowing = false;
+                          _isUploadHidden = false;
+                          // Clear active state
+                          _activeProgressNotifier = null;
+                        });
+                      },
+                      child: const Text('Tutup'),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocListener<MapBloc, MapState>(
@@ -4659,11 +4732,29 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                           backgroundColor: Colors.red[900],
                         ),
                       ],
+                      if (_isUploadHidden) ...[
+                        const SizedBox(width: 16),
+                        FloatingActionButton.extended(
+                          heroTag: 'fab_resume_upload_selected',
+                          onPressed: _showUploadProgressDialog,
+                          icon: const Icon(Icons.upload_file),
+                          label: const Text('Lihat Upload'),
+                          backgroundColor: Colors.blue,
+                        ),
+                      ],
                     ],
                   );
                 },
               )
-            : null,
+            : (_isUploadHidden
+                  ? FloatingActionButton.extended(
+                      heroTag: 'fab_resume_upload',
+                      onPressed: _showUploadProgressDialog,
+                      icon: const Icon(Icons.upload_file),
+                      label: const Text('Lihat Proses Upload'),
+                      backgroundColor: Colors.blue,
+                    )
+                  : null),
         body: Padding(
           padding: const EdgeInsets.all(16),
           child: _isLoading
