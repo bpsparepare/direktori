@@ -1278,25 +1278,24 @@ class _DuplicatePageState extends State<DuplicatePage> {
                                   ),
                                 ),
                                 DataCell(
-                                  SizedBox(
-                                    width: 200,
-                                    child: Text(
-                                      displayNama,
-                                      style: isMissing
-                                          ? textStyle
-                                          : const TextStyle(
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                    ),
+                                  Text(
+                                    displayNama,
+                                    style: isMissing
+                                        ? textStyle
+                                        : const TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                          ),
                                   ),
                                 ),
                                 DataCell(
-                                  SizedBox(
-                                    width: 200,
+                                  Container(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 300,
+                                    ),
                                     child: Text(
                                       displayAlamat,
                                       style: textStyle,
-                                      maxLines: 2,
+                                      maxLines: 3,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
