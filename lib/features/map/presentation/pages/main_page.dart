@@ -7,6 +7,7 @@ import 'map_page.dart';
 import 'saved_page.dart';
 import 'groundcheck_page.dart';
 import 'spasial_page.dart';
+import 'duplicate_page.dart';
 import '../../../contribution/presentation/pages/contribution_page.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
@@ -290,6 +291,8 @@ class _MainPageState extends State<MainPage> {
                   if (!_isMitra && isLargeScreen)
                     GroundcheckPage(onGoToMap: _focusGroundcheckLocation),
                   if (!_isMitra && isLargeScreen) const SpasialPage(),
+                  if (!_isMitra && isLargeScreen)
+                    DuplicatePage(onGoToMap: _focusGroundcheckLocation),
                 ],
               ),
             ),
@@ -427,6 +430,11 @@ class _MainPageState extends State<MainPage> {
               const BottomNavigationBarItem(
                 icon: Icon(Icons.map_outlined),
                 label: 'Spasial',
+              ),
+            if (!_isMitra && isLargeScreen)
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.content_copy_outlined),
+                label: 'Ganda',
               ),
           ],
         ),

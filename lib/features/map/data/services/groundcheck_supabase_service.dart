@@ -446,6 +446,55 @@ class GroundcheckSupabaseService {
     }
   }
 
+  Future<void> upsertRecords(List<GroundcheckRecord> records) async {
+    if (records.isEmpty) return;
+    try {
+      // Chunking to avoid payload too large
+      const int batchSize = 100;
+      for (var i = 0; i < records.length; i += batchSize) {
+        final end = (i + batchSize < records.length) ? i + batchSize : records.length;
+        final chunk = records.sublist(i, end);
+        
+        final payload = chunk.map((record) {
+          final data = {
+            'idsbr': record.idsbr,
+            'nama_usaha': record.namaUsaha,
+            'alamat_usaha': record.alamatUsaha,
+            'kode_wilayah': record.kodeWilayah,
+            'status_perusahaan': record.statusPerusahaan,
+            'skala_usaha': record.skalaUsaha,
+            'gcs_result': record.gcsResult,
+            'latitude': record.latitude,
+            'longitude': record.longitude,
+            'perusahaan_id': record.perusahaanId,
+            'kdprov': record.kdProv,
+            'kdkab': record.kdKab,
+            'kdkec': record.kdKec,
+            'kddesa': record.kdDesa,
+            'isUploaded': record.isUploaded,
+            'allow_cancel': record.allowCancel,
+            'updated_at': DateTime.now().toIso8601String(),
+          };
+
+          if (record.userId != null) {
+            data['user_id'] = record.userId!;
+          }
+
+          if (record.isUploaded || record.isRevisi) {
+            data['is_revisi'] = true;
+          }
+          
+          return data;
+        }).toList();
+
+        await _client.from(_tableName).upsert(payload, onConflict: 'idsbr');
+      }
+    } catch (e) {
+      debugPrint('Error upsertRecords: $e');
+      rethrow;
+    }
+  }
+
   Future<bool> updateUploadStatus(String idsbr, bool isUploaded) async {
     try {
       final response = await _client
