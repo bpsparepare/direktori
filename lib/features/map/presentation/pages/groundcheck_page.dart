@@ -2262,14 +2262,60 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     );
 
     if (confirm == true && selectedStatus != null) {
-      // setState(() {
-      //   _isLoading = true;
-      // });
+      // Show progress dialog
+      final progressNotifier = ValueNotifier<double>(0.0);
+      final currentItemNotifier = ValueNotifier<String>('');
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Memperbarui Status'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ValueListenableBuilder<double>(
+                valueListenable: progressNotifier,
+                builder: (context, progress, _) {
+                  return LinearProgressIndicator(value: progress);
+                },
+              ),
+              const SizedBox(height: 16),
+              ValueListenableBuilder<String>(
+                valueListenable: currentItemNotifier,
+                builder: (context, item, _) {
+                  return Text(
+                    item,
+                    style: const TextStyle(fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+              ValueListenableBuilder<double>(
+                valueListenable: progressNotifier,
+                builder: (context, progress, _) {
+                  return Text('${(progress * 100).toInt()}%');
+                },
+              ),
+            ],
+          ),
+        ),
+      );
 
       int count = 0;
-      for (final row in selected) {
+      final total = selected.length;
+
+      for (var i = 0; i < total; i++) {
+        final row = selected[i];
         final record = _dataSource?.getRecord(row);
+
         if (record != null) {
+          // Update progress
+          currentItemNotifier.value = 'Memproses: ${record.namaUsaha}';
+          progressNotifier.value = (i + 1) / total;
+
           // Cek apakah perlu status revisi (jika sudah diupload sebelumnya)
           final bool shouldBeRevisi = record.isUploaded || record.isRevisi;
 
@@ -2300,6 +2346,9 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
           await _supabaseService.updateRecord(updated, updateTimestamp: true);
 
           count++;
+
+          // Small delay to allow UI to update
+          await Future.delayed(const Duration(milliseconds: 50));
         }
       }
 
@@ -2316,7 +2365,10 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
 
       _refreshFilteredData();
 
+      // Close progress dialog
       if (mounted) {
+        Navigator.pop(context);
+
         // setState(() {
         //   _isLoading = false;
         // });
