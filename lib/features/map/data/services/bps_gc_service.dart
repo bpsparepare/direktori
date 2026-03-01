@@ -173,10 +173,12 @@ class BpsGcService {
       );
     } catch (e) {
       debugPrint('proses kirim: Error init webview: $e');
-      if (e.toString().contains('MissingPluginException') && defaultTargetPlatform == TargetPlatform.windows) {
-         return {
+      if (e.toString().contains('MissingPluginException') &&
+          defaultTargetPlatform == TargetPlatform.windows) {
+        return {
           'status': 'error',
-          'message': 'Komponen Background WebView tidak didukung di Windows ini. Gunakan Login Manual.'
+          'message':
+              'Komponen Background WebView tidak didukung di Windows ini. Gunakan Login Manual.',
         };
       }
     }
@@ -205,7 +207,7 @@ class BpsGcService {
       } else {
         // Windows Workaround: Clear cookies & storage via JS since we reuse WebView
         try {
-           await controller.setSettings(
+          await controller.setSettings(
             settings: InAppWebViewSettings(
               userAgent: _userAgent, // Set UA here directly
               clearCache: true,
@@ -214,13 +216,14 @@ class BpsGcService {
             ),
           );
         } catch (e) {
-           debugPrint('proses kirim: Error setting settings on Windows: $e');
-           if (e.toString().contains('MissingPluginException')) {
-             return {
+          debugPrint('proses kirim: Error setting settings on Windows: $e');
+          if (e.toString().contains('MissingPluginException')) {
+            return {
               'status': 'error',
-              'message': 'Gagal inisialisasi WebView (MissingPlugin). Silakan gunakan "Login Manual".'
-             };
-           }
+              'message':
+                  'Gagal inisialisasi WebView (MissingPlugin). Silakan gunakan "Login Manual".',
+            };
+          }
         }
       }
 
@@ -271,25 +274,125 @@ class BpsGcService {
         source: "document.querySelector('#login-sso').click();",
       );
 
-      // Wait for Username Input (SSO Page)
-      if (!await waitForSelector('input[name="username"]')) {
+      final userSelector =
+          'input[name="username"], input#username, input[name="loginfmt"], input#i0116, input[type="email"], input[name="email"]';
+      final passSelector =
+          'input[name="password"], input#password, input[name="passwd"], input#i0118, input[type="password"]';
+
+      if (!await waitForSelector(userSelector)) {
         debugPrint('proses kirim: SSO page timeout');
         return {'status': 'error', 'message': 'SSO page timeout'};
       }
 
-      // Fill Credentials
-      debugPrint('proses kirim: Filling credentials...');
+      debugPrint('proses kirim: Filling credentials (username)...');
       final safeUser = username.replaceAll("'", "\\'");
       final safePass = password.replaceAll("'", "\\'");
 
-      await controller.evaluateJavascript(
-        source:
-            """
-        document.querySelector('input[name="username"]').value = '$safeUser';
-        document.querySelector('input[name="password"]').value = '$safePass';
-        document.querySelector('input[type="submit"]').click();
-      """,
-      );
+      final bool userFilled =
+          await controller.evaluateJavascript(
+                source:
+                    """
+            (function(){
+              var userSel = "$userSelector";
+              function setVal(el, val){
+                el.focus();
+                el.value = val;
+                try { el.dispatchEvent(new Event('input', {bubbles:true})); } catch(e){}
+                try { el.dispatchEvent(new Event('change', {bubbles:true})); } catch(e){}
+              }
+              var u = document.querySelector(userSel);
+              if(u){ setVal(u, '$safeUser'); return true; }
+              return false;
+            })();
+          """,
+              )
+              as bool? ??
+          false;
+
+      if (!userFilled) {
+        debugPrint(
+          'proses kirim: Gagal mengisi username (selector tidak ditemukan)',
+        );
+        return {'status': 'error', 'message': 'Username field not found'};
+      }
+
+      var hasPasswordField =
+          await controller.evaluateJavascript(
+            source: "document.querySelector('$passSelector') != null",
+          ) ==
+          true;
+
+      if (!hasPasswordField) {
+        debugPrint('proses kirim: Password belum muncul, mencoba klik Next...');
+        await controller.evaluateJavascript(
+          source: """
+          (function(){
+            var candidates = Array.from(document.querySelectorAll('button, input[type="submit"], a[role="button"]'));
+            for(var i=0;i<candidates.length;i++){
+              var el = candidates[i];
+              var t = (el.innerText || el.value || '').trim().toLowerCase();
+              if(t.includes('next') || t.includes('berikut') || t.includes('lanjut') || t.includes('continue') || t.includes('berikutnya') || el.id==='idSIButton9'){
+                el.click();
+                return true;
+              }
+            }
+            return false;
+          })();
+        """,
+        );
+
+        if (!await waitForSelector(passSelector, timeoutMs: 20000)) {
+          debugPrint('proses kirim: Password step timeout');
+          return {'status': 'error', 'message': 'Password step timeout'};
+        }
+      }
+
+      debugPrint('proses kirim: Mengisi password dan submit...');
+      final bool passFilled =
+          await controller.evaluateJavascript(
+                source:
+                    """
+            (function(){
+              var passSel = "$passSelector";
+              function setVal(el, val){
+                el.focus();
+                el.value = val;
+                try { el.dispatchEvent(new Event('input', {bubbles:true})); } catch(e){}
+                try { el.dispatchEvent(new Event('change', {bubbles:true})); } catch(e){}
+              }
+              var p = document.querySelector(passSel);
+              if(!p) return false;
+              setVal(p, '$safePass');
+              var candidates = Array.from(document.querySelectorAll('button, input[type="submit"], a[role="button"]'));
+              var clicked = false;
+              for(var i=0;i<candidates.length;i++){
+                var el = candidates[i];
+                var t = (el.innerText || el.value || '').trim().toLowerCase();
+                if(t.includes('sign in') || t.includes('masuk') || t.includes('login') || t.includes('submit') || el.id==='idSIButton9'){
+                  el.click();
+                  clicked = true;
+                  break;
+                }
+              }
+              if(!clicked){
+                try { if(p.form && p.form.submit) { p.form.submit(); clicked = true; } } catch(e){}
+              }
+              if(!clicked){
+                try { var evt = new KeyboardEvent('keydown', {key:'Enter', keyCode:13, which:13, bubbles:true}); p.dispatchEvent(evt); } catch(e){}
+              }
+              return true;
+            })();
+          """,
+              )
+              as bool? ??
+          false;
+
+      if (!passFilled) {
+        debugPrint(
+          'proses kirim: Gagal mengisi password (selector tidak ditemukan)',
+        );
+        return {'status': 'error', 'message': 'Password field not found'};
+      }
 
       // Wait for Redirect back to Matchapro
       debugPrint('proses kirim: Waiting for redirect to dashboard...');
@@ -760,6 +863,8 @@ class BpsGcService {
 
     final body = {'_token': _csrfToken ?? ''};
 
+    debugPrint('getDraftTambahUsaha: Payload: $body');
+
     try {
       final response = await _client.post(url, headers: headers, body: body);
       debugPrint('getDraftTambahUsaha: HTTP Status: ${response.statusCode}');
@@ -799,10 +904,14 @@ class BpsGcService {
       'X-CSRF-TOKEN': _csrfToken ?? '',
     };
 
+    final namaUsahaEncoded = base64Encode(utf8.encode(namaUsaha));
+    final alamatEncoded = base64Encode(utf8.encode(alamat));
+
     final body = {
       '_token': _csrfToken ?? '',
-      'nama_usaha': namaUsaha,
-      'alamat': alamat,
+      'id_table': '',
+      'nama_usaha': namaUsahaEncoded,
+      'alamat': alamatEncoded,
       'provinsi': provinsiId,
       'kabupaten': kabupatenId,
       'kecamatan': kecamatanId,
@@ -810,6 +919,7 @@ class BpsGcService {
       'latitude': latitude,
       'longitude': longitude,
       'confirmSubmit': 'true',
+      'totalSimilar': '0',
     };
 
     debugPrint('saveDraftTambahUsaha: Payload: $body');
@@ -820,11 +930,131 @@ class BpsGcService {
       debugPrint('saveDraftTambahUsaha: Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
+        final json = jsonDecode(response.body) as Map<String, dynamic>;
+
+        // Handle Similar Data Warning
+        if (json['status'] == 'warning' && json['similarData'] != null) {
+          final similarList = json['similarData'] as List;
+          final totalSimilar = similarList.length.toString();
+
+          debugPrint(
+            'saveDraftTambahUsaha: Detected ${similarList.length} similar data. Retrying with totalSimilar=$totalSimilar',
+          );
+
+          // Update body with totalSimilar count
+          final retryBody = Map<String, String>.from(body);
+          retryBody['totalSimilar'] = totalSimilar;
+
+          final retryResponse = await _client.post(
+            url,
+            headers: headers,
+            body: retryBody,
+          );
+          debugPrint(
+            'saveDraftTambahUsaha (Retry): HTTP Status: ${retryResponse.statusCode}',
+          );
+          debugPrint(
+            'saveDraftTambahUsaha (Retry): Response Body: ${retryResponse.body}',
+          );
+
+          if (retryResponse.statusCode == 200) {
+            return jsonDecode(retryResponse.body) as Map<String, dynamic>;
+          }
+        }
+
+        return json;
       }
       return null;
     } catch (e) {
       debugPrint('saveDraftTambahUsaha Error: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> reportGcUser({
+    required String refIdTable,
+    required String statusHasilGc,
+    String latitude = '',
+    String longitude = '',
+    String namaUsahaGc = '',
+    String alamatUsahaGc = '',
+    String editNama = '0',
+    String editAlamat = '0',
+  }) async {
+    if (!hasCredentials) {
+      debugPrint('reportGcUser: Gagal. Belum login / credentials kosong.');
+      return null;
+    }
+
+    // 1. Prioritaskan HTTP Request Biasa (Tanpa WebView)
+    final hasSession = _cookieHeader?.contains('laravel_session') ?? false;
+    final hasXsrf = _cookieHeader?.contains('XSRF-TOKEN') ?? false;
+
+    if (hasSession && hasXsrf) {
+      return _reportGcUserViaHttp(
+        refIdTable: refIdTable,
+        statusHasilGc: statusHasilGc,
+        latitude: latitude,
+        longitude: longitude,
+        namaUsahaGc: namaUsahaGc,
+        alamatUsahaGc: alamatUsahaGc,
+        editNama: editNama,
+        editAlamat: editAlamat,
+      );
+    }
+
+    // Fallback not implemented for now as HTTP is primary
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> _reportGcUserViaHttp({
+    required String refIdTable,
+    required String statusHasilGc,
+    String latitude = '',
+    String longitude = '',
+    String namaUsahaGc = '',
+    String alamatUsahaGc = '',
+    String editNama = '0',
+    String editAlamat = '0',
+  }) async {
+    final url = Uri.parse('$baseUrl/dirgc/report-gc-user');
+
+    final headers = {
+      'Cookie': _cookieHeader!,
+      'User-Agent': _userAgent,
+      'Accept': 'application/json, text/javascript, */*; q=0.01',
+      'X-Requested-With': 'XMLHttpRequest',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'Origin': baseUrl,
+      'Referer': '$baseUrl/dirgc',
+      'X-CSRF-TOKEN': _csrfToken ?? '',
+    };
+
+    final body = {
+      'ref_id_table': refIdTable,
+      'status_hasil_gc': statusHasilGc,
+      'latitude': latitude,
+      'longitude': longitude,
+      'nama_usaha_gc': namaUsahaGc,
+      'alamat_usaha_gc': alamatUsahaGc,
+      'edit_nama': editNama,
+      'edit_alamat': editAlamat,
+      '_token': _csrfToken ?? '',
+    };
+
+    debugPrint('reportGcUser: Payload: $body');
+
+    try {
+      final response = await _client.post(url, headers: headers, body: body);
+      debugPrint('reportGcUser: HTTP Status: ${response.statusCode}');
+      debugPrint('reportGcUser: HTTP Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('reportGcUser Error: $e');
       return null;
     }
   }

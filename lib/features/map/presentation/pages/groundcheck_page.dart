@@ -3,7 +3,7 @@ import 'dart:math';
 import 'dart:async';
 
 import 'package:http/http.dart' as http;
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_datagrid/datagrid.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/services/bps_gc_service.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
 import '../../data/constants/wilayah_mapping.dart';
+import '../../data/constants/wilayah_mapping_sidrap.dart';
 import '../widgets/inappwebview_login_dialog.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
@@ -32,13 +33,20 @@ class GroundcheckDataSource extends DataGridSource {
   final Map<DataGridRow, GroundcheckRecord> _rowToRecord = {};
   final void Function(GroundcheckRecord record)? onGcPressed;
   final void Function(GroundcheckRecord record)? onGoToMap;
+  Map<String, String>? comparisonMap;
 
   GroundcheckDataSource({
     required List<GroundcheckRecord> data,
     this.onGcPressed,
     this.onGoToMap,
+    this.comparisonMap,
   }) {
     _buildRows(data);
+  }
+
+  void updateComparisonMap(Map<String, String>? map) {
+    comparisonMap = map;
+    notifyListeners();
   }
 
   @override
@@ -136,12 +144,25 @@ class GroundcheckDataSource extends DataGridSource {
             label = raw;
             base = Colors.blueGrey;
           }
+
+          // Check comparison logic
+          if (comparisonMap != null && record != null) {
+            final compareVal = comparisonMap![record.idsbr];
+            // Only highlight if comparison exists and is different
+            if (compareVal != null && compareVal != raw) {
+              label = '$label (Excel: $compareVal)';
+              base = Colors.purple;
+            }
+          }
+
           return Container(
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Chip(
               label: Text(
-                code.isNotEmpty ? '$code. $label' : label,
+                code.isNotEmpty && !label.contains('Excel:')
+                    ? '$code. $label'
+                    : label,
                 style: TextStyle(color: base.shade700, fontSize: 12),
               ),
               backgroundColor: base.withValues(alpha: 0.12),
@@ -153,99 +174,58 @@ class GroundcheckDataSource extends DataGridSource {
             ),
           );
         }
-        if (cell.columnName == 'status_perusahaan') {
-          final raw = (cell.value ?? '').toString().trim();
-          final lower = raw.toLowerCase();
-          final codeMatch = RegExp(r'^\s*(\d+)').firstMatch(raw);
-          int? code = codeMatch != null
-              ? int.tryParse(codeMatch.group(1)!)
-              : null;
-          String label = raw.isEmpty ? 'Tidak diketahui' : raw;
-          final Map<int, String> statusMap = {
-            1: 'Aktif',
-            2: 'Tutup Sementara',
-            3: 'Belum Beroperasi/Berproduksi',
-            4: 'Tutup',
-            5: 'Alih Usaha',
-            6: 'Tidak Ditemukan',
-            7: 'Aktif Pindah',
-            8: 'Aktif Nonrespon',
-            9: 'Duplikat',
-            10: 'Salah Kode Wilayah',
-          };
-          MaterialColor base = Colors.grey;
-          if (code != null && statusMap.containsKey(code)) {
-            label = '${code}. ${statusMap[code]}';
-            switch (code) {
-              case 1:
-                base = Colors.green;
-                break;
-              case 2:
-                base = Colors.amber;
-                break;
-              case 3:
-                base = Colors.blue;
-                break;
-              case 4:
-                base = Colors.red;
-                break;
-              case 5:
-                base = Colors.deepPurple;
-                break;
-              case 6:
-                base = Colors.red;
-                break;
-              case 7:
-                base = Colors.teal;
-                break;
-              case 8:
-                base = Colors.orange;
-                break;
-              case 9:
-                base = Colors.orange;
-                break;
-              case 10:
-                base = Colors.brown;
-                break;
-              default:
-                base = Colors.grey;
-            }
-          } else {
-            if (lower.contains('aktif non')) {
-              base = Colors.orange;
-              label = '8. Aktif Nonrespon';
-            } else if (lower.contains('aktif pindah')) {
-              base = Colors.teal;
-              label = '7. Aktif Pindah';
-            } else if (lower.contains('alih usaha')) {
-              base = Colors.deepPurple;
-              label = '5. Alih Usaha';
-            } else if (lower.contains('tutup sementara')) {
-              base = Colors.amber;
-              label = '2. Tutup Sementara';
-            } else if (lower.contains('belum beroperasi') ||
-                lower.contains('belum berproduksi')) {
-              base = Colors.blue;
-              label = '3. Belum Beroperasi/Berproduksi';
-            } else if (lower.contains('tutup')) {
-              base = Colors.red;
-              label = '4. Tutup';
-            } else if (lower.contains('tidak ditemukan')) {
-              base = Colors.red;
-              label = '6. Tidak Ditemukan';
-            } else if (lower.contains('duplikat') || lower.contains('ganda')) {
-              base = Colors.orange;
-              label = '9. Duplikat';
-            } else if (lower.contains('salah kode wilayah')) {
-              base = Colors.brown;
-              label = '10. Salah Kode Wilayah';
-            } else if (lower.contains('aktif')) {
-              base = Colors.green;
-              label = 'Aktif';
-            } else {
-              base = Colors.grey;
-            }
+        if (cell.columnName == 'gcs_result_excel') {
+          final idsbr = (cell.value ?? '').toString();
+          String compareVal = '-';
+          if (comparisonMap != null && comparisonMap!.containsKey(idsbr)) {
+            compareVal = comparisonMap![idsbr] ?? '-';
           }
+
+          // Format value for display similar to gcs_result logic
+          final raw = compareVal;
+          final lower = raw.toLowerCase();
+          String label = raw;
+          MaterialColor base = Colors.grey;
+
+          if (lower == '99' || lower.contains('tidak ditemukan')) {
+            label = 'Tidak Ditemukan';
+            base = Colors.red;
+          } else if (lower == '1' || lower.contains('ditemukan')) {
+            label = 'Ditemukan';
+            base = Colors.green;
+          } else if (lower == '3' || lower.contains('tutup')) {
+            label = 'Tutup';
+            base = Colors.blueGrey;
+          } else if (lower == '4' || lower.contains('ganda')) {
+            label = 'Ganda';
+            base = Colors.orange;
+          } else if (lower == '5' || lower.contains('usaha baru')) {
+            label = 'Usaha Baru';
+            base = Colors.blue;
+          } else if (lower == '-' || lower.isEmpty || lower == 'null') {
+            label = '-';
+            base = Colors.grey;
+          } else {
+            label = raw;
+            base = Colors.blueGrey;
+          }
+
+          if (raw != '-' &&
+              raw.isNotEmpty &&
+              raw != 'null' &&
+              !label.contains(raw) &&
+              label != raw) {
+            // If raw is a code like "1", and label is "Ditemukan", show "1. Ditemukan"
+            // But my logic above sets label to "Ditemukan" directly.
+            // Let's mimic the gcs_result logic more closely if needed.
+            // For now, let's just prepend raw if it's short (likely a code).
+            if (raw.length <= 2) {
+              label = '$raw. $label';
+            }
+          } else if (label != raw && raw.length <= 2) {
+            label = '$raw. $label';
+          }
+
           return Container(
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -342,19 +322,331 @@ class GroundcheckDataSource extends DataGridSource {
             columnName: 'kode_wilayah',
             value: e.kodeWilayah,
           ),
-          DataGridCell<String>(
-            columnName: 'status_perusahaan',
-            value: e.statusPerusahaan,
-          ),
+          DataGridCell<String>(columnName: 'gcs_result_excel', value: e.idsbr),
           DataGridCell<String>(columnName: 'sumber_data', value: e.sumberData),
           DataGridCell<bool>(columnName: 'isUploaded', value: e.isUploaded),
           DataGridCell<String>(columnName: 'gcs_result', value: e.gcsResult),
+          DataGridCell<String>(columnName: 'gc_username', value: e.gcUsername),
           DataGridCell<String>(columnName: 'gc_action', value: e.perusahaanId),
         ],
       );
       _rowToRecord[row] = e;
       return row;
     }).toList();
+  }
+}
+
+class _SidrapManagerDialog extends StatefulWidget {
+  final BpsGcService gcService;
+  final Function(List<Map<String, String>>) onProcessAll;
+  final String? gcToken;
+  final String? gcCookie;
+  final String? userAgent;
+  final String? csrfToken;
+
+  const _SidrapManagerDialog({
+    Key? key,
+    required this.gcService,
+    required this.onProcessAll,
+    this.gcToken,
+    this.gcCookie,
+    this.userAgent,
+    this.csrfToken,
+  }) : super(key: key);
+
+  @override
+  _SidrapManagerDialogState createState() => _SidrapManagerDialogState();
+}
+
+class _SidrapManagerDialogState extends State<_SidrapManagerDialog> {
+  List<Map<String, String>> _data = [];
+  final Set<int> _processingIndices = {};
+  final Set<int> _successIndices = {};
+  final Set<int> _selectedIndices = {};
+  String? _error;
+
+  Future<void> _pasteFromClipboard() async {
+    final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = clipboardData?.text;
+
+    if (text == null || text.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Clipboard kosong')));
+      }
+      return;
+    }
+
+    // Parsing data
+    // Format: nama_usaha | alamat | lat | long | kode_wilayah
+    final lines = text.trim().split('\n');
+    final List<Map<String, String>> parsedData = [];
+    final List<String> errors = [];
+
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i].trim();
+      if (line.isEmpty) continue;
+
+      final cols = line.split('\t');
+      if (cols.length < 5) {
+        errors.add('Baris ${i + 1}: Kolom kurang (${cols.length}/5)');
+        continue;
+      }
+
+      final namaUsaha = cols[0].trim();
+      final alamat = cols[1].trim();
+      var lat = cols[2].trim();
+      var long = cols[3].trim();
+      final kodeWilayah = cols[4].trim();
+
+      // Clean coordinates
+      // 1. Remove quotes
+      lat = lat.replaceAll('"', '').replaceAll("'", "");
+      long = long.replaceAll('"', '').replaceAll("'", "");
+
+      // 2. Replace comma with dot
+      lat = lat.replaceAll(',', '.');
+      long = long.replaceAll(',', '.');
+
+      // Validasi sederhana
+      if (namaUsaha.isEmpty || kodeWilayah.length < 10) {
+        errors.add('Baris ${i + 1}: Data tidak valid (Nama/Kode Wilayah)');
+        continue;
+      }
+
+      // Validasi koordinat
+      if (double.tryParse(lat) == null || double.tryParse(long) == null) {
+        errors.add('Baris ${i + 1}: Koordinat tidak valid ($lat, $long)');
+        continue;
+      }
+
+      parsedData.add({
+        'nama_usaha': namaUsaha,
+        'alamat': alamat,
+        'latitude': lat,
+        'longitude': long,
+        'kode_wilayah': kodeWilayah,
+      });
+    }
+
+    if (parsedData.isEmpty) {
+      setState(() {
+        _error =
+            'Tidak ada data valid ditemukan.\n\nError:\n${errors.join('\n')}';
+      });
+    } else {
+      setState(() {
+        _data = parsedData;
+        _error = errors.isNotEmpty ? '${errors.length} data diabaikan' : null;
+        _successIndices.clear();
+        _processingIndices.clear();
+        // Default select all
+        _selectedIndices.clear();
+        for (int i = 0; i < _data.length; i++) {
+          _selectedIndices.add(i);
+        }
+      });
+    }
+  }
+
+  Future<void> _sendSingle(int index) async {
+    final item = _data[index];
+    setState(() {
+      _processingIndices.add(index);
+    });
+
+    try {
+      if (widget.gcCookie != null && widget.userAgent != null) {
+        widget.gcService.setCredentials(
+          cookie: widget.gcCookie!,
+          csrfToken: widget.csrfToken ?? '',
+          gcToken: widget.gcToken ?? '',
+          userAgent: widget.userAgent!,
+        );
+      }
+
+      final rawKode = item['kode_wilayah'] ?? '';
+      final kecCode = rawKode.substring(4, 7);
+      final desaCode = rawKode.substring(7, 10);
+      final serverKecId = WilayahMappingSidrap.getKecamatanId(kecCode);
+      final serverDesaId = WilayahMappingSidrap.getDesaId(kecCode, desaCode);
+
+      final result = await widget.gcService.saveDraftTambahUsaha(
+        namaUsaha: item['nama_usaha'] ?? '',
+        alamat: item['alamat'] ?? '',
+        provinsiId: WilayahMappingSidrap.serverProvinsiId,
+        kabupatenId: WilayahMappingSidrap.serverKabupatenId,
+        kecamatanId: serverKecId,
+        desaId: serverDesaId,
+        latitude: item['latitude'] ?? '0',
+        longitude: item['longitude'] ?? '0',
+      );
+
+      if (result != null && result['success'] == true) {
+        if (mounted) {
+          setState(() {
+            _successIndices.add(index);
+            _selectedIndices.remove(index); // Deselect if success
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Berhasil: ${item['nama_usaha']}')),
+          );
+        }
+      } else {
+        throw result?['message'] ?? 'Unknown error';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processingIndices.remove(index);
+        });
+      }
+    }
+  }
+
+  void _toggleSelectAll() {
+    setState(() {
+      if (_selectedIndices.length == _data.length) {
+        _selectedIndices.clear();
+      } else {
+        for (int i = 0; i < _data.length; i++) {
+          _selectedIndices.add(i);
+        }
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pendingSelectionCount = _selectedIndices
+        .where((i) => !_successIndices.contains(i))
+        .length;
+
+    return AlertDialog(
+      title: const Text('Sidrap Manager'),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 400,
+        child: Column(
+          children: [
+            if (_error != null)
+              Container(
+                padding: const EdgeInsets.all(8),
+                color: Colors.red[50],
+                child: Text(_error!, style: const TextStyle(color: Colors.red)),
+              ),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.paste),
+                    label: const Text('Ambil Clipboard'),
+                    onPressed: _pasteFromClipboard,
+                  ),
+                ),
+                if (_data.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: _toggleSelectAll,
+                    child: Text(
+                      _selectedIndices.length == _data.length
+                          ? 'Deselect All'
+                          : 'Select All',
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const Divider(),
+            Expanded(
+              child: _data.isEmpty
+                  ? const Center(child: Text('Belum ada data'))
+                  : ListView.separated(
+                      itemCount: _data.length,
+                      separatorBuilder: (ctx, i) => const Divider(),
+                      itemBuilder: (ctx, i) {
+                        final item = _data[i];
+                        final isProcessing = _processingIndices.contains(i);
+                        final isSuccess = _successIndices.contains(i);
+                        final isSelected = _selectedIndices.contains(i);
+
+                        return CheckboxListTile(
+                          value: isSelected,
+                          onChanged: isSuccess
+                              ? null // Disable checkbox if already success
+                              : (val) {
+                                  setState(() {
+                                    if (val == true) {
+                                      _selectedIndices.add(i);
+                                    } else {
+                                      _selectedIndices.remove(i);
+                                    }
+                                  });
+                                },
+                          title: Text(item['nama_usaha'] ?? '-'),
+                          subtitle: Text(
+                            '${item['alamat']}\n${item['kode_wilayah']}\nLat: ${item['latitude']}, Long: ${item['longitude']}',
+                          ),
+                          secondary: isSuccess
+                              ? const Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green,
+                                )
+                              : isProcessing
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : IconButton(
+                                  icon: const Icon(
+                                    Icons.send,
+                                    color: Colors.blue,
+                                  ),
+                                  onPressed: () => _sendSingle(i),
+                                  tooltip: 'Kirim Satu',
+                                ),
+                          controlAffinity: ListTileControlAffinity.leading,
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Tutup'),
+        ),
+        ElevatedButton(
+          onPressed: pendingSelectionCount == 0
+              ? null
+              : () => widget.onProcessAll(
+                  _data
+                      .asMap()
+                      .entries
+                      .where(
+                        (e) =>
+                            _selectedIndices.contains(e.key) &&
+                            !_successIndices.contains(e.key),
+                      )
+                      .map((e) => e.value)
+                      .toList(),
+                ),
+          child: Text('Kirim Terpilih ($pendingSelectionCount)'),
+        ),
+      ],
+    );
   }
 }
 
@@ -408,6 +700,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   String? _isUploadedFilter;
   String? _regionFilter;
   List<String> _regionOptions = [];
+  List<String> _petugasOptions = [];
   Map<String, String> _recordToRegionMap = {}; // idsbr -> region name
   List<_SlsPolygon> _polygons = [];
   Map<String, _Metadata> _metadataMap = {};
@@ -433,6 +726,13 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   ValueNotifier<bool>? _activeIsCancelledNotifier;
   int _activeTotalUploadCount = 0;
   bool _isUploadHidden = false;
+
+  // Comparison State
+  Map<String, String> _parepareComparison = {};
+  Map<String, String> _idsbrToGcid = {};
+  bool _showParepareDiff = false;
+  bool _isLoadingParepare = false;
+  String? _petugasFilter;
 
   @override
   void initState() {
@@ -768,6 +1068,14 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
             .toSet()
             .toList()
           ..sort();
+    _petugasOptions =
+        records
+            .map((e) => e.gcUsername?.trim())
+            .where((v) => v != null && v.isNotEmpty)
+            .map((v) => v!)
+            .toSet()
+            .toList()
+          ..sort();
 
     // Validasi filter saat ini agar tetap konsisten dengan opsi baru (trim)
     if (_sumberDataFilter != null) {
@@ -781,6 +1089,19 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
         } else {
           // Jika opsi yang dipilih tidak ada lagi (misal data berubah total), reset
           _sumberDataFilter = null;
+        }
+      }
+    }
+
+    if (_petugasFilter != null) {
+      if (_petugasFilter!.isEmpty) {
+        // Keep it
+      } else {
+        final trimmed = _petugasFilter!.trim();
+        if (_petugasOptions.contains(trimmed)) {
+          _petugasFilter = trimmed;
+        } else {
+          _petugasFilter = null;
         }
       }
     }
@@ -2137,8 +2458,152 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     await _showGcConfirmationDialog(record);
   }
 
+  Future<void> _loadParepareComparison() async {
+    if (_parepareComparison.isNotEmpty) return;
+    setState(() => _isLoadingParepare = true);
+    try {
+      final jsonString = await DefaultAssetBundle.of(
+        context,
+      ).loadString('assets/json/parepare_comparison.json');
+      final List<dynamic> jsonList = jsonDecode(jsonString);
+      for (var item in jsonList) {
+        final idsbr = item['idsbr']?.toString() ?? '';
+        final gcs = item['gcs_result']?.toString() ?? '';
+        if (idsbr.isNotEmpty) {
+          _parepareComparison[idsbr] = gcs;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading parepare comparison: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal memuat data pembanding: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingParepare = false);
+      }
+    }
+  }
+
+  Future<void> _loadGcidMap() async {
+    if (_idsbrToGcid.isNotEmpty) return;
+    // Gunakan _isLoadingParepare sebagai indikator loading, tapi hati-hati konflik
+    // jika dipanggil bersamaan.
+    setState(() => _isLoadingParepare = true);
+    try {
+      final jsonString = await DefaultAssetBundle.of(
+        context,
+      ).loadString('assets/json/parepare_comparison.json');
+      final List<dynamic> jsonList = jsonDecode(jsonString);
+      for (var item in jsonList) {
+        final idsbr = item['idsbr']?.toString() ?? '';
+        final gcid = item['gcid']?.toString() ?? '';
+        if (idsbr.isNotEmpty && gcid.isNotEmpty) {
+          _idsbrToGcid[idsbr] = gcid;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading gcid map: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Gagal memuat data GCID: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingParepare = false);
+      }
+    }
+  }
+
+  Future<void> _syncGcUsernameFromParepareJson() async {
+    if (_isLoadingParepare) return;
+    setState(() => _isLoadingParepare = true);
+    try {
+      final jsonString = await DefaultAssetBundle.of(
+        context,
+      ).loadString('assets/json/parepare_comparison.json');
+      final List<dynamic> jsonList = jsonDecode(jsonString);
+      final Map<String, String> usernameMap = {};
+      for (var item in jsonList) {
+        final idsbr = item['idsbr']?.toString() ?? '';
+        final username = item['gc_username']?.toString() ?? '';
+        if (idsbr.isNotEmpty && username.isNotEmpty) {
+          usernameMap[idsbr] = username;
+        }
+      }
+
+      final service = GroundcheckSupabaseService();
+      final localRecords = await service.loadLocalRecords();
+      int updatedCount = 0;
+      final newRecords = localRecords.map((r) {
+        if (usernameMap.containsKey(r.idsbr)) {
+          final newUsername = usernameMap[r.idsbr]!;
+          if (r.gcUsername != newUsername) {
+            updatedCount++;
+            return r.copyWith(gcUsername: newUsername);
+          }
+        }
+        return r;
+      }).toList();
+
+      if (updatedCount > 0) {
+        await service.saveLocalRecords(newRecords);
+        await _loadData(); // Reload UI
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Berhasil update $updatedCount username petugas dari Excel',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Tidak ada data username yang perlu diupdate'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error syncing username: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Gagal update username: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingParepare = false);
+      }
+    }
+  }
+
   List<GroundcheckRecord> _filteredRecords() {
     return _allRecords.where((r) {
+      if (_showParepareDiff) {
+        final compareVal = _parepareComparison[r.idsbr];
+        // If not in comparison file, or if values are same, skip it.
+        // We only want to show DIFFERENCES where the ID exists in both.
+        if (compareVal == null) return false;
+
+        final localVal = r.gcsResult.trim();
+        final remoteVal = compareVal.trim();
+
+        // If both are empty/null-ish, consider them same
+        final localEmpty = localVal.isEmpty || localVal == 'null';
+        final remoteEmpty = remoteVal.isEmpty || remoteVal == 'null';
+        if (localEmpty && remoteEmpty) return false;
+
+        if (localVal == remoteVal) return false;
+      }
+
       if (_searchQuery.isNotEmpty) {
         final q = _searchQuery.toLowerCase();
         final match =
@@ -2183,6 +2648,15 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
         }
       }
 
+      if (_petugasFilter != null) {
+        if (_petugasFilter!.isEmpty) {
+          // Filter data yang belum ada petugas (kosong)
+          if (r.gcUsername != null && r.gcUsername!.isNotEmpty) return false;
+        } else if (r.gcUsername?.trim() != _petugasFilter) {
+          return false;
+        }
+      }
+
       if (_regionFilter != null) {
         final region = _recordToRegionMap[r.idsbr];
         if (region != _regionFilter) return false;
@@ -2196,6 +2670,9 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     if (_dataSource == null) {
       return;
     }
+    _dataSource!.updateComparisonMap(
+      _showParepareDiff ? _parepareComparison : null,
+    );
     final filtered = _filteredRecords();
     _dataSource!.updateData(filtered);
   }
@@ -2967,6 +3444,253 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       point: isValid ? finalPoint : null,
       message: logMsg,
     );
+  }
+
+  Future<void> _handleBulkLapor() async {
+    // Pastikan GCID map termuat
+    await _loadGcidMap();
+
+    if (!mounted) return;
+
+    final selected = _dataGridController.selectedRows;
+    if (selected.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pilih data terlebih dahulu.')),
+      );
+      return;
+    }
+
+    final records = <GroundcheckRecord>[];
+    if (_dataSource != null) {
+      for (final row in selected) {
+        final r = _dataSource!.getRecord(row);
+        if (r != null) records.add(r);
+      }
+    }
+
+    if (records.isEmpty) return;
+
+    // Show Dialog to choose status
+    final int? selectedStatus = await showDialog<int>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Pilih Status Laporan'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 4),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('4. Ganda (Duplicate)'),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 3),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('3. Tutup (Closed)'),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 1),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('1. Ada (Active)'),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 2),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('2. Tutup Sementara'),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 5),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('5. Usaha Baru'),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (selectedStatus == null) return;
+
+    if (!mounted) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Lapor ${records.length} Data?'),
+        content: Text(
+          'Anda akan melaporkan ${records.length} data dengan status $selectedStatus. Proses ini akan mengirim data ke server.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Lapor'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // Progress Dialog
+    final ValueNotifier<int> progressNotifier = ValueNotifier(0);
+    final ValueNotifier<int> successNotifier = ValueNotifier(0);
+    final ValueNotifier<int> failNotifier = ValueNotifier(0);
+    final ValueNotifier<String> statusNotifier = ValueNotifier('Menyiapkan...');
+    bool isCancelled = false;
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('Proses Lapor GC'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ValueListenableBuilder<String>(
+                  valueListenable: statusNotifier,
+                  builder: (_, val, __) =>
+                      Text(val, textAlign: TextAlign.center),
+                ),
+                const SizedBox(height: 16),
+                ValueListenableBuilder<int>(
+                  valueListenable: progressNotifier,
+                  builder: (_, val, __) => LinearProgressIndicator(
+                    value: records.isNotEmpty ? val / records.length : 0,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    ValueListenableBuilder<int>(
+                      valueListenable: successNotifier,
+                      builder: (_, val, __) => Column(
+                        children: [
+                          const Text(
+                            'Sukses',
+                            style: TextStyle(color: Colors.green),
+                          ),
+                          Text('$val'),
+                        ],
+                      ),
+                    ),
+                    ValueListenableBuilder<int>(
+                      valueListenable: failNotifier,
+                      builder: (_, val, __) => Column(
+                        children: [
+                          const Text(
+                            'Gagal',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                          Text('$val'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  isCancelled = true;
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Batal'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Pastikan session service up-to-date
+    if (_gcCookie != null && _userAgent != null) {
+      _gcService.setCredentials(
+        cookie: _gcCookie!,
+        csrfToken: _csrfToken ?? '',
+        gcToken: _gcToken ?? '',
+        userAgent: _userAgent!,
+      );
+    }
+
+    for (var i = 0; i < records.length; i++) {
+      if (isCancelled) break;
+      final record = records[i];
+
+      statusNotifier.value = 'Memproses ${record.namaUsaha}...';
+
+      // Gunakan GCID dari parepare_comparison.json
+      final gcid = _idsbrToGcid[record.idsbr];
+      if (gcid == null || gcid.isEmpty) {
+        debugPrint('GCID not found for IDSBR: ${record.idsbr}. Skipping.');
+        failNotifier.value++;
+        progressNotifier.value = i + 1;
+        // Skip record ini karena tidak ada GCID
+        continue;
+      }
+
+      try {
+        final result = await _gcService.reportGcUser(
+          refIdTable: gcid,
+          statusHasilGc: selectedStatus.toString(),
+          latitude: record.latitude,
+          longitude: record.longitude,
+          namaUsahaGc: record.namaUsaha,
+          alamatUsahaGc: record.alamatUsaha,
+        );
+
+        if (result != null && result['status'] == 'success') {
+          successNotifier.value++;
+
+          // Update status lokal
+          await _supabaseService.updateGcsResult(
+            record.idsbr,
+            selectedStatus.toString(),
+            userId: _currentLoginId ?? _currentUser,
+          );
+        } else {
+          failNotifier.value++;
+          debugPrint('Lapor failed for ${record.idsbr}: $result');
+        }
+      } catch (e) {
+        failNotifier.value++;
+        debugPrint('Lapor error for ${record.idsbr}: $e');
+      }
+
+      progressNotifier.value = i + 1;
+      await Future.delayed(
+        const Duration(milliseconds: 100),
+      ); // Rate limit slightly
+    }
+
+    if (mounted && !isCancelled) {
+      Navigator.pop(context); // Close progress dialog
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Selesai. Sukses: ${successNotifier.value}, Gagal: ${failNotifier.value}',
+          ),
+        ),
+      );
+
+      // Refresh data
+      _refreshFilteredData();
+    }
   }
 
   Future<void> _handleBulkGeocoding() async {
@@ -4127,7 +4851,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
           }
 
           // Jeda 10 detik antar record (Wajib untuk semua item)
-          for (int t = 4; t > 0; t--) {
+          for (int t = 1; t > 0; t--) {
             if (isCancelledNotifier.value) break;
             statusNotifier.value =
                 'Cooldown ${t}s sebelum proses berikutnya...';
@@ -4208,6 +4932,40 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
               icon: const Icon(Icons.sync),
               tooltip: 'Sinkronkan Data Lokal',
             ),
+            const SizedBox(width: 8),
+            if (_isLoadingParepare)
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            if (!_isLoadingParepare) ...[
+              IconButton(
+                onPressed: () async {
+                  if (_parepareComparison.isEmpty) {
+                    await _loadParepareComparison();
+                  }
+                  setState(() {
+                    _showParepareDiff = !_showParepareDiff;
+                  });
+                  _refreshFilteredData();
+                },
+                icon: Icon(
+                  _showParepareDiff
+                      ? Icons.difference_rounded
+                      : Icons.compare_arrows,
+                  color: _showParepareDiff ? Colors.purple : null,
+                ),
+                tooltip: _showParepareDiff
+                    ? 'Tampilkan Semua Data'
+                    : 'Bandingkan dengan Excel Parepare (Cari Perbedaan)',
+              ),
+              IconButton(
+                onPressed: _syncGcUsernameFromParepareJson,
+                icon: const Icon(Icons.person_add_alt_1),
+                tooltip: 'Lengkapi GC Username dari JSON',
+              ),
+            ],
           ],
         ),
         const SizedBox(height: 8),
@@ -4329,6 +5087,36 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                 onChanged: (value) {
                   setState(() {
                     _isUploadedFilter = value;
+                  });
+                  _refreshFilteredData();
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DropdownButtonFormField<String?>(
+                value: _petugasFilter,
+                decoration: const InputDecoration(
+                  labelText: 'Petugas',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Semua Petugas'),
+                  ),
+                  const DropdownMenuItem<String?>(
+                    value: '',
+                    child: Text('Belum Ada Petugas'),
+                  ),
+                  ..._petugasOptions.map(
+                    (p) => DropdownMenuItem<String?>(value: p, child: Text(p)),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _petugasFilter = value;
                   });
                   _refreshFilteredData();
                 },
@@ -4643,6 +5431,120 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     );
   }
 
+  Future<void> _handleSidrapPaste() async {
+    showDialog(
+      context: context,
+      builder: (ctx) => _SidrapManagerDialog(
+        gcService: _gcService,
+        onProcessAll: (data) {
+          Navigator.pop(ctx);
+          _processSidrapQueue(data);
+        },
+        gcToken: _gcToken,
+        gcCookie: _gcCookie,
+        userAgent: _userAgent,
+        csrfToken: _csrfToken,
+      ),
+    );
+  }
+
+  Future<void> _processSidrapQueue(List<Map<String, String>> queue) async {
+    // Setup Notifiers untuk Progress Dialog
+    _activeProgressNotifier = ValueNotifier<int>(0);
+    _activeStatusNotifier = ValueNotifier<String>('');
+    _activeSuccessNotifier = ValueNotifier<int>(0);
+    _activeFailNotifier = ValueNotifier<int>(0);
+    _activePendingUiNotifier = ValueNotifier<int>(queue.length);
+    _activeIsFinishedNotifier = ValueNotifier<bool>(false);
+    _activeIsCancelledNotifier = ValueNotifier<bool>(false);
+    _activeTotalUploadCount = queue.length;
+
+    // Pastikan session service up-to-date
+    if (_gcCookie != null && _userAgent != null) {
+      _gcService.setCredentials(
+        cookie: _gcCookie!,
+        csrfToken: _csrfToken ?? '',
+        gcToken: _gcToken ?? '',
+        userAgent: _userAgent!,
+      );
+    }
+
+    // Tampilkan Dialog
+    _showUploadProgressDialog();
+
+    final total = queue.length;
+    int successCount = 0;
+    int failCount = 0;
+
+    for (var i = 0; i < total; i++) {
+      // Cek pembatalan
+      if (_activeIsCancelledNotifier!.value) {
+        break;
+      }
+
+      final item = queue[i];
+      final namaUsaha = item['nama_usaha'] ?? '';
+      final rawKode = item['kode_wilayah'] ?? '';
+
+      // Update UI
+      _activeStatusNotifier!.value = 'Mengirim: $namaUsaha';
+      _activeProgressNotifier!.value =
+          i; // Progress indicator expects processed count? Wait.
+      // Looking at _showUploadProgressDialog: val / _activeTotalUploadCount
+      // So if I process 1, val should be 1.
+      // I'll update it at the end of loop iteration.
+
+      try {
+        // Konversi Kode Wilayah (Format: 7314060007)
+        // 73 = Prov, 14 = Kab, 060 = Kec (index 4-7), 007 = Desa (index 7-10)
+        if (rawKode.length < 10) throw 'Kode wilayah tidak valid';
+
+        final kecCode = rawKode.substring(4, 7);
+        final desaCode = rawKode.substring(7, 10);
+
+        final serverKecId = WilayahMappingSidrap.getKecamatanId(kecCode);
+        final serverDesaId = WilayahMappingSidrap.getDesaId(kecCode, desaCode);
+
+        // Kirim ke Server
+        final result = await _gcService.saveDraftTambahUsaha(
+          namaUsaha: namaUsaha,
+          alamat: item['alamat'] ?? '',
+          provinsiId: WilayahMappingSidrap.serverProvinsiId,
+          kabupatenId: WilayahMappingSidrap.serverKabupatenId,
+          kecamatanId: serverKecId,
+          desaId: serverDesaId,
+          latitude: item['latitude'] ?? '0',
+          longitude: item['longitude'] ?? '0',
+        );
+
+        if (result != null && result['success'] == true) {
+          successCount++;
+          _activeSuccessNotifier!.value = successCount;
+        } else {
+          failCount++;
+          _activeFailNotifier!.value = failCount;
+          debugPrint('Gagal Sidrap: ${result?['message'] ?? 'Unknown error'}');
+        }
+      } catch (e) {
+        failCount++;
+        _activeFailNotifier!.value = failCount;
+        debugPrint('Error Sidrap: $e');
+      }
+
+      _activePendingUiNotifier!.value = total - (i + 1);
+      _activeProgressNotifier!.value = i + 1;
+
+      // Delay rate limit sederhana
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
+    // Selesai
+    _activeProgressNotifier!.value = total;
+    _activeStatusNotifier!.value = 'Selesai';
+    _activeIsFinishedNotifier!.value = true;
+    _loadData(); // Reload map
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocListener<MapBloc, MapState>(
@@ -4718,6 +5620,14 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                         icon: const Icon(Icons.map),
                         label: const Text('Geocoding'),
                         backgroundColor: Colors.teal,
+                      ),
+                      const SizedBox(width: 16),
+                      FloatingActionButton.extended(
+                        heroTag: 'fab_lapor',
+                        onPressed: _handleBulkLapor,
+                        icon: const Icon(Icons.report),
+                        label: const Text('Lapor'),
+                        backgroundColor: Colors.redAccent,
                       ),
                       const SizedBox(width: 16),
                       if (!showCancel) ...[
@@ -4798,15 +5708,31 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                   );
                 },
               )
-            : (_isUploadHidden
-                  ? FloatingActionButton.extended(
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  FloatingActionButton.extended(
+                    heroTag: 'fab_sidrap_paste',
+                    onPressed: _handleSidrapPaste,
+                    icon: const Icon(Icons.paste, color: Colors.white),
+                    label: const Text(
+                      'Sidrap Paste',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    backgroundColor: Colors.indigo,
+                  ),
+                  if (_isUploadHidden) ...[
+                    const SizedBox(width: 16),
+                    FloatingActionButton.extended(
                       heroTag: 'fab_resume_upload',
                       onPressed: _showUploadProgressDialog,
                       icon: const Icon(Icons.upload_file),
                       label: const Text('Lihat Proses Upload'),
                       backgroundColor: Colors.blue,
-                    )
-                  : null),
+                    ),
+                  ],
+                ],
+              ),
         body: Padding(
           padding: const EdgeInsets.all(16),
           child: _isLoading
@@ -5175,7 +6101,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                                       ),
                                     ),
                                     GridColumn(
-                                      columnName: 'status_perusahaan',
+                                      columnName: 'gcs_result_excel',
                                       label: Container(
                                         alignment: Alignment.centerLeft,
                                         padding: const EdgeInsets.symmetric(
@@ -5183,7 +6109,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                                         ),
                                         color: Colors.blue[50],
                                         child: const Text(
-                                          'Status Perusahaan',
+                                          'GCS Excel',
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 13,
@@ -5239,6 +6165,25 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                                         color: Colors.blue[50],
                                         child: const Text(
                                           'GCS Result',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    GridColumn(
+                                      columnName: 'gc_username',
+                                      width: 120,
+                                      label: Container(
+                                        alignment: Alignment.centerLeft,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                        ),
+                                        color: Colors.blue[50],
+                                        child: const Text(
+                                          'Petugas',
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 13,

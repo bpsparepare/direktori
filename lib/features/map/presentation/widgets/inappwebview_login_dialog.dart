@@ -24,6 +24,7 @@ class _InAppWebViewLoginDialogState extends State<InAppWebViewLoginDialog> {
   double progress = 0;
   String url = '';
   bool _isChecking = false;
+  bool _isLoggedIn = false;
 
   final String _targetUrl = 'https://matchapro.web.bps.go.id/dirgc';
   final String _loginUrl = 'https://matchapro.web.bps.go.id/login';
@@ -158,7 +159,11 @@ class _InAppWebViewLoginDialogState extends State<InAppWebViewLoginDialog> {
           hasXsrf &&
           (gcToken.isNotEmpty || csrfToken.isNotEmpty)) {
         // Success!
-        if (mounted) {
+        if (mounted && !_isLoggedIn) {
+          setState(() {
+            _isLoggedIn = true;
+          });
+
           widget.onLoginSuccess(
             cookieStr,
             gcToken,
@@ -166,7 +171,17 @@ class _InAppWebViewLoginDialogState extends State<InAppWebViewLoginDialog> {
             settings.userAgent ?? '',
             userName,
           );
-          Navigator.of(context).pop();
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Login Berhasil! Halo, $userName. Silakan lanjutkan.',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // Jangan close otomatis agar user bisa lanjut menggunakan webview
+          // Navigator.of(context).pop();
         }
       }
     }
@@ -176,11 +191,16 @@ class _InAppWebViewLoginDialogState extends State<InAppWebViewLoginDialog> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Login Matchapro (InAppWebView)'),
+        title: Text(_isLoggedIn ? 'Login Berhasil' : 'Login Matchapro'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => webViewController?.reload(),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: 'Tutup',
+            onPressed: () => Navigator.of(context).pop(),
           ),
         ],
       ),
