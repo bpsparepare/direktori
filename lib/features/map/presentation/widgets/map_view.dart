@@ -76,6 +76,8 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   double _baseFontSize = 10.0; // Initial font size
   Timer? _boundsDebounce;
   bool _isDragging = false; // Track dragging state
+  LatLng? _clipboardCheckedPoint;
+  String? _clipboardCheckedLabel;
 
   @override
   void initState() {
@@ -721,6 +723,19 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                   }).toList(),
                 ),
             ],
+            if (_clipboardCheckedPoint != null)
+              CircleLayer(
+                circles: [
+                  CircleMarker(
+                    point: _clipboardCheckedPoint!,
+                    radius: 30,
+                    useRadiusInMeter: true,
+                    color: Colors.cyan.withValues(alpha: 0.18),
+                    borderColor: Colors.cyanAccent,
+                    borderStrokeWidth: 4,
+                  ),
+                ],
+              ),
             // Keep non-draggable markers (current location and temporary)
             MarkerLayer(
               markers: [
@@ -753,6 +768,67 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                       Icons.place,
                       color: Colors.orange,
                       size: 32,
+                    ),
+                  ),
+                if (_clipboardCheckedPoint != null &&
+                    _clipboardCheckedLabel != null)
+                  Marker(
+                    point: _clipboardCheckedPoint!,
+                    width: 170,
+                    height: 78,
+                    child: Transform.translate(
+                      offset: const Offset(0, -18),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.cyanAccent,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.black, width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.25),
+                                  blurRadius: 10,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            padding: const EdgeInsets.all(4),
+                            child: const Icon(
+                              Icons.gps_fixed,
+                              color: Colors.black,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.75),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: Colors.cyanAccent,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Text(
+                              'CEK: $_clipboardCheckedLabel',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: _baseFontSize.toDouble(),
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
               ],
@@ -836,7 +912,70 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               ),
             );
           },
+          onClipboardPointSelected: (point, label) {
+            setState(() {
+              _clipboardCheckedPoint = point;
+              _clipboardCheckedLabel = label;
+            });
+          },
         ),
+        if (_clipboardCheckedPoint != null && _clipboardCheckedLabel != null)
+          Positioned(
+            left: 16,
+            top: 16,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  setState(() {
+                    _clipboardCheckedPoint = null;
+                    _clipboardCheckedLabel = null;
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.75),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.cyanAccent, width: 1.5),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.gps_fixed,
+                        color: Colors.cyanAccent,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 240),
+                        child: Text(
+                          'CEK aktif: $_clipboardCheckedLabel',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Icon(
+                        Icons.close,
+                        color: Colors.white70,
+                        size: 18,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         // Debug Info Panel (only show for Esri satellite with offset)
         if (_currentMapType == MapType.satellite &&
             (_offsetX != 0.0 || _offsetY != 0.0))

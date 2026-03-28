@@ -95,6 +95,35 @@ class BpsGcService {
             'proses kirim: Headless Console: ${consoleMessage.message}',
           );
         },
+        shouldOverrideUrlLoading: (controller, navigationAction) async {
+          final uri = navigationAction.request.url;
+          if (uri == null) return NavigationActionPolicy.ALLOW;
+          final host = uri.host;
+          final isSso = host.contains('sso.bps.go.id');
+          final isMatcha = host.contains('matchapro.web.bps.go.id');
+          if (isSso || isMatcha) {
+            debugPrint('proses kirim: Override nav with mobile headers: $uri');
+            try {
+              await controller.loadUrl(
+                urlRequest: URLRequest(
+                  url: uri,
+                  headers: {
+                    'x-requested-with': 'com.matchapro.app',
+                    'sec-ch-ua':
+                        '"Android WebView";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+                    'sec-ch-ua-mobile': '?1',
+                    'sec-ch-ua-platform': '"Android"',
+                    'referer': '$baseUrl/',
+                  },
+                ),
+              );
+              return NavigationActionPolicy.CANCEL;
+            } catch (e) {
+              debugPrint('proses kirim: Override nav failed: $e');
+            }
+          }
+          return NavigationActionPolicy.ALLOW;
+        },
       );
 
       await _headlessWebView!.run();
@@ -236,10 +265,20 @@ class BpsGcService {
         settings: InAppWebViewSettings(userAgent: _userAgent),
       );
 
-      // Go to Login Page
-      debugPrint('proses kirim: Navigasi ke login page...');
+      // Mulai dari /dirgc seperti alur manual, agar referer/flow sesuai aplikasi
+      debugPrint('proses kirim: Navigasi ke halaman utama (dirgc)...');
       await controller.loadUrl(
-        urlRequest: URLRequest(url: WebUri('$baseUrl/login')),
+        urlRequest: URLRequest(
+          url: WebUri('$baseUrl/dirgc'),
+          headers: {
+            'x-requested-with': 'com.matchapro.app',
+            'sec-ch-ua':
+                '"Android WebView";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+            'sec-ch-ua-mobile': '?1',
+            'sec-ch-ua-platform': '"Android"',
+            'referer': '$baseUrl/',
+          },
+        ),
       );
 
       // Helper to wait for selector
@@ -259,17 +298,39 @@ class BpsGcService {
         return false;
       }
 
-      // Wait for #login-sso
+      // Tunggu tombol SSO tampil
       if (!await waitForSelector('#login-sso')) {
-        debugPrint('proses kirim: Login page timeout or SSO button missing');
-        return {'status': 'error', 'message': 'Login page timeout'};
+        // Fallback: cari elemen berdasarkan teks
+        final clickedViaText = await controller.evaluateJavascript(
+          source: """
+          (function(){
+            try{
+              var el = document.querySelector('#login-sso');
+              if(!el){
+                var nodes = Array.from(document.querySelectorAll('a,button,div'));
+                var found = nodes.find(n => {
+                  var t = (n.innerText||'').toLowerCase();
+                  return t.includes('sso');
+                });
+                if(found) el = found;
+              }
+              if(el){ el.click(); return true; }
+              return false;
+            }catch(e){ return false; }
+          })();
+          """,
+        );
+        if (clickedViaText != true) {
+          debugPrint('proses kirim: Login page timeout or SSO button missing');
+          return {'status': 'error', 'message': 'Login page timeout'};
+        }
+      } else {
+        // Klik SSO via ID
+        debugPrint('proses kirim: Clicking SSO...');
+        await controller.evaluateJavascript(
+          source: "var el=document.querySelector('#login-sso'); if(el) el.click();",
+        );
       }
-
-      // Click SSO
-      debugPrint('proses kirim: Clicking SSO...');
-      await controller.evaluateJavascript(
-        source: "document.querySelector('#login-sso').click();",
-      );
 
       // Wait for Username Input (SSO Page)
       if (!await waitForSelector('input[name="username"]')) {
@@ -285,9 +346,17 @@ class BpsGcService {
       await controller.evaluateJavascript(
         source:
             """
-        document.querySelector('input[name="username"]').value = '$safeUser';
-        document.querySelector('input[name="password"]').value = '$safePass';
-        document.querySelector('input[type="submit"]').click();
+        (function(){
+          try{
+            var u = document.querySelector('input[name="username"]');
+            var p = document.querySelector('input[name="password"]');
+            var s = document.querySelector('input[type="submit"]');
+            if(u) u.value = '$safeUser';
+            if(p) p.value = '$safePass';
+            if(s) s.click();
+            return true;
+          } catch(e){ return false; }
+        })();
       """,
       );
 
@@ -295,6 +364,7 @@ class BpsGcService {
       debugPrint('proses kirim: Waiting for redirect to dashboard...');
       int elapsed = 0;
       bool loggedIn = false;
+      int retries = 0;
       while (elapsed < 60000) {
         // 60s timeout
         final url = (await controller.getUrl())?.toString() ?? '';
@@ -309,6 +379,89 @@ class BpsGcService {
             'status': 'error',
             'message': 'OTP Diperlukan. Silakan gunakan Login Manual.',
           };
+        }
+
+        // Deteksi halaman error SSO dan lakukan satu kali retry
+        final ssoError = await controller.evaluateJavascript(
+          source:
+              """
+              (function(){
+                try{
+                  var txt = (document && document.body && document.body.innerText) ? document.body.innerText : '';
+                  return txt.includes('We are sorry') || txt.includes('login again through your application');
+                } catch(e){ return false; }
+              })();
+              """,
+        );
+        if (ssoError == true && retries < 1) {
+          debugPrint('proses kirim: Terdeteksi halaman error SSO. Melakukan retry sekali...');
+          retries += 1;
+          // Kembali ke halaman login aplikasi dan ulangi proses klik SSO
+          await controller.loadUrl(
+            urlRequest: URLRequest(
+              url: WebUri('$baseUrl/dirgc'),
+              headers: {
+                'x-requested-with': 'com.matchapro.app',
+                'sec-ch-ua':
+                    '"Android WebView";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+                'sec-ch-ua-mobile': '?1',
+                'sec-ch-ua-platform': '"Android"',
+                'referer': '$baseUrl/',
+              },
+            ),
+          );
+          // Tunggu SSO button lagi (via ID atau fallback text)
+          bool hasSso = await waitForSelector('#login-sso');
+          if (!hasSso) {
+            final clicked = await controller.evaluateJavascript(
+              source: """
+              (function(){
+                try{
+                  var el = document.querySelector('#login-sso');
+                  if(!el){
+                    var nodes = Array.from(document.querySelectorAll('a,button,div'));
+                    var found = nodes.find(n => {
+                      var t = (n.innerText||'').toLowerCase();
+                      return t.includes('sso');
+                    });
+                    if(found) el = found;
+                  }
+                  if(el){ el.click(); return true; }
+                  return false;
+                }catch(e){ return false; }
+              })();
+              """,
+            );
+            if (clicked != true) {
+              return {'status': 'error', 'message': 'Login page timeout (retry)'};
+            }
+          } else {
+            await controller.evaluateJavascript(
+              source: "var el=document.querySelector('#login-sso'); if(el) el.click();",
+            );
+          }
+          if (!await waitForSelector('input[name="username"]')) {
+            return {'status': 'error', 'message': 'SSO page timeout (retry)'};
+          }
+          await controller.evaluateJavascript(
+            source:
+                """
+            (function(){
+              try{
+                var u = document.querySelector('input[name="username"]');
+                var p = document.querySelector('input[name="password"]');
+                var s = document.querySelector('input[type="submit"]');
+                if(u) u.value = '$safeUser';
+                if(p) p.value = '$safePass';
+                if(s) s.click();
+                return true;
+              } catch(e){ return false; }
+            })();
+          """,
+          );
+          // Lanjutkan menunggu redirect
+          await Future.delayed(const Duration(seconds: 2));
+          continue;
         }
 
         if (url.contains('matchapro.web.bps.go.id') &&

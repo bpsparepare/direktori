@@ -746,7 +746,15 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
   }
 
   void _processRecords(List<GroundcheckRecord> records) {
-    _allRecords = records;
+    final sorted = [...records];
+    sorted.sort((a, b) {
+      final da = DateTime.tryParse(a.updatedAt);
+      final db = DateTime.tryParse(b.updatedAt);
+      final aMs = da?.millisecondsSinceEpoch ?? 0;
+      final bMs = db?.millisecondsSinceEpoch ?? 0;
+      return bMs.compareTo(aMs);
+    });
+    _allRecords = sorted;
     _statusOptions =
         records
             .map((e) => e.statusPerusahaan)
@@ -2674,6 +2682,229 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     return null;
   }
 
+  Future<String?> _reverseGeocodeGoogleRoute(double lat, double lng) async {
+    const apiKey = 'AIzaSyDnmzg1NGiODI5clNzFd0G3SkpQm_HavUE';
+    try {
+      final url = Uri.https('maps.googleapis.com', '/maps/api/geocode/json', {
+        'latlng': '$lat,$lng',
+        'language': 'id',
+        'key': apiKey,
+      });
+
+      debugPrint('[ReverseGeocoding][Google] Request: $url');
+
+      final response = await http.get(url);
+      debugPrint(
+        '[ReverseGeocoding][Google] Response Code: ${response.statusCode}',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['status'] == 'OK') {
+          final results = data['results'] as List;
+          if (results.isNotEmpty) {
+            String? street;
+
+            for (final r in results) {
+              if (r is Map<String, dynamic>) {
+                final comps = r['address_components'];
+                if (comps is List) {
+                  for (final c in comps) {
+                    if (c is Map<String, dynamic>) {
+                      final types =
+                          (c['types'] as List?)?.cast<String>() ?? <String>[];
+                      if (types.contains('route')) {
+                        final name = (c['long_name'] ?? c['short_name'] ?? '')
+                            .toString()
+                            .trim();
+                        if (name.isNotEmpty) {
+                          street = name;
+                          break;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              if (street != null && street!.isNotEmpty) break;
+            }
+
+            if (street == null || street!.isEmpty) {
+              final first = results[0];
+              if (first is Map<String, dynamic>) {
+                final comps = first['address_components'];
+                if (comps is List && comps.isNotEmpty) {
+                  final c0 = comps[0];
+                  if (c0 is Map<String, dynamic>) {
+                    final ln = (c0['long_name'] ?? '').toString().trim();
+                    final types0 =
+                        (c0['types'] as List?)?.cast<String>() ?? <String>[];
+                    final isAdmin = types0.any(
+                      (t) =>
+                          t.startsWith('administrative_area_level') ||
+                          t == 'country' ||
+                          t == 'postal_code',
+                    );
+                    if (ln.isNotEmpty && !isAdmin) {
+                      street = ln;
+                    }
+                  }
+                }
+              }
+            }
+
+            if (street == null || street!.isEmpty) {
+              debugPrint(
+                '[ReverseGeocoding][Google] No suitable street for ($lat, $lng).',
+              );
+              return null;
+            }
+
+            debugPrint(
+              '[ReverseGeocoding][Google] Success (route): $street ($lat, $lng)',
+            );
+            return street;
+          }
+        } else {
+          debugPrint(
+            '[ReverseGeocoding][Google] API Error Status: ${data['status']}',
+          );
+          debugPrint(
+            '[ReverseGeocoding][Google] Error Message: ${data['error_message']}',
+          );
+        }
+      } else {
+        debugPrint(
+          '[ReverseGeocoding][Google] HTTP Error: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      debugPrint('[ReverseGeocoding][Google] Error: $e');
+    }
+    return null;
+  }
+
+  Future<String?> _reverseGeocodeGoogleRoads(double lat, double lng) async {
+    const apiKey = 'AIzaSyDnmzg1NGiODI5clNzFd0G3SkpQm_HavUE';
+    try {
+      final url = Uri.https('roads.googleapis.com', '/v1/nearestRoads', {
+        'points': '$lat,$lng',
+        'key': apiKey,
+      });
+
+      debugPrint('[ReverseGeocoding][Roads] Request: $url');
+
+      final response = await http.get(url);
+      debugPrint(
+        '[ReverseGeocoding][Roads] Response Code: ${response.statusCode}',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final snapped = data['snappedPoints'];
+        if (snapped is List && snapped.isNotEmpty) {
+          final first = snapped[0] as Map<String, dynamic>;
+          final loc = first['location'] as Map<String, dynamic>?;
+          if (loc != null) {
+            final snappedLat = (loc['latitude'] as num).toDouble();
+            final snappedLng = (loc['longitude'] as num).toDouble();
+            debugPrint(
+              '[ReverseGeocoding][Roads] Snapped to $snappedLat,$snappedLng',
+            );
+            return _reverseGeocodeGoogleRoute(snappedLat, snappedLng);
+          }
+        } else {
+          debugPrint(
+            '[ReverseGeocoding][Roads] No snappedPoints for ($lat,$lng)',
+          );
+        }
+      } else {
+        debugPrint(
+          '[ReverseGeocoding][Roads] HTTP Error: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      debugPrint('[ReverseGeocoding][Roads] Error: $e');
+    }
+    return null;
+  }
+
+  Future<String?> _reverseGeocodeOsm(double lat, double lng) async {
+    try {
+      final url = Uri.https('nominatim.openstreetmap.org', '/reverse', {
+        'format': 'jsonv2',
+        'lat': '$lat',
+        'lon': '$lng',
+        'zoom': '18',
+        'addressdetails': '1',
+      });
+
+      debugPrint('[ReverseGeocoding][OSM] Request: $url');
+
+      final response = await http.get(
+        url,
+        headers: {'User-Agent': 'direktori-app/1.0'},
+      );
+
+      debugPrint(
+        '[ReverseGeocoding][OSM] Response Code: ${response.statusCode}',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final addr = data['address'] as Map<String, dynamic>?;
+        if (addr != null) {
+          final candidates =
+              [
+                    addr['road'],
+                    addr['pedestrian'],
+                    addr['footway'],
+                    addr['cycleway'],
+                    addr['path'],
+                  ]
+                  .whereType<String>()
+                  .map((e) => e.trim())
+                  .where((e) => e.isNotEmpty)
+                  .toList();
+
+          if (candidates.isNotEmpty) {
+            final street = candidates.first;
+            debugPrint(
+              '[ReverseGeocoding][OSM] Success (road): $street ($lat, $lng)',
+            );
+            return street;
+          }
+        }
+      } else {
+        debugPrint(
+          '[ReverseGeocoding][OSM] HTTP Error: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      debugPrint('[ReverseGeocoding][OSM] Error: $e');
+    }
+    return null;
+  }
+
+  Future<String?> _reverseGeocode(double lat, double lng) async {
+    final fromGoogleRoute = await _reverseGeocodeGoogleRoute(lat, lng);
+    if (fromGoogleRoute != null && fromGoogleRoute.isNotEmpty) {
+      return fromGoogleRoute;
+    }
+
+    final fromRoads = await _reverseGeocodeGoogleRoads(lat, lng);
+    if (fromRoads != null && fromRoads.isNotEmpty) {
+      return fromRoads;
+    }
+
+    final fromOsm = await _reverseGeocodeOsm(lat, lng);
+    if (fromOsm != null && fromOsm.isNotEmpty) {
+      return fromOsm;
+    }
+
+    return null;
+  }
+
   // Helper untuk mencari polygon yang sesuai dengan kode wilayah
   List<_SlsPolygon> _findTargetPolygons(String kodeWilayah) {
     String recCode = kodeWilayah.replaceAll('.', '').trim();
@@ -3278,6 +3509,200 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
     }
   }
 
+  Future<void> _handleBulkTambahAlamat() async {
+    final selected = _dataGridController.selectedRows;
+    if (selected.isEmpty) return;
+
+    final records = <GroundcheckRecord>[];
+    if (_dataSource != null) {
+      for (final row in selected) {
+        final r = _dataSource!.getRecord(row);
+        if (r != null) records.add(r);
+      }
+    }
+
+    if (records.isEmpty) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Tambah Alamat dari Koordinat (${records.length})'),
+        content: const Text(
+          'Sistem akan mencari alamat (reverse geocoding) berdasarkan titik koordinat yang sudah ada.\n'
+          'Hanya record dengan koordinat valid yang akan diproses.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Mulai'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final ValueNotifier<int> progressNotifier = ValueNotifier(0);
+    final ValueNotifier<int> successNotifier = ValueNotifier(0);
+    final ValueNotifier<int> failNotifier = ValueNotifier(0);
+    final ValueNotifier<String> statusNotifier = ValueNotifier('Menyiapkan...');
+    bool isCancelled = false;
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('Proses Tambah Alamat'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ValueListenableBuilder<String>(
+                  valueListenable: statusNotifier,
+                  builder: (_, val, __) =>
+                      Text(val, textAlign: TextAlign.center),
+                ),
+                const SizedBox(height: 16),
+                ValueListenableBuilder<int>(
+                  valueListenable: progressNotifier,
+                  builder: (_, val, __) => LinearProgressIndicator(
+                    value: records.isNotEmpty ? val / records.length : 0,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    ValueListenableBuilder<int>(
+                      valueListenable: successNotifier,
+                      builder: (_, val, __) => Column(
+                        children: [
+                          const Text(
+                            'Berhasil',
+                            style: TextStyle(
+                              color: Colors.green,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text('$val'),
+                        ],
+                      ),
+                    ),
+                    ValueListenableBuilder<int>(
+                      valueListenable: failNotifier,
+                      builder: (_, val, __) => Column(
+                        children: [
+                          const Text(
+                            'Gagal',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text('$val'),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      children: [
+                        const Text(
+                          'Total',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text('${records.length}'),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton(
+                  onPressed: () {
+                    isCancelled = true;
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Batal'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    int success = 0;
+    int fail = 0;
+
+    for (int i = 0; i < records.length; i++) {
+      if (isCancelled) break;
+      final record = records[i];
+
+      statusNotifier.value =
+          'Memproses (${i + 1}/${records.length})\n${record.namaUsaha}';
+
+      final lat = double.tryParse(record.latitude);
+      final lng = double.tryParse(record.longitude);
+
+      if (lat == null ||
+          lng == null ||
+          lat == 0 ||
+          lng == 0 ||
+          lat < -90 ||
+          lat > 90 ||
+          lng < -180 ||
+          lng > 180) {
+        debugPrint(
+          '[ReverseGeocoding] Skip: Koordinat tidak valid untuk ${record.idsbr}',
+        );
+        fail++;
+        failNotifier.value = fail;
+        progressNotifier.value = i + 1;
+        continue;
+      }
+
+      try {
+        final address = await _reverseGeocode(lat, lng);
+        if (address == null || address.isEmpty) {
+          fail++;
+          failNotifier.value = fail;
+        } else {
+          final newRecord = record.copyWith(alamatUsaha: address);
+          await _supabaseService.updateRecord(newRecord);
+          await _supabaseService.updateLocalRecord(newRecord);
+          success++;
+          successNotifier.value = success;
+        }
+      } catch (e) {
+        debugPrint('[ReverseGeocoding] DB Error: $e');
+        fail++;
+        failNotifier.value = fail;
+      }
+
+      progressNotifier.value = i + 1;
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+
+    if (!isCancelled && mounted) {
+      Navigator.pop(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Tambah Alamat selesai: $success berhasil, $fail gagal.',
+          ),
+          backgroundColor: success > 0 ? Colors.green : Colors.orange,
+        ),
+      );
+
+      _loadData();
+    }
+  }
+
   Future<void> _handleBulkTambahUsaha() async {
     final selected = _dataGridController.selectedRows;
     if (selected.isEmpty) return;
@@ -3740,7 +4165,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       }
 
       List<GroundcheckRecord> pendingRecords = List.from(validRecords);
-      int maxRetries = 3;
+      int maxRetries = 1;
 
       for (int attempt = 1; attempt <= maxRetries; attempt++) {
         if (isCancelledNotifier.value) break;
@@ -3995,7 +4420,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
               // --- PROACTIVE ROTATION LOGIC (Every 30 items) ---
               itemsSentWithCurrentAccount++;
               // Hanya rotasi jika ada lebih dari 1 akun tersedia
-              if (itemsSentWithCurrentAccount >= 30 &&
+              if (itemsSentWithCurrentAccount >= 12289 &&
                   AccountManagerService().accounts.length > 1) {
                 final nextAccount = AccountManagerService()
                     .getNextAvailableAccount(_currentLoginId);
@@ -4075,7 +4500,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
           }
 
           // Jeda 10 detik antar record (Wajib untuk semua item)
-          for (int t = 4; t > 0; t--) {
+          for (int t = 1; t > 0; t--) {
             if (isCancelledNotifier.value) break;
             statusNotifier.value =
                 'Cooldown ${t}s sebelum proses berikutnya...';
@@ -4658,6 +5083,14 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
                         icon: const Icon(Icons.close),
                         label: const Text('Batal Pilih'),
                         backgroundColor: Colors.grey,
+                      ),
+                      const SizedBox(width: 16),
+                      FloatingActionButton.extended(
+                        heroTag: 'fab_add_address',
+                        onPressed: _handleBulkTambahAlamat,
+                        icon: const Icon(Icons.place),
+                        label: const Text('Tambah Alamat'),
+                        backgroundColor: Colors.indigo,
                       ),
                       const SizedBox(width: 16),
                       FloatingActionButton.extended(

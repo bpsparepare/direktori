@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -15,6 +16,30 @@ import 'map_type.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../utils/map_download_helper.dart';
+
+class _ClipboardParsedRow {
+  final int no;
+  final String name;
+  final String address;
+  final String rawLatitude;
+  final String rawLongitude;
+  final double? latitude;
+  final double? longitude;
+  final String? error;
+
+  const _ClipboardParsedRow({
+    required this.no,
+    required this.name,
+    required this.address,
+    required this.rawLatitude,
+    required this.rawLongitude,
+    required this.latitude,
+    required this.longitude,
+    required this.error,
+  });
+
+  bool get isValid => error == null && latitude != null && longitude != null;
+}
 
 class MapControls extends StatefulWidget {
   final MapController mapController;
@@ -43,6 +68,7 @@ class MapControls extends StatefulWidget {
   final Function(bool)? onToggleNonVerifiedGroundchecks;
   final bool isPolygonSelected; // Boolean to track if a polygon is selected
   final VoidCallback? onToggleFontSize; // Callback for font size toggle
+  final void Function(LatLng point, String label)? onClipboardPointSelected;
 
   const MapControls({
     super.key,
@@ -70,6 +96,7 @@ class MapControls extends StatefulWidget {
     this.onToggleNonVerifiedGroundchecks,
     this.isPolygonSelected = false, // Initialize
     this.onToggleFontSize,
+    this.onClipboardPointSelected,
   });
 
   @override
@@ -81,6 +108,457 @@ class _MapControlsState extends State<MapControls> {
   String _appVersion = '';
   bool _hasPromptedDownload = false;
   StreamSubscription<Position>? _positionStreamSubscription;
+  String _cachedClipboardText = '';
+  List<_ClipboardParsedRow> _cachedClipboardRows = const [];
+
+  double? _tryParseCoordinate(String input) {
+    final match = RegExp(r'(-?\d+(?:[.,]\d+)?)').firstMatch(input);
+    if (match == null) return null;
+    final normalized = match.group(1)!.replaceAll(',', '.').trim();
+    return double.tryParse(normalized);
+  }
+
+  ({String name, String address, double latitude, double longitude})?
+  _tryParseClipboardText(String raw) {
+    final text = raw.replaceAll('\u00A0', ' ').replaceAll('\r', '\n').trim();
+    if (text.isEmpty) return null;
+
+    final latMatch = RegExp(
+      r'(?:\blat(?:itude)?\b)[^\d-]*(-?\d+(?:[.,]\d+)?)',
+      caseSensitive: false,
+    ).firstMatch(text);
+    final lngMatch = RegExp(
+      r'(?:\b(?:lng|lon|long|longitude)\b)[^\d-]*(-?\d+(?:[.,]\d+)?)',
+      caseSensitive: false,
+    ).firstMatch(text);
+
+    double? lat;
+    double? lng;
+    if (latMatch != null) {
+      lat = _tryParseCoordinate(latMatch.group(1) ?? '');
+    }
+    if (lngMatch != null) {
+      lng = _tryParseCoordinate(lngMatch.group(1) ?? '');
+    }
+
+    final lines = text
+        .split(RegExp(r'[\n\t]+'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    if ((lat == null || lng == null) && lines.length >= 4) {
+      lat ??= _tryParseCoordinate(lines[2]);
+      lng ??= _tryParseCoordinate(lines[3]);
+    }
+
+    if ((lat == null || lng == null) && text.contains('|')) {
+      final parts = text
+          .split('|')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      if (parts.length >= 4) {
+        lat ??= _tryParseCoordinate(parts[2]);
+        lng ??= _tryParseCoordinate(parts[3]);
+      }
+    }
+
+    String name = '';
+    String address = '';
+    if (lines.isNotEmpty) {
+      name = lines[0];
+      if (lines.length >= 2) address = lines[1];
+    }
+
+    if ((lat == null || lng == null) && RegExp(r'[-\d]').hasMatch(text)) {
+      final allMatches = RegExp(
+        r'(-?\d+(?:[.,]\d+)?)',
+      ).allMatches(text).toList();
+      final numbers = allMatches
+          .map((m) => m.group(1)!.replaceAll(',', '.'))
+          .map(double.tryParse)
+          .whereType<double>()
+          .toList();
+
+      for (var i = 0; i + 1 < numbers.length; i++) {
+        final a = numbers[i];
+        final b = numbers[i + 1];
+        final aLatOk = a >= -90 && a <= 90;
+        final bLngOk = b >= -180 && b <= 180;
+        if (aLatOk && bLngOk) {
+          lat ??= a;
+          lng ??= b;
+          break;
+        }
+      }
+    }
+
+    if (name.trim().isEmpty || address.trim().isEmpty) return null;
+    if (lat == null || lng == null) return null;
+    if (lat < -90 || lat > 90) return null;
+    if (lng < -180 || lng > 180) return null;
+
+    return (name: name, address: address, latitude: lat, longitude: lng);
+  }
+
+  List<_ClipboardParsedRow> _parseClipboardRows(String raw) {
+    final text = raw.replaceAll('\u00A0', ' ').replaceAll('\r', '\n').trim();
+    if (text.isEmpty) return [];
+
+    _ClipboardParsedRow buildRow({
+      required int no,
+      required String name,
+      required String address,
+      required String rawLatitude,
+      required String rawLongitude,
+    }) {
+      final n = name.trim();
+      final a = address.trim();
+      final lat = _tryParseCoordinate(rawLatitude);
+      final lng = _tryParseCoordinate(rawLongitude);
+
+      String? error;
+      if (n.isEmpty) {
+        error = 'Nama kosong';
+      } else if (a.isEmpty) {
+        error = 'Alamat kosong';
+      } else if (lat == null || lng == null) {
+        error = 'Koordinat tidak valid';
+      } else if (lat < -90 || lat > 90) {
+        error = 'Latitude di luar range';
+      } else if (lng < -180 || lng > 180) {
+        error = 'Longitude di luar range';
+      }
+
+      return _ClipboardParsedRow(
+        no: no,
+        name: n,
+        address: a,
+        rawLatitude: rawLatitude.trim(),
+        rawLongitude: rawLongitude.trim(),
+        latitude: lat,
+        longitude: lng,
+        error: error,
+      );
+    }
+
+    if (text.contains('\t')) {
+      final lines = text
+          .split('\n')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      final rows = <_ClipboardParsedRow>[];
+      for (var i = 0; i < lines.length; i++) {
+        final cols = lines[i]
+            .split(RegExp(r'\t+'))
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+        if (cols.length < 4) {
+          rows.add(
+            _ClipboardParsedRow(
+              no: i + 1,
+              name: cols.isNotEmpty ? cols[0] : '',
+              address: cols.length >= 2 ? cols[1] : '',
+              rawLatitude: cols.length >= 3 ? cols[2] : '',
+              rawLongitude: cols.length >= 4 ? cols[3] : '',
+              latitude: null,
+              longitude: null,
+              error: 'Kolom kurang (butuh 4 kolom)',
+            ),
+          );
+          continue;
+        }
+
+        rows.add(
+          buildRow(
+            no: i + 1,
+            name: cols[0],
+            address: cols[1],
+            rawLatitude: cols[2],
+            rawLongitude: cols[3],
+          ),
+        );
+      }
+      return rows;
+    }
+
+    final lines = text
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    if (lines.length >= 4 && lines.length % 4 == 0) {
+      final rows = <_ClipboardParsedRow>[];
+      for (var i = 0; i < lines.length; i += 4) {
+        final no = (i ~/ 4) + 1;
+        rows.add(
+          buildRow(
+            no: no,
+            name: lines[i],
+            address: lines[i + 1],
+            rawLatitude: lines[i + 2],
+            rawLongitude: lines[i + 3],
+          ),
+        );
+      }
+      return rows;
+    }
+
+    if (lines.any((l) => l.contains('|'))) {
+      final rows = <_ClipboardParsedRow>[];
+      final candidates = lines
+          .where((l) => l.contains('|'))
+          .map((l) => l.trim())
+          .toList();
+      for (var i = 0; i < candidates.length; i++) {
+        final parts = candidates[i]
+            .split('|')
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+        if (parts.length < 4) {
+          rows.add(
+            _ClipboardParsedRow(
+              no: i + 1,
+              name: parts.isNotEmpty ? parts[0] : '',
+              address: parts.length >= 2 ? parts[1] : '',
+              rawLatitude: parts.length >= 3 ? parts[2] : '',
+              rawLongitude: parts.length >= 4 ? parts[3] : '',
+              latitude: null,
+              longitude: null,
+              error: 'Kolom kurang (butuh 4 kolom)',
+            ),
+          );
+          continue;
+        }
+        rows.add(
+          buildRow(
+            no: i + 1,
+            name: parts[0],
+            address: parts[1],
+            rawLatitude: parts[2],
+            rawLongitude: parts[3],
+          ),
+        );
+      }
+      if (rows.isNotEmpty) return rows;
+    }
+
+    final single = _tryParseClipboardText(text);
+    if (single != null) {
+      return [
+        _ClipboardParsedRow(
+          no: 1,
+          name: single.name,
+          address: single.address,
+          rawLatitude: single.latitude.toString(),
+          rawLongitude: single.longitude.toString(),
+          latitude: single.latitude,
+          longitude: single.longitude,
+          error: null,
+        ),
+      ];
+    }
+
+    return [];
+  }
+
+  Future<void> _showClipboardCheckDialog() async {
+    List<_ClipboardParsedRow> rows = const [];
+    String? errorText;
+    final controller = TextEditingController();
+
+    try {
+      controller.text = _cachedClipboardText;
+      rows = _cachedClipboardRows;
+      if (rows.isEmpty && controller.text.trim().isNotEmpty) {
+        rows = _parseClipboardRows(controller.text);
+      }
+      if (rows.isNotEmpty) {
+        errorText = null;
+      } else if (controller.text.trim().isNotEmpty) {
+        errorText =
+            'Data tidak valid / tidak terdeteksi. Pastikan formatnya benar.';
+      }
+
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              void recompute() {
+                setDialogState(() {
+                  rows = _parseClipboardRows(controller.text);
+                  errorText = rows.isEmpty
+                      ? 'Data tidak valid / tidak terdeteksi. Pastikan formatnya benar.'
+                      : null;
+                });
+                _cachedClipboardText = controller.text;
+                _cachedClipboardRows = rows;
+              }
+
+              final validCount = rows.where((r) => r.isValid).length;
+              return AlertDialog(
+                title: const Text('Cek Data Clipboard'),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Format yang didukung: multi-row dari Excel (kolom dipisah tab): Nama, Alamat, Latitude, Longitude. Bisa juga 4 baris per data.',
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final data = await Clipboard.getData(
+                            Clipboard.kTextPlain,
+                          );
+                          controller.text = data?.text?.trim() ?? '';
+                          recompute();
+                        },
+                        icon: const Icon(Icons.content_paste),
+                        label: const Text('Ambil dari Clipboard'),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        minLines: 3,
+                        maxLines: 6,
+                        decoration: const InputDecoration(
+                          labelText: 'Teks clipboard',
+                          border: OutlineInputBorder(),
+                        ),
+                        controller: controller,
+                        onChanged: (_) => recompute(),
+                      ),
+                      if (rows.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Text('Valid: $validCount / ${rows.length}'),
+                      ],
+                      if (errorText != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          errorText!,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      ],
+                      if (rows.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DataTable(
+                            columns: const [
+                              DataColumn(label: Text('No')),
+                              DataColumn(label: Text('Nama')),
+                              DataColumn(label: Text('Alamat')),
+                              DataColumn(label: Text('Lat')),
+                              DataColumn(label: Text('Lng')),
+                              DataColumn(label: Text('Aksi')),
+                            ],
+                            rows: rows.map((r) {
+                              final latText =
+                                  r.latitude?.toStringAsFixed(6) ??
+                                  (r.rawLatitude.isEmpty ? '-' : r.rawLatitude);
+                              final lngText =
+                                  r.longitude?.toStringAsFixed(6) ??
+                                  (r.rawLongitude.isEmpty
+                                      ? '-'
+                                      : r.rawLongitude);
+                              return DataRow(
+                                cells: [
+                                  DataCell(Text(r.no.toString())),
+                                  DataCell(
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 220,
+                                      ),
+                                      child: Text(
+                                        r.name.isEmpty ? '-' : r.name,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                  DataCell(
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 280,
+                                      ),
+                                      child: Text(
+                                        r.address.isEmpty ? '-' : r.address,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                  DataCell(Text(latText)),
+                                  DataCell(Text(lngText)),
+                                  DataCell(
+                                    r.isValid
+                                        ? ElevatedButton(
+                                            onPressed: () {
+                                              _cachedClipboardText =
+                                                  controller.text;
+                                              _cachedClipboardRows = rows;
+                                              final target = LatLng(
+                                                r.latitude!,
+                                                r.longitude!,
+                                              );
+                                              Navigator.of(dialogContext).pop();
+                                              widget.mapController.move(
+                                                target,
+                                                18.0,
+                                              );
+                                              widget.onClipboardPointSelected
+                                                  ?.call(target, r.name);
+                                              ScaffoldMessenger.of(
+                                                this.context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    'Menuju: ${r.name}',
+                                                  ),
+                                                  duration: const Duration(
+                                                    milliseconds: 1200,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            child: const Text('Menuju'),
+                                          )
+                                        : Text(
+                                            r.error ?? 'Tidak valid',
+                                            style: const TextStyle(
+                                              color: Colors.red,
+                                            ),
+                                          ),
+                                  ),
+                                ],
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('Tutup'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
 
   @override
   void initState() {
@@ -607,6 +1085,28 @@ class _MapControlsState extends State<MapControls> {
                 onPressed: widget.onToggleFontSize,
                 icon: const Icon(Icons.text_fields, color: Colors.black87),
                 tooltip: 'Ubah Ukuran Font',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: IconButton(
+                onPressed: _showClipboardCheckDialog,
+                icon: const Icon(
+                  Icons.assignment_turned_in,
+                  color: Colors.black87,
+                ),
+                tooltip: 'Cek Data Clipboard',
               ),
             ),
             const SizedBox(height: 8),

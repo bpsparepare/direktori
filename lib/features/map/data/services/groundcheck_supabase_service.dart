@@ -387,6 +387,7 @@ class GroundcheckSupabaseService {
     bool updateTimestamp = true,
   }) async {
     try {
+      final nowIso = DateTime.now().toIso8601String();
       final data = {
         'idsbr': record.idsbr,
         'nama_usaha': record.namaUsaha,
@@ -413,7 +414,7 @@ class GroundcheckSupabaseService {
       }
 
       if (updateTimestamp) {
-        data['updated_at'] = DateTime.now().toIso8601String();
+        data['updated_at'] = nowIso;
       }
 
       if (record.userId != null) {
@@ -430,9 +431,15 @@ class GroundcheckSupabaseService {
 
       // Update local cache
       // Pastikan status isRevisi tersimpan di lokal jika berubah
-      final recordToSave = (record.isUploaded && !record.isRevisi)
-          ? record.copyWith(isRevisi: true)
-          : record;
+      final recordToSave =
+          (record.isUploaded && !record.isRevisi)
+              ? record.copyWith(
+                  isRevisi: true,
+                  updatedAt: updateTimestamp ? nowIso : record.updatedAt,
+                )
+              : record.copyWith(
+                  updatedAt: updateTimestamp ? nowIso : record.updatedAt,
+                );
       await updateLocalRecord(recordToSave);
     } catch (e) {
       print('Error updateRecord: $e');
@@ -532,11 +539,12 @@ class GroundcheckSupabaseService {
     required double longitude,
   }) async {
     try {
+      final nowIso = DateTime.now().toIso8601String();
       // Prepare update data
       final updateData = <String, dynamic>{
         'latitude': latitude.toString(),
         'longitude': longitude.toString(),
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at': nowIso,
       };
 
       // Check local cache for isUploaded status
@@ -561,6 +569,7 @@ class GroundcheckSupabaseService {
           latitude: latitude.toString(),
           longitude: longitude.toString(),
           isRevisi: shouldSetRevisi ? true : old.isRevisi,
+          updatedAt: nowIso,
         );
         records[index] = newRecord;
         await saveLocalRecords(records);
@@ -590,6 +599,7 @@ class GroundcheckSupabaseService {
 
   Future<bool> deleteOrCloseRecord(String idsbr) async {
     try {
+      final nowIso = DateTime.now().toIso8601String();
       // Determine if temp
       final bool isTemp =
           idsbr.toUpperCase().startsWith('TEMP') ||
@@ -611,6 +621,7 @@ class GroundcheckSupabaseService {
           records[index] = old.copyWith(
             gcsResult: '3', // Tutup
             isRevisi: shouldSetRevisi ? true : old.isRevisi,
+            updatedAt: nowIso,
           );
         }
         await saveLocalRecords(records);
@@ -622,7 +633,7 @@ class GroundcheckSupabaseService {
       } else {
         final updateData = <String, dynamic>{
           'gcs_result': '3', // Tutup
-          'updated_at': DateTime.now().toIso8601String(),
+          'updated_at': nowIso,
         };
         if (shouldSetRevisi) {
           updateData['is_revisi'] = true;
@@ -648,6 +659,7 @@ class GroundcheckSupabaseService {
     String? alamatUsaha,
   }) async {
     try {
+      final nowIso = DateTime.now().toIso8601String();
       // Check local for isUploaded status
       final records = await loadLocalRecords();
       final index = records.indexWhere((r) => r.idsbr == idsbr);
@@ -661,7 +673,7 @@ class GroundcheckSupabaseService {
 
       final data = <String, dynamic>{
         'gcs_result': hasilGc,
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at': nowIso,
       };
       if (shouldSetRevisi) {
         data['is_revisi'] = true;
@@ -687,6 +699,7 @@ class GroundcheckSupabaseService {
           gcsResult: hasilGc,
           userId: userId ?? old.userId,
           isRevisi: shouldSetRevisi ? true : old.isRevisi,
+          updatedAt: nowIso,
         );
         records[index] = newRecord;
         await saveLocalRecords(records);
@@ -700,13 +713,14 @@ class GroundcheckSupabaseService {
 
   Future<bool> resetRevisiStatus(String idsbr) async {
     try {
+      final nowIso = DateTime.now().toIso8601String();
       // 1. Update Supabase
       await _client
           .from(_tableName)
           .update({
             'isUploaded': false,
             'is_revisi': false,
-            'updated_at': DateTime.now().toIso8601String(),
+            'updated_at': nowIso,
           })
           .eq('idsbr', idsbr);
 
@@ -715,7 +729,11 @@ class GroundcheckSupabaseService {
       final index = records.indexWhere((r) => r.idsbr == idsbr);
       if (index != -1) {
         final old = records[index];
-        records[index] = old.copyWith(isUploaded: false, isRevisi: false);
+        records[index] = old.copyWith(
+          isUploaded: false,
+          isRevisi: false,
+          updatedAt: nowIso,
+        );
         await saveLocalRecords(records);
       }
       return true;
