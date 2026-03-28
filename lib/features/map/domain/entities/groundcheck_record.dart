@@ -19,6 +19,7 @@ class GroundcheckRecord {
   final bool isRevisi;
   final bool allowCancel;
   final String updatedAt;
+  final String? gcUsername;
 
   GroundcheckRecord({
     required this.idsbr,
@@ -41,6 +42,7 @@ class GroundcheckRecord {
     this.isRevisi = false,
     this.allowCancel = true,
     this.updatedAt = '',
+    this.gcUsername,
   });
 
   factory GroundcheckRecord.fromJson(Map<String, dynamic> json) {
@@ -69,6 +71,7 @@ class GroundcheckRecord {
       isRevisi: json['is_revisi'] == true || json['isRevisi'] == true,
       allowCancel: json['allow_cancel'] != false,
       updatedAt: (json['updated_at'] ?? json['updatedAt'] ?? '').toString(),
+      gcUsername: json['gc_username']?.toString(),
     );
   }
 
@@ -94,6 +97,7 @@ class GroundcheckRecord {
       'isRevisi': isRevisi,
       'allow_cancel': allowCancel,
       'updated_at': updatedAt,
+      'gc_username': gcUsername,
     };
   }
 
@@ -118,6 +122,7 @@ class GroundcheckRecord {
     bool? isRevisi,
     bool? allowCancel,
     String? updatedAt,
+    String? gcUsername,
   }) {
     return GroundcheckRecord(
       idsbr: idsbr ?? this.idsbr,
@@ -139,6 +144,7 @@ class GroundcheckRecord {
       isUploaded: isUploaded ?? this.isUploaded,
       isRevisi: isRevisi ?? this.isRevisi,
       allowCancel: allowCancel ?? this.allowCancel,
+      gcUsername: gcUsername ?? this.gcUsername,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }

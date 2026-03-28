@@ -137,8 +137,27 @@ class _DuplicatePageState extends State<DuplicatePage> {
         return DuplicateGroup(groupId: entry.key, records: entry.value);
       }).toList();
 
-      // Sort by Group ID (numeric aware)
+      // Sort by Group ID (numeric aware) with empty/null gcsResult priority
       groups.sort((a, b) {
+        // Function to check if a group has any valid gcsResult
+        bool hasGcsResult(DuplicateGroup group) {
+          return group.records.any((record) {
+            final localRecord =
+                localMap[record.perusahaanId.trim()] ??
+                localMap[record.perusahaanId.replaceAll(RegExp(r'[^0-9]'), '')];
+            return localRecord?.gcsResult != null &&
+                localRecord!.gcsResult.isNotEmpty &&
+                localRecord.gcsResult != '0';
+          });
+        }
+
+        final aHasResult = hasGcsResult(a);
+        final bHasResult = hasGcsResult(b);
+
+        // Prioritize groups where NO record has a result (put them first)
+        if (!aHasResult && bHasResult) return -1;
+        if (aHasResult && !bHasResult) return 1;
+
         // Extract numbers from "DUP_123" format
         final regExp = RegExp(r'(\d+)');
         final matchA = regExp.firstMatch(a.groupId);

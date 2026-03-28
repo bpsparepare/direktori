@@ -1,0 +1,902 @@
+artinya sy masih bermasalah cari ini
+.
+bisa tambah baru untuk kabupaten sidrap, jadi buat file lain.
+yg mau pakai kemudian hari
+berikut datanya
+[{"id":"34380","deleted":null,"kode":"010","locked":"1","nama":"PANCA LAUTANG","kabupaten_kota_id":"2573"},{"id":"34381","deleted":null,"kode":"020","locked":"1","nama":"TELLULIMPO E","kabupaten_kota_id":"2573"},{"id":"34382","deleted":null,"kode":"030","locked":"1","nama":"WATANG PULU","kabupaten_kota_id":"2573"},{"id":"34383","deleted":null,"kode":"040","locked":"1","nama":"BARANTI","kabupaten_kota_id":"2573"},{"id":"34384","deleted":null,"kode":"050","locked":"1","nama":"PANCA RIJANG","kabupaten_kota_id":"2573"},{"id":"34385","deleted":null,"kode":"051","locked":"1","nama":"KULO","kabupaten_kota_id":"2573"},{"id":"34386","deleted":null,"kode":"060","locked":"1","nama":"MARITENGNGAE","kabupaten_kota_id":"2573"},{"id":"34387","deleted":null,"kode":"061","locked":"1","nama":"WATANG SIDENRENG","kabupaten_kota_id":"2573"},{"id":"34388","deleted":null,"kode":"070","locked":"1","nama":"PITU RIAWA","kabupaten_kota_id":"2573"},{"id":"34389","deleted":null,"kode":"080","locked":"1","nama":"DUAPITUE","kabupaten_kota_id":"2573"},{"id":"34390","deleted":null,"kode":"081","locked":"1","nama":"PITU RIASE","kabupaten_kota_id":"2573"}]
+
+[{"id":"480370","deleted":null,"kode":"001","locked":"1","nama":"CENRANA","urban":"1","kecamatan_id":"34380"},{"id":"480371","deleted":null,"kode":"002","locked":"1","nama":"BAPANGI","urban":"1","kecamatan_id":"34380"},{"id":"480372","deleted":null,"kode":"003","locked":"1","nama":"WANIO TIMORENG","urban":"1","kecamatan_id":"34380"},{"id":"480373","deleted":null,"kode":"004","locked":"1","nama":"WANIO","urban":"1","kecamatan_id":"34380"},{"id":"480374","deleted":null,"kode":"005","locked":"1","nama":"BILOKKA","urban":"1","kecamatan_id":"34380"},{"id":"480375","deleted":null,"kode":"006","locked":"1","nama":"CORAWALI","urban":"1","kecamatan_id":"34380"},{"id":"480376","deleted":null,"kode":"007","locked":"1","nama":"LISE","urban":"1","kecamatan_id":"34380"},{"id":"480377","deleted":null,"kode":"008","locked":"1","nama":"ALLESALEWOE","urban":"1","kecamatan_id":"34380"},{"id":"480378","deleted":null,"kode":"009","locked":"1","nama":"LAJONGA","urban":"1","kecamatan_id":"34380"},{"id":"480379","deleted":null,"kode":"010","locked":"1","nama":"WETTEE","urban":"1","kecamatan_id":"34380"}]
+
+[
+    {
+        "id": "480380",
+        "deleted": null,
+        "kode": "001",
+        "locked": "1",
+        "nama": "TEPPO",
+        "urban": "1",
+        "kecamatan_id": "34381"
+    },
+    {
+        "id": "480381",
+        "deleted": null,
+        "kode": "002",
+        "locked": "1",
+        "nama": "MASSEPE",
+        "urban": "1",
+        "kecamatan_id": "34381"
+    },
+    {
+        "id": "480382",
+        "deleted": null,
+        "kode": "004",
+        "locked": "1",
+        "nama": "PAJALELE",
+        "urban": "1",
+        "kecamatan_id": "34381"
+    },
+    {
+        "id": "480383",
+        "deleted": null,
+        "kode": "005",
+        "locked": "1",
+        "nama": "POLEWALI",
+        "urban": "1",
+        "kecamatan_id": "34381"
+    },
+    {
+        "id": "480384",
+        "deleted": null,
+        "kode": "006",
+        "locked": "1",
+        "nama": "TETEAJI",
+        "urban": "1",
+        "kecamatan_id": "34381"
+    },
+    {
+        "id": "480385",
+        "deleted": null,
+        "kode": "007",
+        "locked": "1",
+        "nama": "AMPARITA",
+        "urban": "1",
+        "kecamatan_id": "34381"
+    },
+    {
+        "id": "480386",
+        "deleted": null,
+        "kode": "008",
+        "locked": "1",
+        "nama": "BAULA",
+        "urban": "1",
+        "kecamatan_id": "34381"
+    },
+    {
+        "id": "480387",
+        "deleted": null,
+        "kode": "009",
+        "locked": "1",
+        "nama": "TODANG PULU",
+        "urban": "1",
+        "kecamatan_id": "34381"
+    },
+    {
+        "id": "480388",
+        "deleted": null,
+        "kode": "010",
+        "locked": "1",
+        "nama": "ARATENG",
+        "urban": "1",
+        "kecamatan_id": "34381"
+    }
+]
+
+[
+    {
+        "id": "480389",
+        "deleted": null,
+        "kode": "001",
+        "locked": "1",
+        "nama": "MATTIROTASI",
+        "urban": "1",
+        "kecamatan_id": "34382"
+    },
+    {
+        "id": "480390",
+        "deleted": null,
+        "kode": "002",
+        "locked": "1",
+        "nama": "BUAE",
+        "urban": "1",
+        "kecamatan_id": "34382"
+    },
+    {
+        "id": "480391",
+        "deleted": null,
+        "kode": "003",
+        "locked": "1",
+        "nama": "LAINUNGAN",
+        "urban": "1",
+        "kecamatan_id": "34382"
+    },
+    {
+        "id": "480392",
+        "deleted": null,
+        "kode": "004",
+        "locked": "1",
+        "nama": "LAWAWOI",
+        "urban": "1",
+        "kecamatan_id": "34382"
+    },
+    {
+        "id": "480393",
+        "deleted": null,
+        "kode": "005",
+        "locked": "1",
+        "nama": "BANGKAI",
+        "urban": "1",
+        "kecamatan_id": "34382"
+    },
+    {
+        "id": "480394",
+        "deleted": null,
+        "kode": "006",
+        "locked": "1",
+        "nama": "ULUALE",
+        "urban": "1",
+        "kecamatan_id": "34382"
+    },
+    {
+        "id": "480395",
+        "deleted": null,
+        "kode": "007",
+        "locked": "1",
+        "nama": "ARAWA",
+        "urban": "1",
+        "kecamatan_id": "34382"
+    },
+    {
+        "id": "480396",
+        "deleted": null,
+        "kode": "008",
+        "locked": "1",
+        "nama": "BATULAPPA",
+        "urban": "1",
+        "kecamatan_id": "34382"
+    },
+    {
+        "id": "480397",
+        "deleted": null,
+        "kode": "009",
+        "locked": "1",
+        "nama": "CIRO-CIROE",
+        "urban": "1",
+        "kecamatan_id": "34382"
+    },
+    {
+        "id": "480398",
+        "deleted": null,
+        "kode": "010",
+        "locked": "1",
+        "nama": "CARAWALI",
+        "urban": "1",
+        "kecamatan_id": "34382"
+    }
+]
+
+[
+    {
+        "id": "480399",
+        "deleted": null,
+        "kode": "001",
+        "locked": "1",
+        "nama": "MANISA",
+        "urban": "1",
+        "kecamatan_id": "34383"
+    },
+    {
+        "id": "480400",
+        "deleted": null,
+        "kode": "002",
+        "locked": "1",
+        "nama": "PANRENG",
+        "urban": "1",
+        "kecamatan_id": "34383"
+    },
+    {
+        "id": "480401",
+        "deleted": null,
+        "kode": "003",
+        "locked": "1",
+        "nama": "BENTENG",
+        "urban": "1",
+        "kecamatan_id": "34383"
+    },
+    {
+        "id": "480402",
+        "deleted": null,
+        "kode": "004",
+        "locked": "1",
+        "nama": "BARANTI",
+        "urban": "1",
+        "kecamatan_id": "34383"
+    },
+    {
+        "id": "480403",
+        "deleted": null,
+        "kode": "005",
+        "locked": "1",
+        "nama": "SIPODECENG",
+        "urban": "1",
+        "kecamatan_id": "34383"
+    },
+    {
+        "id": "480404",
+        "deleted": null,
+        "kode": "006",
+        "locked": "1",
+        "nama": "PASSENO",
+        "urban": "1",
+        "kecamatan_id": "34383"
+    },
+    {
+        "id": "480405",
+        "deleted": null,
+        "kode": "007",
+        "locked": "1",
+        "nama": "DUAMPANUA",
+        "urban": "1",
+        "kecamatan_id": "34383"
+    },
+    {
+        "id": "480406",
+        "deleted": null,
+        "kode": "008",
+        "locked": "1",
+        "nama": "TONRONGE",
+        "urban": "1",
+        "kecamatan_id": "34383"
+    },
+    {
+        "id": "480407",
+        "deleted": null,
+        "kode": "009",
+        "locked": "1",
+        "nama": "TONRONG RIJANG",
+        "urban": "1",
+        "kecamatan_id": "34383"
+    }
+]
+
+[
+    {
+        "id": "480408",
+        "deleted": null,
+        "kode": "001",
+        "locked": "1",
+        "nama": "KADIDI",
+        "urban": "1",
+        "kecamatan_id": "34384"
+    },
+    {
+        "id": "480409",
+        "deleted": null,
+        "kode": "002",
+        "locked": "1",
+        "nama": "MACORAWALIE",
+        "urban": "1",
+        "kecamatan_id": "34384"
+    },
+    {
+        "id": "480410",
+        "deleted": null,
+        "kode": "003",
+        "locked": "1",
+        "nama": "TIMORENG PANUA",
+        "urban": "1",
+        "kecamatan_id": "34384"
+    },
+    {
+        "id": "480411",
+        "deleted": null,
+        "kode": "004",
+        "locked": "1",
+        "nama": "CIPOTAKARI",
+        "urban": "1",
+        "kecamatan_id": "34384"
+    },
+    {
+        "id": "480412",
+        "deleted": null,
+        "kode": "005",
+        "locked": "1",
+        "nama": "BULO",
+        "urban": "1",
+        "kecamatan_id": "34384"
+    },
+    {
+        "id": "480413",
+        "deleted": null,
+        "kode": "006",
+        "locked": "1",
+        "nama": "BULO WATTANG",
+        "urban": "1",
+        "kecamatan_id": "34384"
+    },
+    {
+        "id": "480414",
+        "deleted": null,
+        "kode": "007",
+        "locked": "1",
+        "nama": "LALEBATA",
+        "urban": "1",
+        "kecamatan_id": "34384"
+    },
+    {
+        "id": "480415",
+        "deleted": null,
+        "kode": "008",
+        "locked": "1",
+        "nama": "RAPPANG",
+        "urban": "1",
+        "kecamatan_id": "34384"
+    }
+]
+
+[
+    {
+        "id": "480416",
+        "deleted": null,
+        "kode": "001",
+        "locked": "1",
+        "nama": "MARIO",
+        "urban": "1",
+        "kecamatan_id": "34385"
+    },
+    {
+        "id": "480417",
+        "deleted": null,
+        "kode": "002",
+        "locked": "1",
+        "nama": "RIJANG PANUA",
+        "urban": "1",
+        "kecamatan_id": "34385"
+    },
+    {
+        "id": "480418",
+        "deleted": null,
+        "kode": "003",
+        "locked": "1",
+        "nama": "KULO",
+        "urban": "1",
+        "kecamatan_id": "34385"
+    },
+    {
+        "id": "480419",
+        "deleted": null,
+        "kode": "004",
+        "locked": "1",
+        "nama": "ABBOKONGANG",
+        "urban": "1",
+        "kecamatan_id": "34385"
+    },
+    {
+        "id": "480420",
+        "deleted": null,
+        "kode": "005",
+        "locked": "1",
+        "nama": "MADDENRA",
+        "urban": "1",
+        "kecamatan_id": "34385"
+    },
+    {
+        "id": "480421",
+        "deleted": null,
+        "kode": "006",
+        "locked": "1",
+        "nama": "BINA BARU",
+        "urban": "1",
+        "kecamatan_id": "34385"
+    }
+]
+[
+    {
+        "id": "480422",
+        "deleted": null,
+        "kode": "001",
+        "locked": "1",
+        "nama": "TAKKALASI",
+        "urban": "1",
+        "kecamatan_id": "34386"
+    },
+    {
+        "id": "480423",
+        "deleted": null,
+        "kode": "002",
+        "locked": "1",
+        "nama": "ALLAKUANG",
+        "urban": "1",
+        "kecamatan_id": "34386"
+    },
+    {
+        "id": "480424",
+        "deleted": null,
+        "kode": "003",
+        "locked": "1",
+        "nama": "TANETE",
+        "urban": "1",
+        "kecamatan_id": "34386"
+    },
+    {
+        "id": "480425",
+        "deleted": null,
+        "kode": "004",
+        "locked": "1",
+        "nama": "LAUTANG BENTENG",
+        "urban": "1",
+        "kecamatan_id": "34386"
+    },
+    {
+        "id": "480426",
+        "deleted": null,
+        "kode": "005",
+        "locked": "1",
+        "nama": "RIJANG PITTU",
+        "urban": "1",
+        "kecamatan_id": "34386"
+    },
+    {
+        "id": "480427",
+        "deleted": null,
+        "kode": "006",
+        "locked": "1",
+        "nama": "LAKESSI",
+        "urban": "1",
+        "kecamatan_id": "34386"
+    },
+    {
+        "id": "480428",
+        "deleted": null,
+        "kode": "007",
+        "locked": "1",
+        "nama": "PANGKAJENE",
+        "urban": "1",
+        "kecamatan_id": "34386"
+    },
+    {
+        "id": "480429",
+        "deleted": null,
+        "kode": "008",
+        "locked": "1",
+        "nama": "WALA",
+        "urban": "1",
+        "kecamatan_id": "34386"
+    },
+    {
+        "id": "480430",
+        "deleted": null,
+        "kode": "009",
+        "locked": "1",
+        "nama": "MAJJELLING",
+        "urban": "1",
+        "kecamatan_id": "34386"
+    },
+    {
+        "id": "480431",
+        "deleted": null,
+        "kode": "010",
+        "locked": "1",
+        "nama": "MAJELLING WATANG",
+        "urban": "1",
+        "kecamatan_id": "34386"
+    },
+    {
+        "id": "480432",
+        "deleted": null,
+        "kode": "011",
+        "locked": "1",
+        "nama": "SEREANG",
+        "urban": "1",
+        "kecamatan_id": "34386"
+    },
+    {
+        "id": "480433",
+        "deleted": null,
+        "kode": "012",
+        "locked": "1",
+        "nama": "KANIE",
+        "urban": "1",
+        "kecamatan_id": "34386"
+    }
+]
+
+[
+    {
+        "id": "480434",
+        "deleted": null,
+        "kode": "001",
+        "locked": "1",
+        "nama": "KANYUARA",
+        "urban": "1",
+        "kecamatan_id": "34387"
+    },
+    {
+        "id": "480435",
+        "deleted": null,
+        "kode": "002",
+        "locked": "1",
+        "nama": "SIDENRENG",
+        "urban": "1",
+        "kecamatan_id": "34387"
+    },
+    {
+        "id": "480436",
+        "deleted": null,
+        "kode": "003",
+        "locked": "1",
+        "nama": "EMPAGAE",
+        "urban": "1",
+        "kecamatan_id": "34387"
+    },
+    {
+        "id": "480437",
+        "deleted": null,
+        "kode": "004",
+        "locked": "1",
+        "nama": "MOJONG",
+        "urban": "1",
+        "kecamatan_id": "34387"
+    },
+    {
+        "id": "480438",
+        "deleted": null,
+        "kode": "005",
+        "locked": "1",
+        "nama": "TALUMAE",
+        "urban": "1",
+        "kecamatan_id": "34387"
+    },
+    {
+        "id": "480439",
+        "deleted": null,
+        "kode": "006",
+        "locked": "1",
+        "nama": "AKA-AKAE",
+        "urban": "1",
+        "kecamatan_id": "34387"
+    },
+    {
+        "id": "480440",
+        "deleted": null,
+        "kode": "007",
+        "locked": "1",
+        "nama": "DAMAI",
+        "urban": "1",
+        "kecamatan_id": "34387"
+    },
+    {
+        "id": "480441",
+        "deleted": null,
+        "kode": "008",
+        "locked": "1",
+        "nama": "TALAWE",
+        "urban": "1",
+        "kecamatan_id": "34387"
+    }
+]
+
+[
+    {
+        "id": "480442",
+        "deleted": null,
+        "kode": "001",
+        "locked": "1",
+        "nama": "PONRANGAE",
+        "urban": "1",
+        "kecamatan_id": "34388"
+    },
+    {
+        "id": "480443",
+        "deleted": null,
+        "kode": "002",
+        "locked": "1",
+        "nama": "LANCIRANG",
+        "urban": "1",
+        "kecamatan_id": "34388"
+    },
+    {
+        "id": "480444",
+        "deleted": null,
+        "kode": "003",
+        "locked": "1",
+        "nama": "SUMPANG MANGO",
+        "urban": "1",
+        "kecamatan_id": "34388"
+    },
+    {
+        "id": "480445",
+        "deleted": null,
+        "kode": "004",
+        "locked": "1",
+        "nama": "LASIWALA",
+        "urban": "1",
+        "kecamatan_id": "34388"
+    },
+    {
+        "id": "480446",
+        "deleted": null,
+        "kode": "005",
+        "locked": "1",
+        "nama": "AJUBISSUE",
+        "urban": "1",
+        "kecamatan_id": "34388"
+    },
+    {
+        "id": "480447",
+        "deleted": null,
+        "kode": "006",
+        "locked": "1",
+        "nama": "DONGI",
+        "urban": "1",
+        "kecamatan_id": "34388"
+    },
+    {
+        "id": "480448",
+        "deleted": null,
+        "kode": "007",
+        "locked": "1",
+        "nama": "OTTING",
+        "urban": "1",
+        "kecamatan_id": "34388"
+    },
+    {
+        "id": "480449",
+        "deleted": null,
+        "kode": "008",
+        "locked": "1",
+        "nama": "ANA BANNA",
+        "urban": "1",
+        "kecamatan_id": "34388"
+    },
+    {
+        "id": "480450",
+        "deleted": null,
+        "kode": "009",
+        "locked": "1",
+        "nama": "BULU CENRANA",
+        "urban": "1",
+        "kecamatan_id": "34388"
+    },
+    {
+        "id": "480451",
+        "deleted": null,
+        "kode": "010",
+        "locked": "1",
+        "nama": "BETAO",
+        "urban": "1",
+        "kecamatan_id": "34388"
+    },
+    {
+        "id": "480452",
+        "deleted": null,
+        "kode": "014",
+        "locked": "1",
+        "nama": "BETAO RIASE",
+        "urban": "1",
+        "kecamatan_id": "34388"
+    },
+    {
+        "id": "480453",
+        "deleted": null,
+        "kode": "015",
+        "locked": "1",
+        "nama": "KALEMPANG",
+        "urban": "1",
+        "kecamatan_id": "34388"
+    }
+]
+
+[
+    {
+        "id": "480454",
+        "deleted": null,
+        "kode": "001",
+        "locked": "1",
+        "nama": "PADANGLOANG",
+        "urban": "1",
+        "kecamatan_id": "34389"
+    },
+    {
+        "id": "480455",
+        "deleted": null,
+        "kode": "002",
+        "locked": "1",
+        "nama": "PADANGLOANG ALAU",
+        "urban": "1",
+        "kecamatan_id": "34389"
+    },
+    {
+        "id": "480456",
+        "deleted": null,
+        "kode": "003",
+        "locked": "1",
+        "nama": "SALO MALLORI",
+        "urban": "1",
+        "kecamatan_id": "34389"
+    },
+    {
+        "id": "480457",
+        "deleted": null,
+        "kode": "004",
+        "locked": "1",
+        "nama": "TANRUTEDONG",
+        "urban": "1",
+        "kecamatan_id": "34389"
+    },
+    {
+        "id": "480458",
+        "deleted": null,
+        "kode": "005",
+        "locked": "1",
+        "nama": "KALOSI",
+        "urban": "1",
+        "kecamatan_id": "34389"
+    },
+    {
+        "id": "480459",
+        "deleted": null,
+        "kode": "006",
+        "locked": "1",
+        "nama": "KALOSI ALAU",
+        "urban": "1",
+        "kecamatan_id": "34389"
+    },
+    {
+        "id": "480460",
+        "deleted": null,
+        "kode": "007",
+        "locked": "1",
+        "nama": "TACCIMPO",
+        "urban": "1",
+        "kecamatan_id": "34389"
+    },
+    {
+        "id": "480461",
+        "deleted": null,
+        "kode": "008",
+        "locked": "1",
+        "nama": "SALOBUKKANG",
+        "urban": "1",
+        "kecamatan_id": "34389"
+    },
+    {
+        "id": "480462",
+        "deleted": null,
+        "kode": "010",
+        "locked": "1",
+        "nama": "BILA",
+        "urban": "1",
+        "kecamatan_id": "34389"
+    },
+    {
+        "id": "480463",
+        "deleted": null,
+        "kode": "011",
+        "locked": "1",
+        "nama": "KAMPALE",
+        "urban": "1",
+        "kecamatan_id": "34389"
+    }
+]
+
+[
+    {
+        "id": "480464",
+        "deleted": null,
+        "kode": "001",
+        "locked": "1",
+        "nama": "BOLA BULU",
+        "urban": "1",
+        "kecamatan_id": "34390"
+    },
+    {
+        "id": "480465",
+        "deleted": null,
+        "kode": "002",
+        "locked": "1",
+        "nama": "BOTTO",
+        "urban": "1",
+        "kecamatan_id": "34390"
+    },
+    {
+        "id": "480466",
+        "deleted": null,
+        "kode": "003",
+        "locked": "1",
+        "nama": "BILA RIASE",
+        "urban": "1",
+        "kecamatan_id": "34390"
+    },
+    {
+        "id": "480467",
+        "deleted": null,
+        "kode": "004",
+        "locked": "1",
+        "nama": "LAGADING",
+        "urban": "1",
+        "kecamatan_id": "34390"
+    },
+    {
+        "id": "480468",
+        "deleted": null,
+        "kode": "005",
+        "locked": "1",
+        "nama": "BATU",
+        "urban": "1",
+        "kecamatan_id": "34390"
+    },
+    {
+        "id": "480469",
+        "deleted": null,
+        "kode": "007",
+        "locked": "1",
+        "nama": "TANATORO",
+        "urban": "1",
+        "kecamatan_id": "34390"
+    },
+    {
+        "id": "480470",
+        "deleted": null,
+        "kode": "008",
+        "locked": "1",
+        "nama": "COMPONG",
+        "urban": "1",
+        "kecamatan_id": "34390"
+    },
+    {
+        "id": "480471",
+        "deleted": null,
+        "kode": "009",
+        "locked": "1",
+        "nama": "LEPPANGENG",
+        "urban": "1",
+        "kecamatan_id": "34390"
+    },
+    {
+        "id": "480472",
+        "deleted": null,
+        "kode": "010",
+        "locked": "1",
+        "nama": "LOMBO",
+        "urban": "1",
+        "kecamatan_id": "34390"
+    },
+    {
+        "id": "480473",
+        "deleted": null,
+        "kode": "011",
+        "locked": "1",
+        "nama": "DENGENG-DENGENG",
+        "urban": "1",
+        "kecamatan_id": "34390"
+    },
+    {
+        "id": "480474",
+        "deleted": null,
+        "kode": "012",
+        "locked": "1",
+        "nama": "BUNTU BUANGING",
+        "urban": "1",
+        "kecamatan_id": "34390"
+    },
+    {
+        "id": "480475",
+        "deleted": null,
+        "kode": "013",
+        "locked": "1",
+        "nama": "BELAWAE",
+        "urban": "1",
+        "kecamatan_id": "34390"
+    }
+]
+
