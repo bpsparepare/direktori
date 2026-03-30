@@ -472,9 +472,15 @@ class _SidrapManagerDialogState extends State<_SidrapManagerDialog> {
       final serverKecId = WilayahMappingSidrap.getKecamatanId(kecCode);
       final serverDesaId = WilayahMappingSidrap.getDesaId(kecCode, desaCode);
 
+      final namaUsaha = (item['nama_usaha'] ?? '').toString();
+      final alamat = (item['alamat'] ?? '').toString();
+      if (namaUsaha.trim().isEmpty || alamat.trim().isEmpty) {
+        throw 'Seluruh isian wajib terisi.';
+      }
+
       final result = await widget.gcService.saveDraftTambahUsaha(
-        namaUsaha: item['nama_usaha'] ?? '',
-        alamat: item['alamat'] ?? '',
+        namaUsaha: namaUsaha,
+        alamat: alamat,
         provinsiId: WilayahMappingSidrap.serverProvinsiId,
         kabupatenId: WilayahMappingSidrap.serverKabupatenId,
         kecamatanId: serverKecId,
@@ -4737,35 +4743,47 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
           debugPrint('=== MENGIRIM DATA KE SERVER ===');
           debugPrint(const JsonEncoder.withIndent('  ').convert(debugPayload));
 
-          final result = await _gcService.saveDraftTambahUsaha(
-            namaUsaha: record.namaUsaha,
-            alamat: record.alamatUsaha,
-            provinsiId: serverProvId,
-            kabupatenId: serverKabId,
-            kecamatanId: serverKecId,
-            desaId: serverDesaId,
-            latitude: record.latitude,
-            longitude: record.longitude,
-          );
-
-          if (result != null &&
-              (result['status'] == 'success' || result['title'] == 'Sukses')) {
-            successCount++;
-
-            // Update status upload
-            await _applyGcInput(
-              record,
-              record.gcsResult,
-              double.tryParse(record.latitude),
-              double.tryParse(record.longitude),
-              isUploaded: true,
-            );
+          final trimmedNamaUsaha = record.namaUsaha.trim();
+          final trimmedAlamatUsaha = record.alamatUsaha.trim();
+          if (trimmedNamaUsaha.isEmpty || trimmedAlamatUsaha.isEmpty) {
+            statusNotifier.value =
+                'Lewati ${record.idsbr}: Seluruh isian wajib terisi.';
           } else {
-            // Failed
-            pendingRecords.add(record);
+            final result = await _gcService.saveDraftTambahUsaha(
+              namaUsaha: trimmedNamaUsaha,
+              alamat: trimmedAlamatUsaha,
+              provinsiId: serverProvId,
+              kabupatenId: serverKabId,
+              kecamatanId: serverKecId,
+              desaId: serverDesaId,
+              latitude: record.latitude,
+              longitude: record.longitude,
+            );
+
+            if (result != null &&
+                (result['status'] == 'success' ||
+                    result['title'] == 'Sukses')) {
+              successCount++;
+
+              await _applyGcInput(
+                record,
+                record.gcsResult,
+                double.tryParse(record.latitude),
+                double.tryParse(record.longitude),
+                isUploaded: true,
+              );
+            } else {
+              final message = (result?['message'] ?? '').toString();
+              if (!message.contains('Seluruh isian wajib terisi')) {
+                pendingRecords.add(record);
+              }
+            }
           }
         } catch (e) {
-          pendingRecords.add(record);
+          final message = e.toString();
+          if (!message.contains('Seluruh isian wajib terisi')) {
+            pendingRecords.add(record);
+          }
         }
 
         // Small delay
@@ -5910,6 +5928,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
       final item = queue[i];
       final namaUsaha = item['nama_usaha'] ?? '';
       final rawKode = item['kode_wilayah'] ?? '';
+      final alamat = (item['alamat'] ?? '').toString();
 
       // Update UI
       _activeStatusNotifier!.value = 'Mengirim: $namaUsaha';
@@ -5923,6 +5942,9 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
         // Konversi Kode Wilayah (Format: 7314060007)
         // 73 = Prov, 14 = Kab, 060 = Kec (index 4-7), 007 = Desa (index 7-10)
         if (rawKode.length < 10) throw 'Kode wilayah tidak valid';
+        if (namaUsaha.toString().trim().isEmpty || alamat.trim().isEmpty) {
+          throw 'Seluruh isian wajib terisi.';
+        }
 
         final kecCode = rawKode.substring(4, 7);
         final desaCode = rawKode.substring(7, 10);
@@ -5933,7 +5955,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
         // Kirim ke Server
         final result = await _gcService.saveDraftTambahUsaha(
           namaUsaha: namaUsaha,
-          alamat: item['alamat'] ?? '',
+          alamat: alamat,
           provinsiId: WilayahMappingSidrap.serverProvinsiId,
           kabupatenId: WilayahMappingSidrap.serverKabupatenId,
           kecamatanId: serverKecId,

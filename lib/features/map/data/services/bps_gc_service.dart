@@ -1108,6 +1108,21 @@ class BpsGcService {
 
     if (_cookieHeader == null) return null;
 
+    final trimmedNama = namaUsaha.trim();
+    final trimmedAlamat = alamat.trim();
+    if (trimmedNama.isEmpty ||
+        trimmedAlamat.isEmpty ||
+        provinsiId.trim().isEmpty ||
+        kabupatenId.trim().isEmpty ||
+        kecamatanId.trim().isEmpty ||
+        desaId.trim().isEmpty) {
+      return {
+        'title': 'Error',
+        'status': 'error',
+        'message': 'Seluruh isian wajib terisi.',
+      };
+    }
+
     final headers = {
       'Cookie': _cookieHeader!,
       'User-Agent': _userAgent,
@@ -1119,8 +1134,8 @@ class BpsGcService {
       'X-CSRF-TOKEN': _csrfToken ?? '',
     };
 
-    final namaUsahaEncoded = base64Encode(utf8.encode(namaUsaha));
-    final alamatEncoded = base64Encode(utf8.encode(alamat));
+    final namaUsahaEncoded = base64Encode(utf8.encode(trimmedNama));
+    final alamatEncoded = base64Encode(utf8.encode(trimmedAlamat));
 
     final body = {
       '_token': _csrfToken ?? '',
