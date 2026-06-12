@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -11,29 +10,18 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../../../core/config/supabase_config.dart';
-import 'package:uuid/uuid.dart';
 import '../../data/repositories/map_repository_impl.dart';
 import '../../data/repositories/scraping_repository_impl.dart';
 import '../../data/models/direktori_model.dart';
 import '../../domain/entities/groundcheck_record.dart';
-import '../../domain/usecases/get_initial_map_config.dart';
-import '../../domain/usecases/get_places.dart';
-import '../../domain/usecases/get_first_polygon_meta_from_geojson.dart';
-import '../../domain/usecases/get_all_polygons_meta_from_geojson.dart';
 import '../widgets/map_view.dart';
-import '../widgets/map_controls.dart';
 import '../../domain/entities/place.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
 import '../../../../core/widgets/image_upload_widget.dart';
-import '../../../contribution/presentation/bloc/contribution_bloc.dart';
-import '../../../contribution/presentation/bloc/contribution_event.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
-import '../../data/services/bps_gc_service.dart';
-import '../../data/services/gc_credentials_service.dart';
 import '../../../../core/utils/map_utils.dart';
-import 'groundcheck_page.dart';
 
 class MapPage extends StatelessWidget {
   final MapController? mapController;
@@ -812,8 +800,7 @@ class MapPage extends StatelessWidget {
                                                       String? website;
                                                       String? telp;
                                                       final desc =
-                                                          place.description ??
-                                                          '';
+                                                          place.description;
                                                       if (desc.isNotEmpty) {
                                                         for (final part
                                                             in desc.split(
@@ -1260,10 +1247,10 @@ class MapPage extends StatelessWidget {
                                                                         .idSls !=
                                                                     null &&
                                                                 directory
-                                                                    .idSls!
+                                                                    .idSls
                                                                     .isNotEmpty) {
                                                               idSls = directory
-                                                                  .idSls!;
+                                                                  .idSls;
                                                               if (idSls
                                                                       .length >=
                                                                   14) {
@@ -1380,10 +1367,10 @@ class MapPage extends StatelessWidget {
                                                                         .idSls !=
                                                                     null &&
                                                                 directory
-                                                                    .idSls!
+                                                                    .idSls
                                                                     .isNotEmpty) {
                                                               idSls = directory
-                                                                  .idSls!;
+                                                                  .idSls;
                                                               if (idSls
                                                                       .length >=
                                                                   14) {
@@ -2058,7 +2045,7 @@ class MapPage extends StatelessWidget {
                           : null;
                       final isCorrectText = (isCorrect == null)
                           ? null
-                          : (isCorrect! ? 'Benar' : 'Salah');
+                          : (isCorrect ? 'Benar' : 'Salah');
                       final msg = (scoreText != null && isCorrectText != null)
                           ? 'Berhasil kirim. Skor: $scoreText • $isCorrectText'
                           : 'Berhasil kirim jawaban.';
@@ -5519,7 +5506,6 @@ class MapPage extends StatelessWidget {
           );
           // Emit contribution for drag-and-drop coordinate update
           try {
-            final contributionBloc = context.read<ContributionBloc>();
             // Old coordinates from existing place position
             final oldLat = place.position.latitude;
             final oldLon = place.position.longitude;
@@ -5553,16 +5539,6 @@ class MapPage extends StatelessWidget {
                 'timestamp': DateTime.now().toIso8601String(),
                 'distance_moved_m': distance,
               };
-              contributionBloc.add(
-                CreateContributionEvent(
-                  actionType: actionSubtype,
-                  targetType: 'directory',
-                  targetId: place.id,
-                  changes: changes,
-                  latitude: newPoint.latitude,
-                  longitude: newPoint.longitude,
-                ),
-              );
             }
           } catch (e) {
             // Ignore contribution errors
@@ -6475,7 +6451,6 @@ class MapPage extends StatelessWidget {
 
           // Emit contribution for coordinate update
           try {
-            final contributionBloc = context.read<ContributionBloc>();
             // Determine old vs new coordinates
             final oldLat = directory.latitude ?? directory.lat;
             final oldLon = directory.longitude ?? directory.long;
@@ -6513,16 +6488,6 @@ class MapPage extends StatelessWidget {
                 'timestamp': DateTime.now().toIso8601String(),
                 if (distance != null) 'distance_moved_m': distance,
               };
-              contributionBloc.add(
-                CreateContributionEvent(
-                  actionType: actionSubtype,
-                  targetType: 'directory',
-                  targetId: directory.id,
-                  changes: changes,
-                  latitude: point.latitude,
-                  longitude: point.longitude,
-                ),
-              );
             }
           } catch (e) {
             // Ignore contribution errors
@@ -6746,20 +6711,6 @@ class MapPage extends StatelessWidget {
     print('👤 [DEBUG] Pemilik: $pemilik');
     print('📞 [DEBUG] Nomor Telepon: $nomorTelepon');
 
-    // Get ContributionBloc reference early to avoid widget deactivation issues
-    ContributionBloc? contributionBloc;
-    try {
-      // Check that context is still mounted
-      if (context.mounted) {
-        contributionBloc = context.read<ContributionBloc>();
-        print('✅ [CONTRIBUTION] ContributionBloc berhasil diakses');
-      } else {
-        print('⚠️ [CONTRIBUTION] Context tidak mounted');
-      }
-    } catch (e) {
-      print('⚠️ [CONTRIBUTION] Tidak dapat mengakses ContributionBloc: $e');
-    }
-
     try {
       // Find polygon at point to get idSls and nama_sls
       String idSls = '';
@@ -6930,235 +6881,6 @@ class MapPage extends StatelessWidget {
         print(
           '✅ [DEBUG] Direktori berhasil disimpan, menampilkan SnackBar sukses',
         );
-
-        // Save contribution after successful directory save
-        try {
-          print('💾 [CONTRIBUTION] Menyimpan kontribusi...');
-
-          if (contributionBloc != null) {
-            // Determine action type and changes
-            final originalDirectory =
-                existingDirectory ?? selectedExistingBusiness;
-            final actionType = originalDirectory != null
-                ? 'edit_location'
-                : 'add_location';
-            final targetId = originalDirectory?.id ?? newDirectoryId ?? '';
-
-            // Skip contribution if we don't have a valid target_id
-            if (targetId.isEmpty) {
-              print(
-                '⚠️ [CONTRIBUTION] Melewati penyimpanan kontribusi karena target_id kosong',
-              );
-            } else {
-              print('🎯 [CONTRIBUTION] Action: $actionType, Target: $targetId');
-
-              // Create changes map for tracking what was modified
-              final changes = <String, dynamic>{
-                'nama_usaha': namaUsaha,
-                'alamat': alamatFromGeocode ?? alamat,
-                'latitude': point.latitude,
-                'longitude': point.longitude,
-                // Keep UUID reference because contributions table uses BIGINT target_id
-                // This allows us to trace back to the new directory even if target_id is null
-                'target_uuid': targetId,
-                'timestamp': DateTime.now().toIso8601String(),
-              };
-
-              if (originalDirectory != null) {
-                // For updates, track what changed
-                if (originalDirectory.namaUsaha != namaUsaha) {
-                  changes['old_nama_usaha'] = originalDirectory.namaUsaha;
-                }
-                if (originalDirectory.alamat != (alamatFromGeocode ?? alamat)) {
-                  changes['old_alamat'] = originalDirectory.alamat;
-                }
-              }
-
-              print('📝 [CONTRIBUTION] Changes (umum): $changes');
-
-              // Tentukan event utama untuk menghindari duplikasi
-              // - Jika direktori baru: gunakan add_directory_manual / add_directory_scrape
-              // - Jika update koordinat: gunakan set_first_coordinates / update_coordinates_major|minor
-              String? primaryAction;
-
-              // Helper hitung jarak (meter) antara koordinat lama dan baru
-              double _distanceMeters(
-                double lat1,
-                double lon1,
-                double lat2,
-                double lon2,
-              ) {
-                const double R = 6371000; // Earth radius in meters
-                final dLat = (lat2 - lat1) * (3.141592653589793 / 180);
-                final dLon = (lon2 - lon1) * (3.141592653589793 / 180);
-                final a =
-                    (math.sin(dLat / 2) * math.sin(dLat / 2)) +
-                    math.cos(lat1 * (3.141592653589793 / 180)) *
-                        math.cos(lat2 * (3.141592653589793 / 180)) *
-                        (math.sin(dLon / 2) * math.sin(dLon / 2));
-                final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-                return R * c;
-              }
-
-              if (originalDirectory == null) {
-                // Direktori baru
-                if (scrapedPlaceId != null &&
-                    scrapedPlaceId.startsWith('scrape:')) {
-                  primaryAction = 'add_directory_scrape';
-                } else {
-                  primaryAction = 'add_directory_manual';
-                }
-              } else {
-                // Update direktori: cek perubahan koordinat
-                final oldLat =
-                    originalDirectory.latitude ?? originalDirectory.lat;
-                final oldLon =
-                    originalDirectory.longitude ?? originalDirectory.long;
-                if (oldLat == null || oldLon == null) {
-                  primaryAction = 'set_first_coordinates';
-                } else {
-                  final dist = _distanceMeters(
-                    oldLat,
-                    oldLon,
-                    point.latitude,
-                    point.longitude,
-                  );
-                  if (dist >= 0.01) {
-                    // anggap 0 jika sama persis, toleransi kecil
-                    primaryAction = dist >= 20
-                        ? 'update_coordinates_major'
-                        : 'update_coordinates_minor';
-                    changes['distance_moved_m'] = dist;
-                  }
-                }
-              }
-
-              // Generate satu operation_id untuk semua event dalam satu penyimpanan
-              final opId = const Uuid().v4();
-              if (primaryAction != null) {
-                contributionBloc.add(
-                  CreateContributionEvent(
-                    actionType: primaryAction,
-                    targetType: 'directory',
-                    targetId: targetId,
-                    changes: changes,
-                    latitude: point.latitude,
-                    longitude: point.longitude,
-                    operationId: opId,
-                  ),
-                );
-                print('✅ [CONTRIBUTION] Event utama dikirim: $primaryAction');
-              } else {
-                print(
-                  'ℹ️ [CONTRIBUTION] Tidak ada perubahan koordinat signifikan, skip event utama',
-                );
-              }
-
-              // Emit kontribusi tambahan untuk pengayaan data (KBLI, deskripsi, alamat, foto)
-              final nowIso = DateTime.now().toIso8601String();
-
-              void emit(String type, Map<String, dynamic> ch) {
-                contributionBloc!.add(
-                  CreateContributionEvent(
-                    actionType: type,
-                    targetType: 'directory',
-                    targetId: targetId,
-                    changes: ch,
-                    latitude: point.latitude,
-                    longitude: point.longitude,
-                    operationId: opId,
-                  ),
-                );
-              }
-
-              // KBLI
-              final oldKbli = (existingDirectory?.kbli ?? '').trim();
-              final newKbli = (kbli ?? '').trim();
-              if (newKbli.isNotEmpty && newKbli != oldKbli) {
-                final type = oldKbli.isEmpty ? 'add_kbli' : 'update_kbli';
-                emit(type, {
-                  'kbli': newKbli,
-                  if (oldKbli.isNotEmpty) 'old_kbli': oldKbli,
-                  'target_uuid': targetId,
-                  'timestamp': nowIso,
-                });
-                print('✅ [CONTRIBUTION] Event $type (KBLI) dikirim');
-              }
-
-              // Deskripsi usaha
-              final oldDesc =
-                  (existingDirectory?.deskripsiBadanUsahaLainnya ?? '').trim();
-              final newDesc = (deskripsiBadanUsaha ?? '').trim();
-              if (newDesc.isNotEmpty && newDesc != oldDesc) {
-                final type = oldDesc.isEmpty
-                    ? 'add_description'
-                    : 'update_description';
-                emit(type, {
-                  'description': newDesc,
-                  if (oldDesc.isNotEmpty) 'old_description': oldDesc,
-                  'target_uuid': targetId,
-                  'timestamp': nowIso,
-                });
-                print('✅ [CONTRIBUTION] Event $type (deskripsi) dikirim');
-              }
-
-              // Alamat presisi
-              final oldAddr = (existingDirectory?.alamat ?? '').trim();
-              final newAddr = (alamatFromGeocode ?? alamat).trim();
-              // Jika event utama adalah add_directory_scrape, jangan emit add/update_address
-              if (primaryAction != 'add_directory_scrape' &&
-                  newAddr.isNotEmpty &&
-                  newAddr != oldAddr) {
-                final type = oldAddr.isEmpty ? 'add_address' : 'update_address';
-                emit(type, {
-                  'address': newAddr,
-                  if (oldAddr.isNotEmpty) 'old_address': oldAddr,
-                  'target_uuid': targetId,
-                  'timestamp': nowIso,
-                });
-                print('✅ [CONTRIBUTION] Event $type (alamat) dikirim');
-              }
-
-              // Foto
-              final oldPhoto = (existingDirectory?.urlGambar ?? '').trim();
-              final newPhoto = (urlGambar ?? '').trim();
-              // Jika event utama adalah add_directory_scrape, jangan emit add/update_photo
-              if (primaryAction != 'add_directory_scrape' &&
-                  newPhoto.isNotEmpty &&
-                  newPhoto != oldPhoto) {
-                final type = oldPhoto.isEmpty ? 'add_photo' : 'update_photo';
-                emit(type, {
-                  'photo_url': newPhoto,
-                  if (oldPhoto.isNotEmpty) 'old_photo_url': oldPhoto,
-                  'target_uuid': targetId,
-                  'timestamp': nowIso,
-                });
-                print('✅ [CONTRIBUTION] Event $type (foto) dikirim');
-              }
-
-              // Tautkan kontribusi lama yang hanya menyimpan UUID di changes
-              if (newDirectoryId != null && contributionBloc != null) {
-                contributionBloc.add(
-                  LinkContributionsToDirectoryEvent(
-                    directoryId: newDirectoryId,
-                  ),
-                );
-                print(
-                  '🔗 [CONTRIBUTION] Meminta penautan kontribusi ke direktori $newDirectoryId',
-                );
-              }
-            }
-          } else {
-            print(
-              '⚠️ [CONTRIBUTION] ContributionBloc tidak tersedia, melewati penyimpanan kontribusi',
-            );
-          }
-        } catch (contributionError) {
-          print(
-            '❌ [CONTRIBUTION] Gagal menyimpan kontribusi: $contributionError',
-          );
-          // Don't fail the whole operation if contribution fails
-        }
 
         scaffoldMessenger.showSnackBar(
           SnackBar(

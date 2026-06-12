@@ -5,10 +5,10 @@ import 'package:latlong2/latlong.dart';
 import 'groundcheck_history_page.dart';
 import 'map_page.dart';
 import 'saved_page.dart';
+import 'kbli_page.dart';
 import 'groundcheck_page.dart';
 import 'spasial_page.dart';
 import 'duplicate_page.dart';
-import '../../../contribution/presentation/pages/contribution_page.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
@@ -16,10 +16,6 @@ import '../../data/repositories/map_repository_impl.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
 import '../../domain/entities/groundcheck_record.dart';
 import '../../domain/entities/place.dart';
-import '../../domain/usecases/get_initial_map_config.dart';
-import '../../domain/usecases/get_places.dart';
-import '../../domain/usecases/get_first_polygon_meta_from_geojson.dart';
-import '../../domain/usecases/get_all_polygons_meta_from_geojson.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 
 class MainPage extends StatefulWidget {
@@ -33,13 +29,11 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   int _selectedIndex = 0;
   late MapController _sharedMapController; // Add shared MapController
-  bool _handledFocusArgs = false; // Ensure focus-by-args runs once
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   List<Place> _searchResults = [];
   List<Place> _allPlaces = [];
   bool _isMitra = false;
-  bool _loadingRole = true;
 
   @override
   void initState() {
@@ -56,14 +50,8 @@ class _MainPageState extends State<MainPage> {
     if (mounted) {
       setState(() {
         _isMitra = (role == 'mitra');
-        _loadingRole = false;
       });
     }
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
   }
 
   void _loadPlaces() async {
@@ -238,30 +226,6 @@ class _MainPageState extends State<MainPage> {
     } catch (_) {}
   }
 
-  Widget _buildOverlayContent() {
-    // If mitra, max index is 2 (0: Jelajah, 1: Dashboard, 2: Kontribusi)
-    // If user tries to access index 3 (Groundcheck), fallback to 0
-    if (_isMitra && _selectedIndex > 2) {
-      _selectedIndex = 0;
-    }
-
-    switch (_selectedIndex) {
-      case 0:
-        return MapPage(mapController: _sharedMapController);
-      case 1:
-        return DashboardPage(mapController: _sharedMapController);
-      case 2:
-        return const GroundcheckHistoryPage();
-      case 3:
-        // Only accessible if not mitra
-        return _isMitra
-            ? MapPage(mapController: _sharedMapController)
-            : GroundcheckPage(onGoToMap: _focusGroundcheckLocation);
-      default:
-        return MapPage(mapController: _sharedMapController);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final bool isLargeScreen = MediaQuery.of(context).size.width > 600;
@@ -287,6 +251,7 @@ class _MainPageState extends State<MainPage> {
                 index: _selectedIndex == 0 ? 0 : _selectedIndex - 1,
                 children: [
                   DashboardPage(mapController: _sharedMapController),
+                  const KbliPage(),
                   const GroundcheckHistoryPage(),
                   if (!_isMitra && isLargeScreen)
                     GroundcheckPage(onGoToMap: _focusGroundcheckLocation),
@@ -418,24 +383,9 @@ class _MainPageState extends State<MainPage> {
               label: 'Dashboard',
             ),
             const BottomNavigationBarItem(
-              icon: Icon(Icons.add_circle_outline),
-              label: 'Kontribusi',
+              icon: Icon(Icons.apartment_rounded),
+              label: 'KBLI',
             ),
-            if (!_isMitra && isLargeScreen)
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.fact_check_outlined),
-                label: 'Groundcheck',
-              ),
-            if (!_isMitra && isLargeScreen)
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.map_outlined),
-                label: 'Spasial',
-              ),
-            if (!_isMitra && isLargeScreen)
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.content_copy_outlined),
-                label: 'Ganda',
-              ),
           ],
         ),
       ),
