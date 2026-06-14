@@ -9,13 +9,12 @@ import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
 import '../../data/repositories/map_repository_impl.dart';
-import '../../data/services/bps_gc_service.dart';
+import '../../data/services/assignment_places_service.dart';
 import 'compass_widget.dart';
 import '../../domain/entities/polygon_data.dart';
 import 'map_type.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import '../utils/map_download_helper.dart';
 
 class _ClipboardParsedRow {
   final int no;
@@ -66,6 +65,10 @@ class MapControls extends StatefulWidget {
   final Function(bool)? onToggleMarkerLabels;
   final bool showNonVerifiedGroundchecks;
   final Function(bool)? onToggleNonVerifiedGroundchecks;
+  final bool hasAssignmentPolygons;
+  final bool showAssignmentPolygons;
+  final VoidCallback? onToggleAssignmentPolygons;
+  final bool preserveAssignmentFocusOnInit;
   final bool isPolygonSelected; // Boolean to track if a polygon is selected
   final VoidCallback? onToggleFontSize; // Callback for font size toggle
   final void Function(LatLng point, String label)? onClipboardPointSelected;
@@ -94,6 +97,10 @@ class MapControls extends StatefulWidget {
     this.onToggleMarkerLabels,
     this.showNonVerifiedGroundchecks = true,
     this.onToggleNonVerifiedGroundchecks,
+    this.hasAssignmentPolygons = false,
+    this.showAssignmentPolygons = false,
+    this.onToggleAssignmentPolygons,
+    this.preserveAssignmentFocusOnInit = false,
     this.isPolygonSelected = false, // Initialize
     this.onToggleFontSize,
     this.onClipboardPointSelected,
@@ -436,7 +443,13 @@ class _MapControlsState extends State<MapControls> {
 
       if (position != null) {
         final currentLocation = LatLng(position.latitude, position.longitude);
-        widget.mapController.move(currentLocation, 15.0);
+        if (!widget.preserveAssignmentFocusOnInit) {
+          widget.mapController.move(currentLocation, 15.0);
+        } else {
+          debugPrint(
+            '[assignment-focus-cache][D] skip auto-move to device location because assignment focus is active',
+          );
+        }
         if (widget.onLocationUpdate != null) {
           widget.onLocationUpdate!(currentLocation);
         }
@@ -520,14 +533,65 @@ class _MapControlsState extends State<MapControls> {
   }
 
   Future<void> _handleFullDownload(BuildContext context) async {
-    // Gunakan helper yang sudah distandarisasi
-    await MapDownloadHelper.showRedownloadDialog(context);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const PopScope(
+        canPop: false,
+        child: Dialog(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 20),
+                Text(
+                  'Sedang mendownload data assignment...',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Mohon tunggu, jangan tutup aplikasi.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final repository = context.read<MapRepositoryImpl>();
+      final places = await repository.downloadFullPlaces();
+      if (!context.mounted) return;
+      Navigator.pop(context);
+      context.read<MapBloc>().add(const PlacesRequested());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Download selesai! ${places.length} data assignment aktif diperbarui.',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal mendownload data assignment: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<String> _getLastIncrementalSyncText() async {
     final prefs = await SharedPreferences.getInstance();
-    // Use the key defined in GroundcheckSupabaseService
-    final lastSyncStr = prefs.getString('groundcheck_last_sync_time');
+    final lastSyncStr = prefs.getString(AssignmentPlacesService.lastSyncKey);
     if (lastSyncStr == null) return 'Belum pernah';
 
     final date = DateTime.tryParse(lastSyncStr);
@@ -560,8 +624,7 @@ class _MapControlsState extends State<MapControls> {
 
     if (!mounted) return;
 
-    // Gunakan helper yang sudah distandarisasi
-    await MapDownloadHelper.showInitialDownloadDialog(context);
+    await _handleFullDownload(context);
   }
 
   @override
@@ -853,6 +916,49 @@ class _MapControlsState extends State<MapControls> {
             ),
 
             const SizedBox(height: 8),
+            if (widget.hasAssignmentPolygons) ...[
+              Container(
+                decoration: BoxDecoration(
+                  color: widget.showAssignmentPolygons
+                      ? Colors.green[50]
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: widget.onToggleAssignmentPolygons,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.polyline,
+                            color: widget.showAssignmentPolygons
+                                ? Colors.green
+                                : Colors.black87,
+                            size: 20,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             // Pilih Polygon FAB
             Container(
               decoration: BoxDecoration(

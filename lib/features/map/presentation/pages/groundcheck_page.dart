@@ -775,7 +775,7 @@ class _GroundcheckPageState extends State<GroundcheckPage> {
 
       // 2. Load GeoJSON
       final geoJsonString = await rootBundle.loadString(
-        'assets/geojson/final_sls_optimized.json',
+        'assets/geojson/final_sls_optimized_v2.json',
       );
       final geoJson = jsonDecode(geoJsonString);
       final features = geoJson['features'] as List;

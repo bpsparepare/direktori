@@ -6,7 +6,7 @@ Sumber `places` untuk peta sudah dipindahkan ke `assignment places` yang dibatas
 
 - posisi awal peta belum otomatis diarahkan ke wilayah tugas petugas
 - batas wilayah tugas dari polygon belum mudah dilihat saat dibutuhkan
-- polygon sebenarnya sudah tersedia di aset `assets/geojson/final_sls_optimized.json`, tetapi belum dimanfaatkan sebagai konteks wilayah tugas aktif
+- polygon sebenarnya sudah tersedia di aset `assets/geojson/final_sls_optimized_v2.json`, tetapi belum dimanfaatkan sebagai konteks wilayah tugas aktif
 
 Tujuan perubahan ini adalah membuat peta langsung fokus ke area tugas petugas saat dibuka, sambil menyediakan tombol sederhana untuk menampilkan atau menyembunyikan polygon wilayah tugas aktif.
 
@@ -14,7 +14,7 @@ Tujuan perubahan ini adalah membuat peta langsung fokus ke area tugas petugas sa
 
 - Saat halaman peta dibuka, posisi dan zoom awal mengikuti batas gabungan polygon wilayah tugas petugas.
 - Polygon wilayah tugas aktif dapat ditampilkan atau disembunyikan lewat satu tombol `Wilayah Tugas`.
-- Sumber polygon tetap menggunakan `assets/geojson/final_sls_optimized.json`.
+- Sumber polygon tetap menggunakan `assets/geojson/final_sls_optimized_v2.json`.
 - Mapping wilayah tugas ke polygon menggunakan `se2026_wilayah_tugas.id = polygon.idsls`.
 - Perilaku `admin` tetap aman dan tidak dipaksa ke wilayah tertentu.
 
@@ -29,7 +29,7 @@ Tujuan perubahan ini adalah membuat peta langsung fokus ke area tugas petugas sa
 
 - `MapBloc` sudah memuat metadata polygon dan mendukung pemilihan polygon tunggal maupun banyak.
 - `MapView` sudah memiliki logika `fit bounds` untuk polygon tunggal dan multi-polygon.
-- Asset polygon tersedia di `assets/geojson/final_sls_optimized.json`.
+- Asset polygon tersedia di `assets/geojson/final_sls_optimized_v2.json`.
 - `PolygonData` sudah memiliki `idsls`, yang dapat dipakai untuk dicocokkan ke `se2026_wilayah_tugas.id`.
 - `places` sekarang dibatasi berdasarkan wilayah tugas di server melalui RPC Supabase.
 
@@ -54,7 +54,7 @@ Alasan pemilihan:
 ### Petugas Pengawas Dan Pendata
 
 - Saat halaman peta dibuka, app mencari semua `idsls` tugas aktif dari `se2026_wilayah_tugas`.
-- App mencocokkan `idsls` itu ke polygon pada `final_sls_optimized.json`.
+- App mencocokkan `idsls` itu ke polygon pada `final_sls_optimized_v2.json`.
 - App menghitung gabungan bounds seluruh polygon tugas aktif.
 - Peta langsung menyesuaikan center dan zoom agar seluruh wilayah tugas terlihat.
 - Overlay polygon belum tampil di awal.
@@ -71,7 +71,7 @@ Alasan pemilihan:
 
 ### Sumber Polygon
 
-- Sumber polygon tetap `assets/geojson/final_sls_optimized.json`.
+- Sumber polygon tetap `assets/geojson/final_sls_optimized_v2.json`.
 - Asset ini tetap menjadi sumber geometri lokal, bukan diambil dari server.
 
 ### Sumber Wilayah Tugas Aktif
@@ -233,7 +233,7 @@ Toggle ini tidak boleh menghapus seleksi place atau mengubah hasil filter marker
 
 ## Ringkasan Keputusan
 
-- Polygon wilayah tugas berasal dari `assets/geojson/final_sls_optimized.json`.
+- Polygon wilayah tugas berasal dari `assets/geojson/final_sls_optimized_v2.json`.
 - Matching polygon memakai `idsls == wilayah_tugas.id`.
 - Saat map dibuka, peta otomatis fit ke bounds gabungan polygon wilayah tugas petugas.
 - Polygon wilayah tugas tidak tampil otomatis di awal.

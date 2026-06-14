@@ -2,7 +2,7 @@
 
 ## Latar Belakang
 
-Fokus awal peta ke wilayah tugas petugas sudah dirancang berbasis polygon dari `final_sls_optimized.json`. Namun, menghitung polygon tugas aktif dan bounds gabungannya setiap kali halaman peta dibuka dapat membuat fokus awal terasa terlambat atau tidak konsisten terlihat oleh pengguna.
+Fokus awal peta ke wilayah tugas petugas sudah dirancang berbasis polygon dari `final_sls_optimized_v2.json`. Namun, menghitung polygon tugas aktif dan bounds gabungannya setiap kali halaman peta dibuka dapat membuat fokus awal terasa terlambat atau tidak konsisten terlihat oleh pengguna.
 
 Pengguna menginginkan perilaku yang lebih cepat: area fokus wilayah tugas disimpan lokal sehingga saat user login lagi dengan akun yang sama, peta dapat langsung mengarah ke wilayah tugas tanpa perlu menghitung ulang berulang kali. Perhitungan polygon tetap boleh berjalan di belakang untuk memperbarui cache bila ada perubahan.
 

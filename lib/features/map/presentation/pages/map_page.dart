@@ -57,36 +57,17 @@ class MapPage extends StatelessWidget {
                     selectedPlace:
                         state.selectedPlace, // Pass selectedPlace to MapView
                     polygon: state.polygon,
+                    assignmentPolygons: state.assignmentPolygons,
                     selectedPolygons:
                         state.selectedPolygons, // Pass selectedPolygons
                     polygonLabel: state.polygonLabel,
                     temporaryMarker: state.temporaryMarker,
                     polygonsMeta: state.polygonsMeta,
+                    showAssignmentPolygons: state.showAssignmentPolygons,
+                    assignmentFocusBounds: state.assignmentFocusBounds,
                     mapController: mapController, // Pass shared MapController
                     onPlaceTap: (place) {
                       context.read<MapBloc>().add(PlaceSelected(place));
-                    },
-                    onPlaceDragEnd: (place, newPoint) {
-                      if (place.id.startsWith('gc:')) {
-                        _confirmMoveGroundcheckCoordinates(
-                          context,
-                          place,
-                          newPoint,
-                        );
-                      } else {
-                        _confirmMovePlaceAndUpdateRegional(
-                          context,
-                          place,
-                          newPoint,
-                        );
-                      }
-                    },
-                    onNearbyPlacesTap: (places) {
-                      _showNearbyGroundcheckPopup(context, places);
-                    },
-                    onLongPress: (point) {
-                      context.read<MapBloc>().add(TemporaryMarkerAdded(point));
-                      _showContextMenu(context, point);
                     },
                     onPolygonSelected: (index) {
                       context.read<MapBloc>().add(
@@ -110,6 +91,11 @@ class MapPage extends StatelessWidget {
                     isPolygonSelected:
                         state.selectedPolygonMeta != null ||
                         state.selectedPolygons.isNotEmpty,
+                    onToggleAssignmentPolygons: () {
+                      context.read<MapBloc>().add(
+                        const AssignmentPolygonsToggleRequested(),
+                      );
+                    },
                   ),
                   // Coordinate mode overlay: center crosshair + actions
                   if (coordinateTarget != null) ...[

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:async';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_map_dragmarker/flutter_map_dragmarker.dart';
 import 'package:latlong2/latlong.dart';
 import '../../domain/entities/map_config.dart';
+import '../../domain/entities/map_focus_bounds.dart';
 import '../../../../core/utils/map_utils.dart';
 import '../../domain/entities/place.dart';
 import '../../domain/entities/polygon_data.dart';
@@ -15,19 +17,20 @@ class MapView extends StatefulWidget {
   final List<Place> places;
   final Place? selectedPlace; // Add selectedPlace parameter
   final List<LatLng> polygon;
+  final List<PolygonData> assignmentPolygons;
   final List<PolygonData> selectedPolygons; // Add selectedPolygons
   final String? polygonLabel;
   final LatLng? temporaryMarker;
   final List<PolygonData> polygonsMeta;
+  final bool showAssignmentPolygons;
+  final MapFocusBounds? assignmentFocusBounds;
   final void Function(Place) onPlaceTap;
-  final void Function(Place, LatLng)? onPlaceDragEnd;
-  final void Function(LatLng)? onLongPress;
+  final VoidCallback? onToggleAssignmentPolygons;
   final void Function(int)? onPolygonSelected;
   final void Function(List<PolygonData>)?
   onMultiplePolygonsSelected; // Add callback
   final MapController? mapController; // Add optional MapController parameter
   final void Function(LatLngBounds)? onBoundsChanged;
-  final void Function(List<Place>)? onNearbyPlacesTap;
   final bool isPolygonSelected; // Add isPolygonSelected property
   final double baseFontSize; // Base font size for markers
 
@@ -37,18 +40,19 @@ class MapView extends StatefulWidget {
     required this.places,
     this.selectedPlace, // Add to constructor
     required this.polygon,
+    this.assignmentPolygons = const [],
     this.selectedPolygons = const [], // Add to constructor
     this.polygonLabel,
     this.temporaryMarker,
     this.polygonsMeta = const [],
+    this.showAssignmentPolygons = false,
+    this.assignmentFocusBounds,
     required this.onPlaceTap,
-    this.onPlaceDragEnd,
-    this.onLongPress,
+    this.onToggleAssignmentPolygons,
     this.onPolygonSelected,
     this.onMultiplePolygonsSelected,
     this.mapController, // Add to constructor
     this.onBoundsChanged,
-    this.onNearbyPlacesTap,
     this.isPolygonSelected = false, // Add default value
     this.baseFontSize = 12.0,
   });
@@ -58,6 +62,8 @@ class MapView extends StatefulWidget {
 }
 
 class _MapViewState extends State<MapView> with TickerProviderStateMixin {
+  static const String _debugServerUrl = 'http://10.200.3.68:7777/event';
+  static const String _debugSessionId = 'assignment-focus-cache';
   late MapController _mapController;
   double _zoom = 13.0;
   double _rotation = 0.0;
@@ -75,9 +81,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   bool _showNonVerifiedGroundchecks = true;
   double _baseFontSize = 10.0; // Initial font size
   Timer? _boundsDebounce;
-  bool _isDragging = false; // Track dragging state
   LatLng? _clipboardCheckedPoint;
   String? _clipboardCheckedLabel;
+  bool _hasAppliedAssignmentFocus = false;
 
   @override
   void initState() {
@@ -99,6 +105,44 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
         curve: Curves.easeInOut,
       ),
     );
+    if (widget.assignmentFocusBounds != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _hasAppliedAssignmentFocus = true;
+        // #region debug-point D:fit-from-cache-init
+        unawaited(
+          _debugReport(
+            hypothesisId: 'D',
+            location: 'map_view.dart:112',
+            msg: '[DEBUG] applying assignment focus from cache on init',
+            data: {
+              'south': widget.assignmentFocusBounds!.south,
+              'north': widget.assignmentFocusBounds!.north,
+              'west': widget.assignmentFocusBounds!.west,
+              'east': widget.assignmentFocusBounds!.east,
+            },
+          ),
+        );
+        // #endregion
+        _fitToFocusBounds(widget.assignmentFocusBounds!);
+      });
+    } else if (widget.assignmentPolygons.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _hasAppliedAssignmentFocus = true;
+        // #region debug-point D:fit-from-polygon-init
+        unawaited(
+          _debugReport(
+            hypothesisId: 'D',
+            location: 'map_view.dart:130',
+            msg: '[DEBUG] applying assignment focus from polygons on init',
+            data: {'assignmentPolygonCount': widget.assignmentPolygons.length},
+          ),
+        );
+        // #endregion
+        _fitMultiPolygonToBounds(widget.assignmentPolygons);
+      });
+    }
   }
 
   @override
@@ -243,9 +287,72 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
       }
     }
 
-    if (!hasPoints) return;
+    if (!hasPoints) {
+      unawaited(
+        _debugReport(
+          hypothesisId: 'D',
+          location: 'map_view.dart:290',
+          msg: '[DEBUG] fit multi polygon skipped because no points',
+          data: {'assignmentPolygonCount': polygons.length},
+        ),
+      );
+      return;
+    }
 
     final bounds = LatLngBounds(LatLng(minLat, minLng), LatLng(maxLat, maxLng));
+    unawaited(
+      _debugReport(
+        hypothesisId: 'D',
+        location: 'map_view.dart:299',
+        msg: '[DEBUG] fit multi polygon to bounds',
+        data: {
+          'assignmentPolygonCount': polygons.length,
+          'south': minLat,
+          'north': maxLat,
+          'west': minLng,
+          'east': maxLng,
+        },
+      ),
+    );
+    _mapController.fitCamera(
+      CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50.0)),
+    );
+  }
+
+  void _fitToFocusBounds(MapFocusBounds focusBounds) {
+    if (!focusBounds.isValid) {
+      unawaited(
+        _debugReport(
+          hypothesisId: 'D',
+          location: 'map_view.dart:316',
+          msg: '[DEBUG] fit focus bounds skipped because invalid bounds',
+          data: {
+            'south': focusBounds.south,
+            'north': focusBounds.north,
+            'west': focusBounds.west,
+            'east': focusBounds.east,
+          },
+        ),
+      );
+      return;
+    }
+    final bounds = LatLngBounds(
+      LatLng(focusBounds.south, focusBounds.west),
+      LatLng(focusBounds.north, focusBounds.east),
+    );
+    unawaited(
+      _debugReport(
+        hypothesisId: 'D',
+        location: 'map_view.dart:332',
+        msg: '[DEBUG] fit focus bounds to camera',
+        data: {
+          'south': focusBounds.south,
+          'north': focusBounds.north,
+          'west': focusBounds.west,
+          'east': focusBounds.east,
+        },
+      ),
+    );
     _mapController.fitCamera(
       CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50.0)),
     );
@@ -254,7 +361,51 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(MapView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.polygon != widget.polygon &&
+    if (oldWidget.assignmentFocusBounds != widget.assignmentFocusBounds) {
+      _hasAppliedAssignmentFocus = false;
+    }
+    if (!_hasAppliedAssignmentFocus && widget.assignmentFocusBounds != null) {
+      _hasAppliedAssignmentFocus = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // #region debug-point D:fit-from-cache-update
+        unawaited(
+          _debugReport(
+            hypothesisId: 'D',
+            location: 'map_view.dart:309',
+            msg: '[DEBUG] applying assignment focus from cache on update',
+            data: {
+              'south': widget.assignmentFocusBounds!.south,
+              'north': widget.assignmentFocusBounds!.north,
+              'west': widget.assignmentFocusBounds!.west,
+              'east': widget.assignmentFocusBounds!.east,
+            },
+          ),
+        );
+        // #endregion
+        _fitToFocusBounds(widget.assignmentFocusBounds!);
+      });
+    } else if (oldWidget.assignmentPolygons != widget.assignmentPolygons &&
+        widget.assignmentFocusBounds == null) {
+      _hasAppliedAssignmentFocus = false;
+    }
+    if (!_hasAppliedAssignmentFocus && widget.assignmentPolygons.isNotEmpty) {
+      _hasAppliedAssignmentFocus = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // #region debug-point D:fit-from-polygon-update
+        unawaited(
+          _debugReport(
+            hypothesisId: 'D',
+            location: 'map_view.dart:329',
+            msg: '[DEBUG] applying assignment focus from polygons on update',
+            data: {'assignmentPolygonCount': widget.assignmentPolygons.length},
+          ),
+        );
+        // #endregion
+        _fitMultiPolygonToBounds(widget.assignmentPolygons);
+      });
+    } else if (oldWidget.polygon != widget.polygon &&
         widget.polygon.isNotEmpty &&
         widget.selectedPolygons.isEmpty) {
       // Zoom to fit the new polygon instead of just moving to centroid
@@ -277,6 +428,39 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     return 26;
   }
 
+  Future<void> _debugReport({
+    required String hypothesisId,
+    required String location,
+    required String msg,
+    required Map<String, Object?> data,
+  }) async {
+    final localLine =
+        '[assignment-focus-cache][$hypothesisId][$location] $msg ${jsonEncode(data)}';
+    debugPrint(localLine);
+    try {
+      final client = HttpClient();
+      final request = await client.postUrl(Uri.parse(_debugServerUrl));
+      request.headers.contentType = ContentType.json;
+      request.write(
+        jsonEncode({
+          'sessionId': _debugSessionId,
+          'runId': 'pre-fix',
+          'hypothesisId': hypothesisId,
+          'location': location,
+          'msg': msg,
+          'data': data,
+          'ts': DateTime.now().millisecondsSinceEpoch,
+        }),
+      );
+      await request.close();
+      client.close(force: true);
+    } catch (e) {
+      debugPrint(
+        '[assignment-focus-cache][$hypothesisId][$location] remote-log-failed ${e.toString()}',
+      );
+    }
+  }
+
   double _scaledWidth(String text, double fontSize) {
     final double w = fontSize * (text.length * 0.6);
     return w.clamp(60, 400);
@@ -285,6 +469,18 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   double _scaledHeight(double fontSize) {
     final double h = fontSize * 1.6;
     return h.clamp(24, 64);
+  }
+
+  String? _polygonDisplayLabel(PolygonData polygon) {
+    final baseName = polygon.name?.trim();
+    if (baseName == null || baseName.isEmpty) return null;
+
+    final subsls = polygon.subsls?.trim();
+    if (subsls == null || subsls.isEmpty || subsls == '00') {
+      return baseName;
+    }
+
+    return '$baseName ($subsls)';
   }
 
   // Calculate dynamic offset based on zoom level for Esri maps
@@ -324,18 +520,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
         : 120;
     final double labelHeight = _scaledHeight(fontSize);
     final List<Place> renderList = _placesForRender(widget.places);
-    final List<Place> groundcheckList = renderList
-        .where(
-          (p) =>
-              p.id.startsWith('gc:') &&
-              (_showNonVerifiedGroundchecks ||
-                  p.gcsResult == '1' ||
-                  (p.gcsResult?.isEmpty ?? true)),
-        )
-        .toList();
-    final List<Place> mainList = renderList
-        .where((p) => !p.id.startsWith('gc:'))
-        .toList();
+    final bool showMarkers = _showDirectoryMarkers || _showGroundcheckMarkers;
 
     return Stack(
       children: [
@@ -350,11 +535,6 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
             interactionOptions: const InteractionOptions(
               flags: InteractiveFlag.all,
             ),
-            onLongPress: (tapPosition, point) {
-              if (widget.onLongPress != null) {
-                widget.onLongPress!(point);
-              }
-            },
             onMapEvent: (evt) {
               bool shouldSetState = false;
               // Only update state if zoom or rotation changed significantly
@@ -371,10 +551,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                 setState(() {});
               }
 
-              if (widget.onBoundsChanged != null && !_isDragging) {
+              if (widget.onBoundsChanged != null) {
                 _boundsDebounce?.cancel();
                 _boundsDebounce = Timer(const Duration(milliseconds: 300), () {
-                  if (_isDragging) return; // Double check inside timer
                   final b = _mapController.camera.visibleBounds;
                   widget.onBoundsChanged!(b);
                 });
@@ -407,6 +586,24 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                 return tileWidget;
               },
             ),
+            if (widget.showAssignmentPolygons &&
+                widget.assignmentPolygons.isNotEmpty)
+              PolygonLayer(
+                polygons: widget.assignmentPolygons.map((p) {
+                  return Polygon(
+                    points: p.points,
+                    color: Colors.green.withValues(alpha: 0.18),
+                    borderColor: Colors.green,
+                    borderStrokeWidth: 2,
+                    label: _polygonDisplayLabel(p),
+                    labelStyle: const TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  );
+                }).toList(),
+              ),
             if (widget.selectedPolygons.isNotEmpty)
               PolygonLayer(
                 polygons: widget.selectedPolygons.map((p) {
@@ -415,7 +612,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                     color: Colors.blue.withValues(alpha: 0.3),
                     borderColor: Colors.blue,
                     borderStrokeWidth: 2,
-                    label: p.name, // Use name (nmsls) instead of idsls
+                    label: _polygonDisplayLabel(p),
                     labelStyle: const TextStyle(
                       color: Colors.black,
                       fontWeight: FontWeight.bold,
@@ -477,61 +674,23 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                   ),
                 ],
               ),
-            // Draggable markers: split into groundcheck and main (above)
-            if (renderList.isNotEmpty) ...[
-              if (_showGroundcheckMarkers && groundcheckList.isNotEmpty)
-                DragMarkers(
-                  markers: groundcheckList.map((p) {
-                    final isSelected = widget.selectedPlace?.id == p.id;
-                    final double fontSize = _baseFontSize;
-                    return DragMarker(
-                      key: ValueKey(p.id),
-                      point: p.position,
-                      size: Size(170, isSelected ? 86 : 78),
-                      offset: Offset(0, isSelected ? -20 : -16),
-                      useLongPress: true,
-                      builder: (_, __, isDragging) {
-                        Color baseColor;
-                        IconData icon;
-
-                        if (isDragging) {
-                          baseColor = Colors.blue;
-                          icon = Icons.edit_location_alt;
-                        } else {
-                          switch (p.gcsResult) {
-                            case '1': // Ditemukan
-                              baseColor = Colors.green;
-                              icon = Icons.check_circle;
-                              break;
-                            case '99': // Tidak ditemukan
-                              baseColor = Colors.red;
-                              icon = Icons.cancel;
-                              break;
-                            case '3': // Tutup
-                              baseColor = Colors.pinkAccent;
-                              icon = Icons.block;
-                              break;
-                            case '4': // Ganda
-                              baseColor = Colors.deepPurpleAccent;
-                              icon = Icons.content_copy;
-                              break;
-                            case '5': // Usaha Baru
-                              baseColor = Colors.blue;
-                              icon = Icons.add_location;
-                              break;
-                            default: // Belum Groundcheck (null/empty)
-                              baseColor = Colors.orange;
-                              icon = Icons.help;
-                              break;
-                          }
-                        }
-
-                        // Highlight color when selected if needed, or just keep status color
-                        if (isSelected) {
-                          // Optional: make it slightly different or just rely on size
-                        }
-
-                        return Column(
+            if (showMarkers && renderList.isNotEmpty)
+              MarkerLayer(
+                markers: renderList.map((p) {
+                  final isSelected = widget.selectedPlace?.id == p.id;
+                  final fontSize = _baseFontSize;
+                  final baseColor = isSelected ? Colors.blue : Colors.red;
+                  return Marker(
+                    key: ValueKey(p.id),
+                    point: p.position,
+                    width: 170,
+                    height: isSelected ? 86 : 78,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => widget.onPlaceTap(p),
+                      child: Transform.translate(
+                        offset: Offset(0, isSelected ? -20 : -16),
+                        child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Container(
@@ -550,7 +709,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                                     )
                                   : null,
                               child: Icon(
-                                icon,
+                                Icons.location_on,
                                 color: baseColor,
                                 size: isSelected ? 40 : 32,
                               ),
@@ -588,141 +747,12 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                                 ],
                               ),
                           ],
-                        );
-                      },
-                      onTap: (_) {
-                        final d = const Distance();
-                        final nearby = groundcheckList
-                            .where(
-                              (other) =>
-                                  d.as(
-                                    LengthUnit.Meter,
-                                    p.position,
-                                    other.position,
-                                  ) <=
-                                  4.0,
-                            )
-                            .toList();
-                        if (widget.onNearbyPlacesTap != null) {
-                          final list = nearby.isNotEmpty ? nearby : [p];
-                          widget.onNearbyPlacesTap!(list);
-                        } else {
-                          widget.onPlaceTap(p);
-                        }
-                      },
-                      onDragStart: (_, __) {
-                        _isDragging = true;
-                      },
-                      onDragEnd: (_, newPoint) {
-                        _isDragging = false;
-                        widget.onPlaceDragEnd?.call(p, newPoint);
-                      },
-                      onLongDragEnd: (_, newPoint) {
-                        _isDragging = false;
-                        widget.onPlaceDragEnd?.call(p, newPoint);
-                      },
-                      scrollMapNearEdge: true,
-                      scrollNearEdgeRatio: 2.0,
-                      scrollNearEdgeSpeed: 2.0,
-                    );
-                  }).toList(),
-                ),
-              if (_showDirectoryMarkers && mainList.isNotEmpty)
-                DragMarkers(
-                  markers: mainList.map((p) {
-                    final isSelected = widget.selectedPlace?.id == p.id;
-                    final double fontSize = _baseFontSize;
-                    return DragMarker(
-                      key: ValueKey(p.id),
-                      point: p.position,
-                      size: Size(170, isSelected ? 86 : 78),
-                      offset: Offset(0, isSelected ? -20 : -16),
-                      useLongPress: true,
-                      builder: (_, __, isDragging) {
-                        final Color baseColor = isSelected
-                            ? Colors.blue
-                            : Colors.red;
-                        final IconData icon = isDragging
-                            ? Icons.edit_location
-                            : Icons.location_on;
-                        return Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              decoration: isSelected
-                                  ? BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: baseColor.withValues(
-                                            alpha: 0.5,
-                                          ),
-                                          blurRadius: 10,
-                                          spreadRadius: 2,
-                                        ),
-                                      ],
-                                    )
-                                  : null,
-                              child: Icon(
-                                icon,
-                                color: baseColor,
-                                size: isSelected ? 40 : 32,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            if (_showMarkerLabels)
-                              Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  Text(
-                                    p.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: fontSize.toDouble(),
-                                      fontWeight: FontWeight.w600,
-                                      foreground: Paint()
-                                        ..style = PaintingStyle.stroke
-                                        ..strokeWidth = 3
-                                        ..color = Colors.black,
-                                    ),
-                                  ),
-                                  Text(
-                                    p.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: fontSize.toDouble(),
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                          ],
-                        );
-                      },
-                      onTap: (_) => widget.onPlaceTap(p),
-                      onDragStart: (_, __) {
-                        _isDragging = true;
-                      },
-                      onDragEnd: (_, newPoint) {
-                        _isDragging = false;
-                        widget.onPlaceDragEnd?.call(p, newPoint);
-                      },
-                      onLongDragEnd: (_, newPoint) {
-                        _isDragging = false;
-                        widget.onPlaceDragEnd?.call(p, newPoint);
-                      },
-                      scrollMapNearEdge: true,
-                      scrollNearEdgeRatio: 2.0,
-                      scrollNearEdgeSpeed: 2.0,
-                    );
-                  }).toList(),
-                ),
-            ],
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
             if (_clipboardCheckedPoint != null)
               CircleLayer(
                 circles: [
@@ -841,6 +871,11 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           initialCenter: widget.config.center,
           rotation: _rotation,
           polygonsMeta: widget.polygonsMeta,
+          hasAssignmentPolygons: widget.assignmentPolygons.isNotEmpty,
+          showAssignmentPolygons: widget.showAssignmentPolygons,
+          preserveAssignmentFocusOnInit:
+              widget.assignmentFocusBounds != null ||
+              widget.assignmentPolygons.isNotEmpty,
           currentMapType: _currentMapType,
           showDirectoryMarkers: _showDirectoryMarkers,
           showGroundcheckMarkers: _showGroundcheckMarkers,
@@ -858,6 +893,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           },
           onPolygonSelected: widget.onPolygonSelected,
           onMultiplePolygonsSelected: widget.onMultiplePolygonsSelected,
+          onToggleAssignmentPolygons: widget.onToggleAssignmentPolygons,
           onMapTypeChanged: (MapType mapType) {
             setState(() {
               _currentMapType = mapType;
@@ -965,11 +1001,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      const Icon(
-                        Icons.close,
-                        color: Colors.white70,
-                        size: 18,
-                      ),
+                      const Icon(Icons.close, color: Colors.white70, size: 18),
                     ],
                   ),
                 ),
@@ -1098,25 +1130,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
       return sourceList;
     }
 
-    final List<Place> main = [];
-    final List<Place> gc = [];
-    for (final p in sourceList) {
-      if (p.id.startsWith('gc:')) {
-        gc.add(p);
-      } else {
-        main.add(p);
-      }
-    }
-    final List<Place> result = [];
-    int iMain = 0, iGc = 0;
-    while (result.length < cap && (iMain < main.length || iGc < gc.length)) {
-      if (iMain < main.length && result.length < cap) {
-        result.add(main[iMain++]);
-      }
-      if (iGc < gc.length && result.length < cap) {
-        result.add(gc[iGc++]);
-      }
-    }
+    final List<Place> result = sourceList.take(cap).toList();
     if (selectedId != null && result.every((p) => p.id != selectedId)) {
       // Only try to find in sourceList (must be inside polygon if filtering is active)
       try {

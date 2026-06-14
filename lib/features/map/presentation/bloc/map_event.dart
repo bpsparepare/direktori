@@ -47,7 +47,7 @@ class PlaceCleared extends MapEvent {
 class PolygonRequested extends MapEvent {
   final String assetPath;
   const PolygonRequested({
-    this.assetPath = 'assets/geojson/final_sls_optimized.json',
+    this.assetPath = 'assets/geojson/final_sls_optimized_v2.json',
   });
   @override
   List<Object?> get props => [assetPath];
@@ -56,7 +56,7 @@ class PolygonRequested extends MapEvent {
 class PolygonsListRequested extends MapEvent {
   final String assetPath;
   const PolygonsListRequested({
-    this.assetPath = 'assets/geojson/final_sls_optimized.json',
+    this.assetPath = 'assets/geojson/final_sls_optimized_v2.json',
   });
   @override
   List<Object?> get props => [assetPath];
@@ -92,4 +92,8 @@ class TemporaryMarkerAdded extends MapEvent {
 
 class TemporaryMarkerRemoved extends MapEvent {
   const TemporaryMarkerRemoved();
+}
+
+class AssignmentPolygonsToggleRequested extends MapEvent {
+  const AssignmentPolygonsToggleRequested();
 }

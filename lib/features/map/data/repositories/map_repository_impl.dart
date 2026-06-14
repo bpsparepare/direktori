@@ -8,11 +8,12 @@ import '../../domain/entities/map_config.dart';
 import '../../domain/entities/place.dart';
 import '../../domain/repositories/map_repository.dart';
 import '../../domain/entities/polygon_data.dart';
-import '../../domain/entities/groundcheck_record.dart';
+import '../models/assignment_place_record.dart';
 import '../models/direktori_model.dart';
 import '../../../../core/config/supabase_config.dart';
 import 'package:flutter/foundation.dart';
 import '../../../../core/config/app_constants.dart';
+import '../services/assignment_places_service.dart';
 import '../services/groundcheck_supabase_service.dart';
 import '../../../../core/utils/debug_monitor.dart';
 
@@ -26,14 +27,12 @@ class MapRepositoryImpl implements MapRepository {
 
   Future<List<Place>> _loadPlacesFromLocal() async {
     try {
-      final service = GroundcheckSupabaseService();
-      final records = await service.loadLocalRecords();
-      final places = <Place>[];
-      for (final r in records) {
-        final p = _recordToPlace(r);
-        if (p != null) places.add(p);
+      final service = AssignmentPlacesService();
+      var records = await service.getVisibleLocalRecords();
+      if (records.isEmpty && _supabaseClient.auth.currentUser != null) {
+        records = await service.syncRecords();
       }
-      return places;
+      return _placesFromAssignmentRecords(records);
     } catch (e) {
       debugPrint('MapRepository: Error loading local places: $e');
       return [];
@@ -656,18 +655,9 @@ class MapRepositoryImpl implements MapRepository {
   @override
   Future<List<Place>> refreshPlaces() async {
     try {
-      final service = GroundcheckSupabaseService();
-
-      // Incremental Sync
-      // Hanya mengambil data baru/update dan menggabungkannya dengan cache saat ini.
-      List<GroundcheckRecord> records = await service.syncRecords();
-
-      // Convert ke List<Place>
-      final places = <Place>[];
-      for (final r in records) {
-        final p = _recordToPlace(r);
-        if (p != null) places.add(p);
-      }
+      final service = AssignmentPlacesService();
+      final records = await service.syncRecords();
+      final places = _placesFromAssignmentRecords(records);
       _allPlacesCache = places;
       _boundsCache.clear();
       return _allPlacesCache ?? [];
@@ -680,18 +670,9 @@ class MapRepositoryImpl implements MapRepository {
   @override
   Future<List<Place>> downloadFullPlaces() async {
     try {
-      final service = GroundcheckSupabaseService();
-
-      // Full Sync (Download Semua)
-      // Menimpa seluruh cache lokal dengan data baru dari server.
-      List<GroundcheckRecord> records = await service.downloadFullData();
-
-      // Convert ke List<Place>
-      final places = <Place>[];
-      for (final r in records) {
-        final p = _recordToPlace(r);
-        if (p != null) places.add(p);
-      }
+      final service = AssignmentPlacesService();
+      final records = await service.downloadFullData();
+      final places = _placesFromAssignmentRecords(records);
       _allPlacesCache = places;
       _boundsCache.clear();
       return _allPlacesCache ?? [];
@@ -701,27 +682,34 @@ class MapRepositoryImpl implements MapRepository {
     }
   }
 
-  Place? _recordToPlace(GroundcheckRecord r) {
-    final lat = double.tryParse(r.latitude);
-    final lon = double.tryParse(r.longitude);
-    if (lat == null || lon == null) return null;
+  List<Place> _placesFromAssignmentRecords(
+    List<AssignmentPlaceRecord> records,
+  ) {
+    final places = <Place>[];
+    for (final record in records) {
+      final place = _assignmentRecordToPlace(record);
+      places.add(place);
+    }
+    return places;
+  }
 
+  Place _assignmentRecordToPlace(AssignmentPlaceRecord record) {
     final descParts = <String>[];
-    if (r.kodeWilayah.isNotEmpty)
-      descParts.add('Kode wilayah: ${r.kodeWilayah}');
-    if (r.statusPerusahaan.isNotEmpty)
-      descParts.add('Status: ${r.statusPerusahaan}');
-    if (r.skalaUsaha.isNotEmpty) descParts.add('Skala: ${r.skalaUsaha}');
-    if (r.gcsResult.isNotEmpty) descParts.add('GCS: ${r.gcsResult}');
-
+    if (record.alamat.isNotEmpty) descParts.add(record.alamat);
+    if (record.statusText.isNotEmpty)
+      descParts.add('Status: ${record.statusText}');
+    if (record.kodeUsaha.isNotEmpty)
+      descParts.add('Kode usaha: ${record.kodeUsaha}');
+    if (record.fullcodeSubsls.isNotEmpty) {
+      descParts.add('Wilayah tugas: ${record.fullcodeSubsls}');
+    }
     return Place(
-      id: 'gc:${r.idsbr}',
-      name: r.namaUsaha.isNotEmpty ? r.namaUsaha : r.idsbr,
+      id: record.id,
+      name: record.namaUsaha.isNotEmpty ? record.namaUsaha : record.idsbr,
       description: descParts.join(' | '),
-      position: LatLng(lat, lon),
-      gcsResult: r.gcsResult,
-      address: r.alamatUsaha,
-      statusPerusahaan: r.statusPerusahaan,
+      position: LatLng(record.latitude, record.longitude),
+      address: record.alamat,
+      statusPerusahaan: record.statusText,
     );
   }
 
@@ -894,6 +882,12 @@ class MapRepositoryImpl implements MapRepository {
     final String? idsls = properties != null
         ? properties['idsls'] as String?
         : null;
+    final String? idsubsls = properties != null
+        ? properties['idsubsls']?.toString()
+        : null;
+    final String? subsls = properties != null
+        ? properties['subsls']?.toString()
+        : null;
     final String? kodePos = properties != null
         ? properties['kode_pos']?.toString()
         : null;
@@ -908,6 +902,8 @@ class MapRepositoryImpl implements MapRepository {
         kecamatan: kec,
         desa: desa,
         idsls: idsls,
+        idsubsls: idsubsls,
+        subsls: subsls,
         kodePos: kodePos,
       );
     }
@@ -930,6 +926,8 @@ class MapRepositoryImpl implements MapRepository {
           kecamatan: kec,
           desa: desa,
           idsls: idsls,
+          idsubsls: idsubsls,
+          subsls: subsls,
           kodePos: kodePos,
         );
       }
@@ -946,6 +944,8 @@ class MapRepositoryImpl implements MapRepository {
           kecamatan: kec,
           desa: desa,
           idsls: idsls,
+          idsubsls: idsubsls,
+          subsls: subsls,
           kodePos: kodePos,
         );
       }
@@ -957,6 +957,8 @@ class MapRepositoryImpl implements MapRepository {
         kecamatan: kec,
         desa: desa,
         idsls: idsls,
+        idsubsls: idsubsls,
+        subsls: subsls,
         kodePos: kodePos,
       );
     }
@@ -978,6 +980,8 @@ class MapRepositoryImpl implements MapRepository {
       kecamatan: kec,
       desa: desa,
       idsls: idsls,
+      idsubsls: idsubsls,
+      subsls: subsls,
       kodePos: kodePos,
     );
   }
@@ -1036,6 +1040,8 @@ class MapRepositoryImpl implements MapRepository {
             kecamatan: map['nmkec'],
             desa: map['nmdesa'],
             idsls: map['idsls'],
+            idsubsls: map['idsubsls']?.toString(),
+            subsls: map['subsls']?.toString(),
             kodePos: map['kode_pos']?.toString(),
           );
         }).toList();
@@ -1346,6 +1352,12 @@ List<PolygonData> _parseGeoJsonList(String jsonStr) {
     final String? idsls = properties != null
         ? properties['idsls'] as String?
         : null;
+    final String? idsubsls = properties != null
+        ? properties['idsubsls']?.toString()
+        : null;
+    final String? subsls = properties != null
+        ? properties['subsls']?.toString()
+        : null;
     final String? kodePos = properties != null
         ? properties['kode_pos']?.toString()
         : null;
@@ -1360,6 +1372,8 @@ List<PolygonData> _parseGeoJsonList(String jsonStr) {
           kecamatan: kec,
           desa: desa,
           idsls: idsls,
+          idsubsls: idsubsls,
+          subsls: subsls,
           kodePos: kodePos,
         ),
       );
@@ -1394,6 +1408,8 @@ List<PolygonData> _parseGeoJsonList(String jsonStr) {
           kecamatan: kec,
           desa: desa,
           idsls: idsls,
+          idsubsls: idsubsls,
+          subsls: subsls,
           kodePos: kodePos,
         ),
       );
@@ -1415,6 +1431,8 @@ List<PolygonData> _parseGeoJsonList(String jsonStr) {
         kecamatan: kec,
         desa: desa,
         idsls: idsls,
+        idsubsls: idsubsls,
+        subsls: subsls,
         kodePos: kodePos,
       ),
     );

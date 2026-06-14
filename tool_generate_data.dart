@@ -9,7 +9,7 @@ void main() {
     '/Users/nasrul/flutter/direktori/assets/json/sls_metadata.json',
   );
   final File optimizedFile = File(
-    '/Users/nasrul/flutter/direktori/assets/geojson/final_sls_optimized.json',
+    '/Users/nasrul/flutter/direktori/assets/geojson/final_sls_optimized_v2.json',
   );
 
   if (!inputFile.existsSync()) {

@@ -1,20 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
-import 'groundcheck_history_page.dart';
 import 'map_page.dart';
 import 'saved_page.dart';
 import 'kbli_page.dart';
-import 'groundcheck_page.dart';
-import 'spasial_page.dart';
-import 'duplicate_page.dart';
+import 'dokumentasi_page.dart';
+import 'wilayah_tugas_page.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
 import '../../data/repositories/map_repository_impl.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
-import '../../domain/entities/groundcheck_record.dart';
 import '../../domain/entities/place.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 
@@ -33,7 +29,7 @@ class _MainPageState extends State<MainPage> {
   final FocusNode _searchFocusNode = FocusNode();
   List<Place> _searchResults = [];
   List<Place> _allPlaces = [];
-  bool _isMitra = false;
+  String? _se2026Role;
 
   @override
   void initState() {
@@ -46,10 +42,10 @@ class _MainPageState extends State<MainPage> {
 
   Future<void> _checkUserRole() async {
     final service = GroundcheckSupabaseService();
-    final role = await service.fetchCurrentUserRole();
+    final role = await service.fetchCurrentSe2026Role();
     if (mounted) {
       setState(() {
-        _isMitra = (role == 'mitra');
+        _se2026Role = role;
       });
     }
   }
@@ -210,26 +206,8 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  void _focusGroundcheckLocation(GroundcheckRecord record) {
-    final lat = double.tryParse(record.latitude);
-    final lon = double.tryParse(record.longitude);
-
-    if (lat == null || lon == null || lat == 0.0 || lon == 0.0) return;
-
-    setState(() {
-      _selectedIndex = 0;
-    });
-
-    try {
-      // Use latlong2.LatLng via flutter_map export
-      _sharedMapController.move(LatLng(lat, lon), 18.0);
-    } catch (_) {}
-  }
-
   @override
   Widget build(BuildContext context) {
-    final bool isLargeScreen = MediaQuery.of(context).size.width > 600;
-
     return BlocListener<MapBloc, MapState>(
       listenWhen: (previous, current) => previous.places != current.places,
       listener: (context, state) {
@@ -251,13 +229,9 @@ class _MainPageState extends State<MainPage> {
                 index: _selectedIndex == 0 ? 0 : _selectedIndex - 1,
                 children: [
                   DashboardPage(mapController: _sharedMapController),
+                  const WilayahTugasPage(),
+                  const DokumentasiPage(),
                   const KbliPage(),
-                  const GroundcheckHistoryPage(),
-                  if (!_isMitra && isLargeScreen)
-                    GroundcheckPage(onGoToMap: _focusGroundcheckLocation),
-                  if (!_isMitra && isLargeScreen) const SpasialPage(),
-                  if (!_isMitra && isLargeScreen)
-                    DuplicatePage(onGoToMap: _focusGroundcheckLocation),
                 ],
               ),
             ),
@@ -327,7 +301,7 @@ class _MainPageState extends State<MainPage> {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: Colors.blue,
+                              color: _avatarColor,
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
@@ -383,6 +357,14 @@ class _MainPageState extends State<MainPage> {
               label: 'Dashboard',
             ),
             const BottomNavigationBarItem(
+              icon: Icon(Icons.map_outlined),
+              label: 'Wilayah',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.photo_camera_back_outlined),
+              label: 'Dokumentasi',
+            ),
+            const BottomNavigationBarItem(
               icon: Icon(Icons.apartment_rounded),
               label: 'KBLI',
             ),
@@ -414,5 +396,18 @@ class _MainPageState extends State<MainPage> {
         ],
       ),
     );
+  }
+
+  Color get _avatarColor {
+    switch (_se2026Role) {
+      case 'admin':
+        return Colors.deepPurple;
+      case 'pengawas':
+        return Colors.orange;
+      case 'pendata':
+        return Colors.blue;
+      default:
+        return Colors.blueGrey;
+    }
   }
 }

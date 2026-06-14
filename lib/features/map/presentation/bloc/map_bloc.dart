@@ -1,5 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../data/services/map_assignment_focus_cache_service.dart';
+import '../../data/services/groundcheck_supabase_service.dart';
+import '../../domain/entities/map_focus_bounds.dart';
 import '../../domain/entities/polygon_data.dart';
 import '../../domain/usecases/get_all_polygons_meta_from_geojson.dart';
 import '../../domain/usecases/get_first_polygon_meta_from_geojson.dart';
@@ -12,6 +19,8 @@ import 'map_event.dart';
 import 'map_state.dart';
 
 class MapBloc extends Bloc<MapEvent, MapState> {
+  static const String _debugServerUrl = 'http://10.200.3.68:7777/event';
+  static const String _debugSessionId = 'assignment-focus-cache';
   final GetInitialMapConfig getInitialMapConfig;
   final GetPlaces getPlaces;
   final RefreshPlaces refreshPlaces;
@@ -19,6 +28,10 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   final GetFirstPolygonMetaFromGeoJson getFirstPolygonMeta;
   final GetAllPolygonsMetaFromGeoJson getAllPolygonsMeta;
   final GetPolygonPoints getPolygonPoints;
+  final GroundcheckSupabaseService _groundcheckService =
+      GroundcheckSupabaseService();
+  final MapAssignmentFocusCacheService _focusCacheService =
+      MapAssignmentFocusCacheService();
 
   MapBloc({
     required this.getInitialMapConfig,
@@ -42,13 +55,39 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     on<MultiplePolygonsSelected>(_onMultiplePolygonsSelected);
     on<TemporaryMarkerAdded>(_onTemporaryMarkerAdded);
     on<TemporaryMarkerRemoved>(_onTemporaryMarkerRemoved);
+    on<AssignmentPolygonsToggleRequested>(_onAssignmentPolygonsToggleRequested);
   }
 
   Future<void> _onInit(MapInitRequested event, Emitter<MapState> emit) async {
     emit(state.copyWith(status: MapStatus.loading));
     try {
       final config = await getInitialMapConfig();
-      emit(state.copyWith(status: MapStatus.success, config: config));
+      final focusBounds = await _focusCacheService.loadCurrentUserBounds();
+      // #region debug-point C:init-state
+      unawaited(
+        _debugReport(
+          hypothesisId: 'C',
+          location: 'map_bloc.dart:66',
+          msg: '[DEBUG] map init completed',
+          data: {
+            'hasConfig': true,
+            'hasFocusBounds': focusBounds != null,
+            'focusSouth': focusBounds?.south,
+            'focusNorth': focusBounds?.north,
+            'focusWest': focusBounds?.west,
+            'focusEast': focusBounds?.east,
+          },
+        ),
+      );
+      // #endregion
+      emit(
+        state.copyWith(
+          status: MapStatus.success,
+          config: config,
+          assignmentFocusBounds: focusBounds,
+          clearAssignmentFocusBounds: focusBounds == null,
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(status: MapStatus.failure, error: e.toString()));
     }
@@ -147,7 +186,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       );
 
       // Buat label yang lebih informatif dengan nmsls, nmkec, dan nmdesa
-      String label = meta.name ?? 'Polygon';
+      String label = _formatPolygonDisplayName(meta) ?? 'Polygon';
       if (meta.kecamatan != null || meta.desa != null) {
         final kecInfo = meta.kecamatan ?? '-';
         final desaInfo = meta.desa ?? '-';
@@ -179,9 +218,54 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       String? selLabel = state.polygonLabel;
       var selMeta = state.selectedPolygonMeta;
 
+      final assignmentPolygons = await _loadAssignmentPolygons(list);
+      final assignmentFocusBounds = _buildFocusBounds(assignmentPolygons);
+      // #region debug-point B:assignment-polygon-summary
+      unawaited(
+        _debugReport(
+          hypothesisId: 'B',
+          location: 'map_bloc.dart:224',
+          msg: '[DEBUG] assignment polygons resolved',
+          data: {
+            'totalPolygonsMeta': list.length,
+            'assignmentPolygonCount': assignmentPolygons.length,
+            'firstPolygonIdsls': list.isNotEmpty ? list.first.idsls : null,
+            'firstPolygonIdSubsls': list.isNotEmpty
+                ? list.first.idsubsls
+                : null,
+            'firstPolygonPointCount': list.isNotEmpty ? list.first.points.length : null,
+            'firstAssignmentIdsls': assignmentPolygons.isNotEmpty
+                ? assignmentPolygons.first.idsls
+                : null,
+            'firstAssignmentIdSubsls': assignmentPolygons.isNotEmpty
+                ? assignmentPolygons.first.idsubsls
+                : null,
+            'firstAssignmentPointCount': assignmentPolygons.isNotEmpty
+                ? assignmentPolygons.first.points.length
+                : null,
+            'hasFocusBounds': assignmentFocusBounds != null,
+            'focusSouth': assignmentFocusBounds?.south,
+            'focusNorth': assignmentFocusBounds?.north,
+            'focusWest': assignmentFocusBounds?.west,
+            'focusEast': assignmentFocusBounds?.east,
+          },
+        ),
+      );
+      // #endregion
+      if (assignmentFocusBounds != null) {
+        await _focusCacheService.saveCurrentUserBounds(assignmentFocusBounds);
+      } else {
+        await _focusCacheService.clearCurrentUserBounds();
+      }
       emit(
         state.copyWith(
           polygonsMeta: list,
+          assignmentPolygons: assignmentPolygons,
+          showAssignmentPolygons: state.assignmentPolygons.isEmpty
+              ? assignmentPolygons.isNotEmpty
+              : state.showAssignmentPolygons,
+          assignmentFocusBounds: assignmentFocusBounds,
+          clearAssignmentFocusBounds: assignmentFocusBounds == null,
           polygon: selPoints,
           polygonLabel: selLabel,
           selectedPolygonMeta: selMeta,
@@ -210,6 +294,8 @@ class MapBloc extends Bloc<MapEvent, MapState> {
           kecamatan: sel.kecamatan,
           desa: sel.desa,
           idsls: sel.idsls,
+          idsubsls: sel.idsubsls,
+          subsls: sel.subsls,
           kodePos: sel.kodePos,
         );
       } catch (e) {
@@ -218,7 +304,8 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     }
 
     // Buat label yang lebih informatif dengan nmsls, nmkec, dan nmdesa
-    String label = sel.name ?? 'Polygon ${event.index + 1}';
+    String label =
+        _formatPolygonDisplayName(sel) ?? 'Polygon ${event.index + 1}';
     if (sel.kecamatan != null || sel.desa != null) {
       final kecInfo = sel.kecamatan ?? '-';
       final desaInfo = sel.desa ?? '-';
@@ -251,6 +338,8 @@ class MapBloc extends Bloc<MapEvent, MapState> {
           kecamatan: sel.kecamatan,
           desa: sel.desa,
           idsls: sel.idsls,
+          idsubsls: sel.idsubsls,
+          subsls: sel.subsls,
           kodePos: sel.kodePos,
         );
       } catch (e) {
@@ -259,7 +348,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     }
 
     // Buat label yang lebih informatif dengan nmsls, nmkec, dan nmdesa
-    String label = sel.name ?? 'Polygon';
+    String label = _formatPolygonDisplayName(sel) ?? 'Polygon';
     if (sel.kecamatan != null || sel.desa != null) {
       final kecInfo = sel.kecamatan ?? '-';
       final desaInfo = sel.desa ?? '-';
@@ -298,6 +387,28 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     emit(state.copyWith(clearTemporaryMarker: true));
   }
 
+  void _onAssignmentPolygonsToggleRequested(
+    AssignmentPolygonsToggleRequested event,
+    Emitter<MapState> emit,
+  ) {
+    if (state.assignmentPolygons.isEmpty) return;
+    // #region debug-point D:assignment-polygon-toggle
+    unawaited(
+      _debugReport(
+        hypothesisId: 'D',
+        location: 'map_bloc.dart:381',
+        msg: '[DEBUG] assignment polygon visibility toggled',
+        data: {
+          'currentShowAssignmentPolygons': state.showAssignmentPolygons,
+          'nextShowAssignmentPolygons': !state.showAssignmentPolygons,
+          'assignmentPolygonCount': state.assignmentPolygons.length,
+        },
+      ),
+    );
+    // #endregion
+    emit(state.copyWith(showAssignmentPolygons: !state.showAssignmentPolygons));
+  }
+
   Future<void> _onMultiplePolygonsSelected(
     MultiplePolygonsSelected event,
     Emitter<MapState> emit,
@@ -327,6 +438,8 @@ class MapBloc extends Bloc<MapEvent, MapState> {
               kecamatan: p.kecamatan,
               desa: p.desa,
               idsls: p.idsls,
+              idsubsls: p.idsubsls,
+              subsls: p.subsls,
               kodePos: p.kodePos,
             ),
           );
@@ -365,5 +478,191 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         selectedPolygonMeta: first,
       ),
     );
+  }
+
+  Future<List<PolygonData>> _loadAssignmentPolygons(
+    List<PolygonData> polygonsMeta,
+  ) async {
+    if (polygonsMeta.isEmpty) return const [];
+
+    try {
+      final profile = await _groundcheckService.fetchCurrentSe2026Profile();
+      // #region debug-point E:profile-role
+      unawaited(
+        _debugReport(
+          hypothesisId: 'E',
+          location: 'map_bloc.dart:434',
+          msg: '[DEBUG] profile fetched for assignment polygons',
+          data: {
+            'hasProfile': profile != null,
+            'isActive': profile?.isActive,
+            'role': profile?.role,
+          },
+        ),
+      );
+      // #endregion
+      if (profile == null || !profile.isActive || profile.role == 'admin') {
+        return const [];
+      }
+
+      final wilayah = await _groundcheckService.fetchCurrentUserWilayahTugas();
+      // #region debug-point B:wilayah-match-input
+      unawaited(
+        _debugReport(
+          hypothesisId: 'B',
+          location: 'map_bloc.dart:449',
+          msg: '[DEBUG] wilayah tugas fetched for polygon matching',
+          data: {
+            'wilayahCount': wilayah.length,
+            'firstWilayahId': wilayah.isNotEmpty ? wilayah.first['id']?.toString() : null,
+            'firstWilayahIdSls': wilayah.isNotEmpty
+                ? wilayah.first['id_sls']?.toString()
+                : null,
+          },
+        ),
+      );
+      // #endregion
+      if (wilayah.isEmpty) return const [];
+
+      final assignmentIds = wilayah
+          .expand((item) {
+            final values = <String>[
+              item['id']?.toString().trim() ?? '',
+              item['id_sls']?.toString().trim() ?? '',
+            ];
+            return values.where((value) => value.isNotEmpty);
+          })
+          .toSet();
+      if (assignmentIds.isEmpty) return const [];
+
+      final matchedPolygons = polygonsMeta.where((polygon) {
+        final idsubsls = polygon.idsubsls?.trim();
+        final idsls = polygon.idsls?.trim();
+        return (idsubsls != null && assignmentIds.contains(idsubsls)) ||
+            (idsls != null && assignmentIds.contains(idsls));
+      }).toList();
+
+      // #region debug-point B:wilayah-match-result
+      unawaited(
+        _debugReport(
+          hypothesisId: 'B',
+          location: 'map_bloc.dart:512',
+          msg: '[DEBUG] assignment polygon matching completed',
+          data: {
+            'assignmentIdCount': assignmentIds.length,
+            'polygonMetaCount': polygonsMeta.length,
+            'matchedPolygonCount': matchedPolygons.length,
+            'sampleAssignmentIds': assignmentIds.take(5).toList(),
+            'samplePolygonIds': polygonsMeta
+                .take(5)
+                .map(
+                  (polygon) => {
+                    'idsls': polygon.idsls,
+                    'idsubsls': polygon.idsubsls,
+                  },
+                )
+                .toList(),
+            'sampleMatchedPolygonIds': matchedPolygons
+                .take(5)
+                .map(
+                  (polygon) => {
+                    'idsls': polygon.idsls,
+                    'idsubsls': polygon.idsubsls,
+                  },
+                )
+                .toList(),
+          },
+        ),
+      );
+      // #endregion
+
+      return matchedPolygons;
+    } catch (e) {
+      debugPrint('BLoC: failed to load assignment polygons: $e');
+      unawaited(
+        _debugReport(
+          hypothesisId: 'B',
+          location: 'map_bloc.dart:531',
+          msg: '[DEBUG] assignment polygon load failed',
+          data: {'error': e.toString()},
+        ),
+      );
+      return const [];
+    }
+  }
+
+  MapFocusBounds? _buildFocusBounds(List<PolygonData> polygons) {
+    if (polygons.isEmpty) return null;
+
+    double minLat = 90.0;
+    double maxLat = -90.0;
+    double minLng = 180.0;
+    double maxLng = -180.0;
+    var hasPoints = false;
+
+    for (final polygon in polygons) {
+      for (final point in polygon.points) {
+        hasPoints = true;
+        if (point.latitude < minLat) minLat = point.latitude;
+        if (point.latitude > maxLat) maxLat = point.latitude;
+        if (point.longitude < minLng) minLng = point.longitude;
+        if (point.longitude > maxLng) maxLng = point.longitude;
+      }
+    }
+
+    if (!hasPoints) return null;
+
+    final bounds = MapFocusBounds(
+      south: minLat,
+      north: maxLat,
+      west: minLng,
+      east: maxLng,
+    );
+    return bounds.isValid ? bounds : null;
+  }
+
+  String? _formatPolygonDisplayName(PolygonData polygon) {
+    final baseName = polygon.name?.trim();
+    if (baseName == null || baseName.isEmpty) return null;
+
+    final subsls = polygon.subsls?.trim();
+    if (subsls == null || subsls.isEmpty || subsls == '00') {
+      return baseName;
+    }
+
+    return '$baseName ($subsls)';
+  }
+
+  Future<void> _debugReport({
+    required String hypothesisId,
+    required String location,
+    required String msg,
+    required Map<String, Object?> data,
+  }) async {
+    final localLine =
+        '[assignment-focus-cache][$hypothesisId][$location] $msg ${jsonEncode(data)}';
+    debugPrint(localLine);
+    try {
+      final client = HttpClient();
+      final request = await client.postUrl(Uri.parse(_debugServerUrl));
+      request.headers.contentType = ContentType.json;
+      request.write(
+        jsonEncode({
+          'sessionId': _debugSessionId,
+          'runId': 'pre-fix',
+          'hypothesisId': hypothesisId,
+          'location': location,
+          'msg': msg,
+          'data': data,
+          'ts': DateTime.now().millisecondsSinceEpoch,
+        }),
+      );
+      await request.close();
+      client.close(force: true);
+    } catch (e) {
+      debugPrint(
+        '[assignment-focus-cache][$hypothesisId][$location] remote-log-failed ${e.toString()}',
+      );
+    }
   }
 }

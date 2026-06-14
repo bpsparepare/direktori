@@ -71,5 +71,5 @@ def verify_geojson(original_path, optimized_path):
 
 if __name__ == "__main__":
     original = '/Users/nasrul/flutter/direktori/assets/geojson/final_sls.geojson'
-    optimized = '/Users/nasrul/flutter/direktori/assets/geojson/final_sls_optimized.json'
+    optimized = '/Users/nasrul/flutter/direktori/assets/geojson/final_sls_optimized_v2.json'
     verify_geojson(original, optimized)

@@ -13,6 +13,22 @@ import '../../../../core/utils/debug_monitor.dart';
 import '../../../../core/services/storage/storage_service.dart';
 import '../../../../core/services/storage/storage_interface.dart';
 
+class Se2026UserProfile {
+  final String userId;
+  final String petugasId;
+  final String role;
+  final String? pengawasId;
+  final bool isActive;
+
+  const Se2026UserProfile({
+    required this.userId,
+    required this.petugasId,
+    required this.role,
+    required this.pengawasId,
+    required this.isActive,
+  });
+}
+
 class GroundcheckSupabaseService {
   final SupabaseClient _client = SupabaseConfig.client;
   static const String _tableName = 'groundcheck_list';
@@ -337,6 +353,106 @@ class GroundcheckSupabaseService {
       return null;
     } catch (e) {
       return null;
+    }
+  }
+
+  Future<Se2026UserProfile?> fetchCurrentSe2026Profile() async {
+    try {
+      final authUser = _client.auth.currentUser;
+      if (authUser == null) {
+        debugPrint('[assignment-focus-cache][E] profile fetch skipped: auth user null');
+        return null;
+      }
+
+      final appUser = await _client
+          .from('users')
+          .select('id')
+          .eq('auth_uid', authUser.id)
+          .maybeSingle();
+
+      final userId = appUser?['id']?.toString();
+      if (userId == null || userId.isEmpty) {
+        debugPrint(
+          '[assignment-focus-cache][E] profile fetch failed: users.auth_uid not found for ${authUser.id}',
+        );
+        return null;
+      }
+
+      final petugas = await _client
+          .from('se2026_petugas')
+          .select('id, role, pengawas_id, is_active')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      final petugasId = petugas?['id']?.toString();
+      final role = petugas?['role']?.toString();
+      if (petugasId == null || role == null) {
+        debugPrint(
+          '[assignment-focus-cache][E] profile fetch failed: se2026_petugas not found for userId=$userId',
+        );
+        return null;
+      }
+
+      debugPrint(
+        '[assignment-focus-cache][E] profile fetched userId=$userId petugasId=$petugasId role=$role isActive=${petugas?['is_active'] == true}',
+      );
+
+      return Se2026UserProfile(
+        userId: userId,
+        petugasId: petugasId,
+        role: role,
+        pengawasId: petugas?['pengawas_id']?.toString(),
+        isActive: petugas?['is_active'] == true,
+      );
+    } catch (e) {
+      debugPrint('[assignment-focus-cache][E] profile fetch exception: $e');
+      return null;
+    }
+  }
+
+  Future<String?> fetchCurrentSe2026Role() async {
+    final profile = await fetchCurrentSe2026Profile();
+    if (profile == null || !profile.isActive) return null;
+    return profile.role;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchCurrentUserWilayahTugas() async {
+    try {
+      final profile = await fetchCurrentSe2026Profile();
+      if (profile == null || !profile.isActive) {
+        debugPrint(
+          '[assignment-focus-cache][B] wilayah fetch skipped: profile null or inactive',
+        );
+        return [];
+      }
+
+      dynamic query = _client.from('se2026_wilayah_tugas').select();
+
+      if (profile.role == 'pengawas') {
+        query = query.eq('pml_id', profile.petugasId);
+      } else if (profile.role == 'pendata') {
+        query = query.eq('ppl_id', profile.petugasId);
+      }
+
+      final response = await query
+          .order('kode_prov', ascending: true)
+          .order('kode_kab', ascending: true)
+          .order('kode_kec', ascending: true)
+          .order('kode_desa', ascending: true)
+          .limit(5000);
+
+      if (response is List) {
+        final result = List<Map<String, dynamic>>.from(response);
+        debugPrint(
+          '[assignment-focus-cache][B] wilayah fetched role=${profile.role} count=${result.length} firstId=${result.isNotEmpty ? result.first['id'] : null}',
+        );
+        return result;
+      }
+      debugPrint('[assignment-focus-cache][B] wilayah fetched with non-list response');
+      return [];
+    } catch (e) {
+      debugPrint('[assignment-focus-cache][B] wilayah fetch exception: $e');
+      return [];
     }
   }
 

@@ -21,7 +21,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<UserEntity?> getCurrentUser() async {
     final user = _supabaseClient.auth.currentUser;
     if (user != null) {
-      return UserModel.fromSupabaseUser(user);
+      return await _getAuthorizedUserOrNull(user);
     }
     return null;
   }
@@ -35,7 +35,7 @@ class AuthRepositoryImpl implements AuthRepository {
       );
 
       if (response.user != null) {
-        return UserModel.fromSupabaseUser(response.user!);
+        return await _requireAuthorizedUser(response.user!);
       } else {
         throw Exception('Login gagal');
       }
@@ -129,7 +129,7 @@ class AuthRepositoryImpl implements AuthRepository {
           name: 'GoogleSignIn',
         );
 
-        final userEntity = UserModel.fromSupabaseUser(response.user!);
+        final userEntity = await _requireAuthorizedUser(response.user!);
         developer.log(
           '✅ UserEntity created successfully',
           name: 'GoogleSignIn',
@@ -160,12 +160,62 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Stream<UserEntity?> get authStateChanges {
-    return _supabaseClient.auth.onAuthStateChange.map((data) {
+    return _supabaseClient.auth.onAuthStateChange.asyncMap((data) async {
       final user = data.session?.user;
       if (user != null) {
-        return UserModel.fromSupabaseUser(user);
+        return await _getAuthorizedUserOrNull(user);
       }
       return null;
     });
+  }
+
+  Future<UserEntity> _requireAuthorizedUser(User user) async {
+    final authorizedUser = await _getAuthorizedUserOrNull(user);
+    if (authorizedUser == null) {
+      throw Exception('Akun ini tidak terdaftar sebagai petugas SE2026 aktif');
+    }
+    return authorizedUser;
+  }
+
+  Future<UserEntity?> _getAuthorizedUserOrNull(User user) async {
+    try {
+      final appUser = await _supabaseClient
+          .from('users')
+          .select('id')
+          .eq('auth_uid', user.id)
+          .maybeSingle();
+
+      if (appUser == null || appUser['id'] == null) {
+        await _safeSignOutUnauthorizedUser();
+        return null;
+      }
+
+      final petugas = await _supabaseClient
+          .from('se2026_petugas')
+          .select('id, is_active')
+          .eq('user_id', appUser['id'])
+          .maybeSingle();
+
+      if (petugas == null || petugas['id'] == null || petugas['is_active'] != true) {
+        await _safeSignOutUnauthorizedUser();
+        return null;
+      }
+
+      return UserModel.fromSupabaseUser(user);
+    } catch (e) {
+      developer.log('❌ SE2026 auth validation error: $e', name: 'AuthRepository');
+      await _safeSignOutUnauthorizedUser();
+      return null;
+    }
+  }
+
+  Future<void> _safeSignOutUnauthorizedUser() async {
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {}
+
+    try {
+      await _supabaseClient.auth.signOut();
+    } catch (_) {}
   }
 }

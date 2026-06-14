@@ -77,5 +77,5 @@ def optimize_geojson(input_path, output_path):
 
 if __name__ == "__main__":
     input_file = '/Users/nasrul/flutter/direktori/assets/geojson/final_sls.geojson'
-    output_file = '/Users/nasrul/flutter/direktori/assets/geojson/final_sls_optimized.json'
+    output_file = '/Users/nasrul/flutter/direktori/assets/geojson/final_sls_optimized_v2.json'
     optimize_geojson(input_file, output_file)

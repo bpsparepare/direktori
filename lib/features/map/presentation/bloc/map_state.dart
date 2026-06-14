@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:latlong2/latlong.dart';
 import '../../domain/entities/map_config.dart';
+import '../../domain/entities/map_focus_bounds.dart';
 import '../../domain/entities/place.dart';
 import '../../domain/entities/polygon_data.dart';
 
@@ -14,8 +15,11 @@ class MapState extends Equatable {
   final List<LatLng> polygon;
   final String? polygonLabel;
   final List<PolygonData> polygonsMeta;
+  final List<PolygonData> assignmentPolygons;
   final PolygonData? selectedPolygonMeta;
   final List<PolygonData> selectedPolygons; // New field for multiple selection
+  final bool showAssignmentPolygons;
+  final MapFocusBounds? assignmentFocusBounds;
   final LatLng? temporaryMarker;
   final String? error;
   // Store last bounds to preserve view during refresh
@@ -32,8 +36,11 @@ class MapState extends Equatable {
     this.polygon = const [],
     this.polygonLabel,
     this.polygonsMeta = const [],
+    this.assignmentPolygons = const [],
     this.selectedPolygonMeta,
     this.selectedPolygons = const [], // Initialize
+    this.showAssignmentPolygons = false,
+    this.assignmentFocusBounds,
     this.temporaryMarker,
     this.error,
     this.lastSouth,
@@ -50,13 +57,17 @@ class MapState extends Equatable {
     List<LatLng>? polygon,
     String? polygonLabel,
     List<PolygonData>? polygonsMeta,
+    List<PolygonData>? assignmentPolygons,
     PolygonData? selectedPolygonMeta,
     List<PolygonData>? selectedPolygons, // Parameter
+    bool? showAssignmentPolygons,
+    MapFocusBounds? assignmentFocusBounds,
     LatLng? temporaryMarker,
     String? error,
     bool clearSelectedPlace = false,
     bool clearTemporaryMarker = false,
     bool clearSelectedPolygonMeta = false,
+    bool clearAssignmentFocusBounds = false,
     double? lastSouth,
     double? lastNorth,
     double? lastWest,
@@ -72,10 +83,16 @@ class MapState extends Equatable {
       polygon: polygon ?? this.polygon,
       polygonLabel: polygonLabel ?? this.polygonLabel,
       polygonsMeta: polygonsMeta ?? this.polygonsMeta,
+      assignmentPolygons: assignmentPolygons ?? this.assignmentPolygons,
       selectedPolygonMeta: clearSelectedPolygonMeta
           ? null
           : (selectedPolygonMeta ?? this.selectedPolygonMeta),
       selectedPolygons: selectedPolygons ?? this.selectedPolygons, // Assign
+      showAssignmentPolygons:
+          showAssignmentPolygons ?? this.showAssignmentPolygons,
+      assignmentFocusBounds: clearAssignmentFocusBounds
+          ? null
+          : (assignmentFocusBounds ?? this.assignmentFocusBounds),
       temporaryMarker: clearTemporaryMarker
           ? null
           : (temporaryMarker ?? this.temporaryMarker),
@@ -96,8 +113,11 @@ class MapState extends Equatable {
     polygon,
     polygonLabel,
     polygonsMeta,
+    assignmentPolygons,
     selectedPolygonMeta,
     selectedPolygons, // Add to props
+    showAssignmentPolygons,
+    assignmentFocusBounds,
     temporaryMarker,
     error,
     lastSouth,
