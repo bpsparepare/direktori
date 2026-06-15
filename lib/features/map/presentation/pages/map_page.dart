@@ -9,7 +9,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import '../../../../core/config/supabase_config.dart';
 import '../../data/repositories/map_repository_impl.dart';
 import '../../data/repositories/scraping_repository_impl.dart';
 import '../../data/models/direktori_model.dart';
@@ -68,6 +67,9 @@ class MapPage extends StatelessWidget {
                     mapController: mapController, // Pass shared MapController
                     onPlaceTap: (place) {
                       context.read<MapBloc>().add(PlaceSelected(place));
+                    },
+                    onMapLongPress: (point) {
+                      _handleMapLongPress(context, state, point);
                     },
                     onPolygonSelected: (index) {
                       context.read<MapBloc>().add(
@@ -1823,8 +1825,48 @@ class MapPage extends StatelessWidget {
     }
   }
 
-  void _showContextMenu(BuildContext parentContext, LatLng point) {
-    showModalBottomSheet(
+  void _handleMapLongPress(BuildContext context, MapState state, LatLng point) {
+    if (_isPointInsideVisiblePolygon(state, point)) {
+      return;
+    }
+
+    final mapBloc = context.read<MapBloc>();
+    mapBloc.add(const PlaceCleared());
+    mapBloc.add(TemporaryMarkerAdded(point));
+    _showContextMenu(context, point);
+  }
+
+  bool _isPointInsideVisiblePolygon(MapState state, LatLng point) {
+    if (state.selectedPolygons.isNotEmpty) {
+      for (final polygon in state.selectedPolygons) {
+        if (MapUtils.isPointInPolygon(point, polygon.points)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    if (state.polygon.isNotEmpty &&
+        MapUtils.isPointInPolygon(point, state.polygon)) {
+      return true;
+    }
+
+    if (state.showAssignmentPolygons) {
+      for (final polygon in state.assignmentPolygons) {
+        if (MapUtils.isPointInPolygon(point, polygon.points)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  Future<void> _showContextMenu(
+    BuildContext parentContext,
+    LatLng point,
+  ) async {
+    await showModalBottomSheet(
       context: parentContext,
       isScrollControlled: true,
       useSafeArea: true,
@@ -1872,49 +1914,6 @@ class MapPage extends StatelessWidget {
               },
             ),
             ListTile(
-              leading: const Icon(
-                Icons.playlist_add_check,
-                color: Colors.purple,
-              ),
-              title: const Text('Tambah Groundcheck'),
-              subtitle: const Text('Cari & Tambah/Edit data groundcheck'),
-              onTap: () {
-                Navigator.pop(context);
-                parentContext.read<MapBloc>().add(
-                  const TemporaryMarkerRemoved(),
-                );
-
-                // Calculate region data
-                String idSls = '';
-                String? namaSls;
-                final polygons = parentContext
-                    .read<MapBloc>()
-                    .state
-                    .polygonsMeta;
-                for (final polygon in polygons) {
-                  if (MapUtils.isPointInPolygon(point, polygon.points)) {
-                    idSls = polygon.idsls ?? '';
-                    namaSls = polygon.name;
-                    break;
-                  }
-                }
-
-                _showAddGroundcheckForm(context, point, idSls, namaSls);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.mic, color: Colors.redAccent),
-              title: const Text('Voice Groundcheck (Mode Berkendara)'),
-              subtitle: const Text('Sebut nama usaha, otomatis simpan'),
-              onTap: () {
-                Navigator.pop(context);
-                parentContext.read<MapBloc>().add(
-                  const TemporaryMarkerRemoved(),
-                );
-                _showVoiceModeDialog(parentContext);
-              },
-            ),
-            ListTile(
               leading: const Icon(Icons.navigation, color: Colors.orange),
               title: const Text('Navigasi'),
               subtitle: const Text('Navigasi ke lokasi'),
@@ -1926,141 +1925,14 @@ class MapPage extends StatelessWidget {
                 _showNavigasiDialog(context, point);
               },
             ),
-            Visibility(
-              visible:
-                  DateTime.now().year == 2025 &&
-                  DateTime.now().month == 11 &&
-                  DateTime.now().day == 11,
-              child: ListTile(
-                leading: const Icon(Icons.flag, color: Colors.green),
-                title: const Text('Kirim Quiz'),
-                subtitle: const Text('Kirim titik ini sebagai jawaban'),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final confirm = await showDialog<bool>(
-                    context: parentContext,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Kirim jawaban?'),
-                      content: const Text(
-                        'Apakah Anda yakin ingin mengirim titik ini sebagai jawaban?',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(false),
-                          child: const Text('Batal'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.of(ctx).pop(true),
-                          child: const Text('Kirim'),
-                        ),
-                      ],
-                    ),
-                  );
-
-                  if (confirm == true) {
-                    try {
-                      // Tampilkan indikator proses
-                      showDialog(
-                        context: parentContext,
-                        barrierDismissible: false,
-                        builder: (ctx) => const AlertDialog(
-                          content: Row(
-                            children: [
-                              SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(),
-                              ),
-                              SizedBox(width: 16),
-                              Expanded(child: Text('Mengirim jawaban...')),
-                            ],
-                          ),
-                        ),
-                      );
-
-                      final result = await SupabaseConfig.client.rpc(
-                        'fn_submit_guess_current',
-                        params: {
-                          'p_lat': point.latitude,
-                          'p_lon': point.longitude,
-                        },
-                      );
-
-                      // Tutup indikator proses
-                      if (Navigator.of(parentContext).canPop()) {
-                        Navigator.of(parentContext).pop();
-                      }
-
-                      // Ekstrak metrik dari hasil RPC, jika tidak ada, query dari tabel submissions
-                      String submissionId = '';
-                      num? score;
-                      bool? isCorrect;
-                      num? distanceM;
-                      int? durationMs;
-
-                      if (result is Map<String, dynamic>) {
-                        submissionId = (result['id']?.toString() ?? '');
-                        score =
-                            (result['score'] ?? result['total_score']) as num?;
-                        isCorrect = result['is_correct'] as bool?;
-                        distanceM =
-                            (result['distance_m'] ?? result['distance'])
-                                as num?;
-                        durationMs =
-                            (result['duration_ms'] ?? result['total_time_ms'])
-                                as int?;
-                      } else if (result is List &&
-                          result.isNotEmpty &&
-                          result.first is Map<String, dynamic>) {
-                        final m = result.first as Map<String, dynamic>;
-                        submissionId = (m['id']?.toString() ?? '');
-                        score = (m['score'] ?? m['total_score']) as num?;
-                        isCorrect = m['is_correct'] as bool?;
-                        distanceM = (m['distance_m'] ?? m['distance']) as num?;
-                        durationMs =
-                            (m['duration_ms'] ?? m['total_time_ms']) as int?;
-                      } else if (result is String) {
-                        submissionId = result;
-                      }
-
-                      // SnackBar konfirmasi minimalis (tampilkan skor/benar jika tersedia)
-                      final scoreText = (score != null)
-                          ? (score is int
-                                ? score.toString()
-                                : (score as num).toString())
-                          : null;
-                      final isCorrectText = (isCorrect == null)
-                          ? null
-                          : (isCorrect ? 'Benar' : 'Salah');
-                      final msg = (scoreText != null && isCorrectText != null)
-                          ? 'Berhasil kirim. Skor: $scoreText • $isCorrectText'
-                          : 'Berhasil kirim jawaban.';
-                      ScaffoldMessenger.of(
-                        parentContext,
-                      ).showSnackBar(SnackBar(content: Text(msg)));
-                    } catch (e) {
-                      // Tutup indikator proses jika masih terbuka
-                      if (Navigator.of(parentContext).canPop()) {
-                        Navigator.of(parentContext).pop();
-                      }
-
-                      final message = e.toString();
-
-                      // Feedback minimalis untuk error
-                      ScaffoldMessenger.of(parentContext).showSnackBar(
-                        SnackBar(content: Text('Gagal kirim: $message')),
-                      );
-                    }
-                  }
-                },
-              ),
-            ),
 
             const SizedBox(height: 20),
           ],
         ),
       ),
     );
+    if (!parentContext.mounted) return;
+    parentContext.read<MapBloc>().add(const TemporaryMarkerRemoved());
   }
 
   void _showInfoDialog(BuildContext context, LatLng point, MapBloc mapBloc) {
