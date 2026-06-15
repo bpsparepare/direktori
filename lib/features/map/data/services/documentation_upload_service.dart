@@ -18,6 +18,8 @@ class DocumentationEntry {
   final String driveFileId;
   final String driveViewUrl;
   final String previewUrl;
+  final String category;
+  final String description;
   final String uploadedAt;
   final int fileSize;
 
@@ -28,6 +30,8 @@ class DocumentationEntry {
     required this.driveFileId,
     required this.driveViewUrl,
     required this.previewUrl,
+    required this.category,
+    required this.description,
     required this.uploadedAt,
     required this.fileSize,
   });
@@ -40,6 +44,8 @@ class DocumentationEntry {
       'drive_file_id': driveFileId,
       'drive_view_url': driveViewUrl,
       'preview_url': previewUrl,
+      'category': category,
+      'description': description,
       'uploaded_at': uploadedAt,
       'file_size': fileSize,
     };
@@ -53,6 +59,8 @@ class DocumentationEntry {
       driveFileId: (json['drive_file_id'] ?? '').toString(),
       driveViewUrl: (json['drive_view_url'] ?? '').toString(),
       previewUrl: (json['preview_url'] ?? '').toString(),
+      category: (json['category'] ?? '').toString(),
+      description: (json['description'] ?? '').toString(),
       uploadedAt: (json['uploaded_at'] ?? '').toString(),
       fileSize: (json['file_size'] as num?)?.toInt() ?? 0,
     );
@@ -90,6 +98,8 @@ class DocumentationUploadService {
   Future<DocumentationEntry> uploadDocumentation(
     File pickedFile, {
     String? originalName,
+    required String category,
+    String? description,
   }) async {
     final context = await _resolveContext();
     final fileBytes = Uint8List.fromList(await pickedFile.readAsBytes());
@@ -98,11 +108,34 @@ class DocumentationUploadService {
       originalName: originalName,
     );
     final fileName = _buildFileName(context.displayName, extension);
-    final uploadResult = await _driveService.uploadFile(
+    final targetFolderId = await _driveService.ensureFolderInParent(
       _driveFolderId,
+      _folderNameForCategory(category),
+    );
+    final uploadResult = await _driveService.uploadFile(
+      targetFolderId,
       fileName,
       fileBytes,
     );
+    final uploadedAt = DateTime.now().toIso8601String();
+    final driveFileId = (uploadResult['id'] ?? '').toString();
+    final driveViewUrl = (uploadResult['webViewLink'] ?? '').toString();
+    final previewUrl =
+        (uploadResult['thumbnailLink'] ??
+                uploadResult['webContentLink'] ??
+                uploadResult['webViewLink'] ??
+                '')
+            .toString();
+
+    await _saveUploadMetadata(
+      userId: context.userKey,
+      fileName: fileName,
+      category: category,
+      description: description,
+      driveViewUrl: driveViewUrl,
+      uploadedAt: uploadedAt,
+    );
+
     final localFile = await _persistLocalFile(
       userKey: context.userKey,
       fileName: fileName,
@@ -113,15 +146,12 @@ class DocumentationUploadService {
       id: _uuid.v4(),
       fileName: fileName,
       localPath: localFile.path,
-      driveFileId: (uploadResult['id'] ?? '').toString(),
-      driveViewUrl: (uploadResult['webViewLink'] ?? '').toString(),
-      previewUrl:
-          (uploadResult['thumbnailLink'] ??
-                  uploadResult['webContentLink'] ??
-                  uploadResult['webViewLink'] ??
-                  '')
-              .toString(),
-      uploadedAt: DateTime.now().toIso8601String(),
+      driveFileId: driveFileId,
+      driveViewUrl: driveViewUrl,
+      previewUrl: previewUrl,
+      category: category,
+      description: description?.trim() ?? '',
+      uploadedAt: uploadedAt,
       fileSize: await localFile.length(),
     );
 
@@ -142,6 +172,24 @@ class DocumentationUploadService {
         await file.delete();
       }
     } catch (_) {}
+  }
+
+  Future<void> _saveUploadMetadata({
+    required String userId,
+    required String fileName,
+    required String category,
+    required String driveViewUrl,
+    required String uploadedAt,
+    String? description,
+  }) async {
+    await _client.from('documentation_uploads').insert({
+      'user_id': userId,
+      'kategori': category,
+      'keterangan': _normalizeDescription(description),
+      'link_file': driveViewUrl,
+      'nama_file': fileName,
+      'created_at': uploadedAt,
+    });
   }
 
   Future<_DocumentationContext> _resolveContext() async {
@@ -237,6 +285,30 @@ class DocumentationUploadService {
     if (raw.endsWith('.webp')) return 'webp';
     if (raw.endsWith('.heic')) return 'heic';
     return 'jpg';
+  }
+
+  String? _normalizeDescription(String? value) {
+    final trimmed = value?.trim() ?? '';
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  String _folderNameForCategory(String value) {
+    final normalized = value.trim().toLowerCase();
+    switch (normalized) {
+      case 'koordinasi':
+        return 'Koordinasi';
+      case 'pendataan':
+        return 'Pendataan';
+      case 'pengawasan':
+        return 'Pengawasan';
+      case 'pertemuan':
+        return 'Pertemuan';
+      case 'bukti paket data':
+        return 'Bukti Paket Data';
+      case 'lainnya':
+        return 'Lainnya';
+    }
+    return 'Lainnya';
   }
 }
 

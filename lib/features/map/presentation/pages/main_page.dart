@@ -5,6 +5,7 @@ import 'map_page.dart';
 import 'saved_page.dart';
 import 'kbli_page.dart';
 import 'dokumentasi_page.dart';
+import 'usaha_organik_page.dart';
 import 'wilayah_tugas_page.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
@@ -232,6 +233,7 @@ class _MainPageState extends State<MainPage> {
                   const WilayahTugasPage(),
                   const DokumentasiPage(),
                   const KbliPage(),
+                  const UsahaOrganikPage(),
                 ],
               ),
             ),
@@ -367,6 +369,10 @@ class _MainPageState extends State<MainPage> {
             const BottomNavigationBarItem(
               icon: Icon(Icons.apartment_rounded),
               label: 'KBLI',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.eco_rounded),
+              label: 'Usaha Organik',
             ),
           ],
         ),

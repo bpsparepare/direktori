@@ -17,6 +17,8 @@ class GoogleDriveException implements Exception {
 }
 
 class GoogleDriveService {
+  static const String _refreshFunctionName = 'google-drive-refresh';
+
   GoogleDriveService({
     SupabaseClient? client,
     this.primaryCompanyEmail = 'bps737273@gmail.com',
@@ -25,6 +27,7 @@ class GoogleDriveService {
   final SupabaseClient _supabaseClient;
   final String primaryCompanyEmail;
   Map<String, dynamic>? _lastSelectedTokenMeta;
+  final Map<String, String> _folderIdCache = {};
 
   DateTime? _tryParseTokenExpiry(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
@@ -172,8 +175,6 @@ class GoogleDriveService {
       if (tokenData == null) return null;
 
       final accessTokenRaw = tokenData['access_token']?.toString() ?? '';
-      if (accessTokenRaw.isEmpty) return null;
-
       var accessToken = accessTokenRaw;
       final refreshToken = tokenData['refresh_token']?.toString();
       final tokenExpiry = _tryParseTokenExpiry(
@@ -197,8 +198,9 @@ class GoogleDriveService {
               : null;
         }
 
-        final refreshedToken = await _refreshAccessToken(refreshToken);
-        if (refreshedToken == null || refreshedToken.isEmpty) {
+        final refreshed = await _refreshAccessToken(refreshToken);
+        final refreshedToken = refreshed?.accessToken ?? '';
+        if (refreshedToken.isEmpty) {
           return null;
         }
 
@@ -210,11 +212,13 @@ class GoogleDriveService {
                 'access_token': refreshedToken,
                 'updated_at': DateTime.now().toIso8601String(),
                 'token_expiry': DateTime.now()
-                    .add(const Duration(seconds: 3500))
+                    .add(Duration(seconds: refreshed?.expiresIn ?? 3500))
                     .toIso8601String(),
               })
               .eq('id', tokenId);
         }
+      } else if (accessToken.isEmpty) {
+        return null;
       } else if (tokenExpiry != null && now.isAfter(tokenExpiry)) {
         return null;
       }
@@ -226,36 +230,45 @@ class GoogleDriveService {
     }
   }
 
-  Future<String?> _refreshAccessToken(String refreshToken) async {
-    final clientId = SupabaseConfig.googleClientId.trim();
-    if (clientId.isEmpty) {
-      debugPrint('GoogleDriveService: GOOGLE_CLIENT_ID belum diatur');
+  Future<_RefreshedGoogleToken?> _refreshAccessToken(
+    String refreshToken,
+  ) async {
+    final authUser = _supabaseClient.auth.currentUser;
+    if (authUser == null) {
+      debugPrint(
+        'GoogleDriveService: refresh token via function but auth user null',
+      );
       return null;
     }
 
     try {
-      final response = await http.post(
-        Uri.parse('https://oauth2.googleapis.com/token'),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: {
-          'client_id': clientId,
-          'grant_type': 'refresh_token',
-          'refresh_token': refreshToken,
-        },
+      final response = await _supabaseClient.functions.invoke(
+        _refreshFunctionName,
+        body: {'refresh_token': refreshToken},
       );
-
-      if (response.statusCode < 200 || response.statusCode >= 300) {
+      final data = response.data;
+      if (data is! Map) {
         debugPrint(
-          'GoogleDriveService: refresh token gagal (${response.statusCode}) '
-          '${response.body}',
+          'GoogleDriveService: refresh token function return invalid payload',
         );
         return null;
       }
 
-      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-      return decoded['access_token']?.toString();
+      final accessToken = data['access_token']?.toString() ?? '';
+      if (accessToken.isEmpty) {
+        debugPrint(
+          'GoogleDriveService: refresh token function missing access_token',
+        );
+        return null;
+      }
+
+      final expiresIn = (data['expires_in'] as num?)?.toInt() ?? 3500;
+      return _RefreshedGoogleToken(
+        accessToken: accessToken,
+        expiresIn: expiresIn,
+      );
     } catch (e) {
-      debugPrint('GoogleDriveService: exception saat refresh token: $e');
+      debugPrint('GoogleDriveService: exception saat refresh via function: $e');
       return null;
     }
   }
@@ -347,6 +360,65 @@ class GoogleDriveService {
     }
 
     _throwGoogleApiError(response, action: 'Memuat file');
+  }
+
+  Future<String> ensureFolderInParent(
+    String parentId,
+    String folderName,
+  ) async {
+    final cacheKey = '$parentId|$folderName';
+    final cached = _folderIdCache[cacheKey];
+    if (cached != null && cached.isNotEmpty) return cached;
+
+    final existingId = await _findFolderIdInParent(
+      parentId: parentId,
+      folderName: folderName,
+    );
+    if (existingId != null && existingId.isNotEmpty) {
+      _folderIdCache[cacheKey] = existingId;
+      return existingId;
+    }
+
+    final createdId = await createFolder(parentId, folderName);
+    if (createdId.isNotEmpty) {
+      _folderIdCache[cacheKey] = createdId;
+    }
+    return createdId;
+  }
+
+  Future<String?> _findFolderIdInParent({
+    required String parentId,
+    required String folderName,
+  }) async {
+    final escaped = _escapeDriveQueryLiteral(folderName);
+    final response = await _authorizedRequest('findFolder', (token) {
+      final uri = Uri.https('www.googleapis.com', '/drive/v3/files', {
+        'q':
+            "mimeType='application/vnd.google-apps.folder' and "
+            "name='$escaped' and "
+            "'$parentId' in parents and trashed=false",
+        'fields': 'files(id,name)',
+        'pageSize': '1',
+        'includeItemsFromAllDrives': 'true',
+        'supportsAllDrives': 'true',
+      });
+      return http.get(uri, headers: {'Authorization': 'Bearer $token'});
+    });
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final files = data['files'];
+      if (files is List && files.isNotEmpty) {
+        final first = files.first;
+        if (first is Map) {
+          final id = first['id']?.toString();
+          return id != null && id.isNotEmpty ? id : null;
+        }
+      }
+      return null;
+    }
+
+    _throwGoogleApiError(response, action: 'Mencari folder');
   }
 
   Future<Map<String, dynamic>> uploadFile(
@@ -481,4 +553,18 @@ class GoogleDriveService {
     if (lower.endsWith('.heic')) return 'image/heic';
     return 'image/jpeg';
   }
+
+  String _escapeDriveQueryLiteral(String value) {
+    return value.replaceAll("'", r"\'");
+  }
+}
+
+class _RefreshedGoogleToken {
+  final String accessToken;
+  final int expiresIn;
+
+  const _RefreshedGoogleToken({
+    required this.accessToken,
+    required this.expiresIn,
+  });
 }

@@ -109,7 +109,7 @@ flutter:
     - assets/geojson/
     - assets/json/
     - assets/env
-    # - assets/sa/sa-account.json  # File service account - uncomment jika ada
+    - assets/sa/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

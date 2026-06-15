@@ -8,6 +8,35 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/services/documentation_upload_service.dart';
 
+const List<_DocumentationCategoryOption> _categoryOptions = [
+  _DocumentationCategoryOption(
+    'koordinasi',
+    'Koordinasi',
+    Icons.groups_rounded,
+  ),
+  _DocumentationCategoryOption(
+    'pendataan',
+    'Pendataan',
+    Icons.edit_note_rounded,
+  ),
+  _DocumentationCategoryOption(
+    'pengawasan',
+    'Pengawasan',
+    Icons.verified_user_rounded,
+  ),
+  _DocumentationCategoryOption(
+    'pertemuan',
+    'Pertemuan',
+    Icons.handshake_rounded,
+  ),
+  _DocumentationCategoryOption('lainnya', 'Lainnya', Icons.category_rounded),
+  _DocumentationCategoryOption(
+    'bukti paket data',
+    'Bukti Paket Data',
+    Icons.receipt_long_rounded,
+  ),
+];
+
 class DokumentasiPage extends StatefulWidget {
   const DokumentasiPage({super.key});
 
@@ -21,12 +50,8 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
   final TextEditingController _searchController = TextEditingController();
 
   bool _isLoading = true;
-  bool _isUploading = false;
   String? _error;
-  String? _statusMessage;
   String _query = '';
-  File? _selectedFile;
-  String? _selectedOriginalName;
   List<DocumentationEntry> _entries = [];
 
   @override
@@ -45,7 +70,6 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
     setState(() {
       _isLoading = true;
       _error = null;
-      _statusMessage = null;
     });
 
     try {
@@ -55,102 +79,11 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
       setState(() {
         _entries = entries;
         _isLoading = false;
-        _statusMessage = entries.isEmpty
-            ? 'Belum ada dokumentasi yang tersimpan lokal.'
-            : 'Riwayat dokumentasi ditampilkan dari penyimpanan lokal.';
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = e.toString();
-      });
-    }
-  }
-
-  Future<void> _pickImage(ImageSource source) async {
-    try {
-      if (source == ImageSource.gallery && _usesDesktopFilePicker) {
-        final result = await FilePicker.platform.pickFiles(
-          type: FileType.image,
-          allowMultiple: false,
-          withData: false,
-        );
-        final path = result?.files.single.path;
-        if (path == null || !mounted) return;
-
-        setState(() {
-          _selectedFile = File(path);
-          _selectedOriginalName = result?.files.single.name;
-          _statusMessage = 'File siap diupload ke Google Drive.';
-        });
-        return;
-      }
-
-      if (source == ImageSource.camera && _usesDesktopFilePicker) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Kamera belum didukung di macOS. Gunakan Galeri.'),
-          ),
-        );
-        return;
-      }
-
-      final image = await _picker.pickImage(
-        source: source,
-        maxWidth: 1920,
-        maxHeight: 1920,
-        imageQuality: 88,
-      );
-      if (image == null || !mounted) return;
-
-      setState(() {
-        _selectedFile = File(image.path);
-        _selectedOriginalName = image.name;
-        _statusMessage = 'Gambar siap diupload ke Google Drive.';
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gagal memilih gambar: $e')));
-    }
-  }
-
-  Future<void> _uploadSelectedImage() async {
-    final selected = _selectedFile;
-    if (selected == null) return;
-
-    setState(() {
-      _isUploading = true;
-      _error = null;
-    });
-
-    try {
-      final entry = await _service.uploadDocumentation(
-        selected,
-        originalName: _selectedOriginalName,
-      );
-      if (!mounted) return;
-
-      setState(() {
-        _entries.insert(0, entry);
-        _selectedFile = null;
-        _selectedOriginalName = null;
-        _isUploading = false;
-        _statusMessage = 'Dokumentasi berhasil diupload ke Google Drive.';
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Upload dokumentasi berhasil'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isUploading = false;
         _error = e.toString();
       });
     }
@@ -161,7 +94,6 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
     if (!mounted) return;
     setState(() {
       _entries.removeWhere((item) => item.id == entry.id);
-      _statusMessage = 'Dokumentasi lokal dihapus dari daftar.';
     });
   }
 
@@ -171,6 +103,8 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
     return _entries.where((entry) {
       final haystack = [
         entry.fileName,
+        entry.category,
+        entry.description,
         entry.uploadedAt,
         entry.driveFileId,
       ].join(' ').toLowerCase();
@@ -186,6 +120,12 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
       color: const Color(0xFFF3F6FB),
       child: Scaffold(
         backgroundColor: Colors.transparent,
+        floatingActionButton: FloatingActionButton(
+          onPressed: _showUploadDialog,
+          backgroundColor: const Color(0xFF1D8F5A),
+          foregroundColor: Colors.white,
+          child: const Icon(Icons.add_rounded),
+        ),
         body: SafeArea(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -197,7 +137,6 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [
                       SliverToBoxAdapter(child: _buildHeroSection()),
-                      SliverToBoxAdapter(child: _buildUploadPanel()),
                       SliverToBoxAdapter(child: _buildSearchSection()),
                       SliverToBoxAdapter(
                         child: _buildSectionHeader(resultCount: entries.length),
@@ -227,192 +166,24 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
   }
 
   Widget _buildHeroSection() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0F4C81), Color(0xFF2D77D0), Color(0xFF7AB6FF)],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF2D77D0).withValues(alpha: 0.25),
-            blurRadius: 22,
-            offset: const Offset(0, 12),
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          'Dokumentasi',
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF10243E),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(Icons.photo_camera_back, color: Colors.white),
-              ),
-              const SizedBox(width: 18),
-              const Expanded(
-                child: Text(
-                  'Dokumentasi',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Upload foto dokumentasi ke Google Drive. Riwayat foto ditampilkan dari penyimpanan lokal perangkat.',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.9),
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildHeroBadge(
-                icon: Icons.cloud_upload_outlined,
-                label: 'Drive folder aktif',
-              ),
-              _buildHeroBadge(
-                icon: Icons.photo_library_outlined,
-                label: '${_entries.length} file lokal',
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeroBadge({required IconData icon, required String label}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(30),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: Colors.white),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildUploadPanel() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Upload Foto Baru',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 12),
-            _buildSelectedPreview(),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _isUploading
-                        ? null
-                        : () => _pickImage(ImageSource.gallery),
-                    icon: const Icon(Icons.photo_library_outlined),
-                    label: const Text('Galeri'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _isUploading
-                        ? null
-                        : () => _pickImage(ImageSource.camera),
-                    icon: const Icon(Icons.photo_camera_outlined),
-                    label: const Text('Kamera'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _isUploading || _selectedFile == null
-                        ? null
-                        : _uploadSelectedImage,
-                    icon: _isUploading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.cloud_upload_outlined),
-                    label: Text(_isUploading ? 'Upload...' : 'Upload'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1D8F5A),
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (_statusMessage != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _statusMessage!,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.blueGrey[600],
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ],
         ),
       ),
     );
   }
 
-  Widget _buildSelectedPreview() {
-    if (_selectedFile == null) {
+  Widget _buildSelectedPreview(File? selectedFile) {
+    if (selectedFile == null) {
       return Container(
         height: 180,
         width: double.infinity,
@@ -440,12 +211,351 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
       child: Image.file(
-        _selectedFile!,
+        selectedFile,
         height: 220,
         width: double.infinity,
         fit: BoxFit.cover,
       ),
     );
+  }
+
+  Widget _buildCategoryCard({
+    required _DocumentationCategoryOption option,
+    required bool isSelected,
+    required VoidCallback? onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: Ink(
+        width: 160,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFEAF3FF) : const Color(0xFFF7FAFF),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF2D77D0)
+                : const Color(0xFF2D77D0).withValues(alpha: 0.10),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFF2D77D0) : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                option.icon,
+                size: 20,
+                color: isSelected ? Colors.white : const Color(0xFF2D77D0),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                option.label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: isSelected
+                      ? const Color(0xFF143A70)
+                      : const Color(0xFF314760),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<_PickedDocumentationFile?> _pickImage(ImageSource source) async {
+    if (source == ImageSource.gallery && _usesDesktopFilePicker) {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: false,
+      );
+      final path = result?.files.single.path;
+      if (path == null) return null;
+      return _PickedDocumentationFile(
+        file: File(path),
+        originalName: result?.files.single.name,
+      );
+    }
+
+    if (source == ImageSource.camera && _usesDesktopFilePicker) {
+      throw Exception('Kamera belum didukung di macOS. Gunakan Galeri.');
+    }
+
+    final image = await _picker.pickImage(
+      source: source,
+      maxWidth: 1920,
+      maxHeight: 1920,
+      imageQuality: 88,
+    );
+    if (image == null) return null;
+
+    return _PickedDocumentationFile(
+      file: File(image.path),
+      originalName: image.name,
+    );
+  }
+
+  Future<void> _showUploadDialog() async {
+    File? selectedFile;
+    String? selectedOriginalName;
+    String? selectedCategory;
+    String? dialogError;
+    bool isUploading = false;
+    final descriptionController = TextEditingController();
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: !isUploading,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            Future<void> handlePick(ImageSource source) async {
+              try {
+                final picked = await _pickImage(source);
+                if (picked == null) return;
+                setDialogState(() {
+                  selectedFile = picked.file;
+                  selectedOriginalName = picked.originalName;
+                  dialogError = null;
+                });
+              } catch (e) {
+                setDialogState(() {
+                  dialogError = 'Gagal memilih gambar: $e';
+                });
+              }
+            }
+
+            Future<void> handleUpload() async {
+              final file = selectedFile;
+              final category = selectedCategory;
+              if (file == null || category == null) return;
+
+              setDialogState(() {
+                isUploading = true;
+                dialogError = null;
+              });
+
+              try {
+                final entry = await _service.uploadDocumentation(
+                  file,
+                  originalName: selectedOriginalName,
+                  category: category,
+                  description: descriptionController.text,
+                );
+                if (!mounted) return;
+
+                setState(() {
+                  _entries.insert(0, entry);
+                });
+
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Upload dokumentasi berhasil'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              } catch (e) {
+                setDialogState(() {
+                  isUploading = false;
+                  dialogError = e.toString();
+                });
+              }
+            }
+
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 24,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Upload Dokumentasi',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF10243E),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: isUploading
+                                ? null
+                                : () => Navigator.of(dialogContext).pop(),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      _buildSelectedPreview(selectedFile),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: isUploading
+                                  ? null
+                                  : () => handlePick(ImageSource.gallery),
+                              icon: const Icon(Icons.photo_library_outlined),
+                              label: const Text('Galeri'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: isUploading
+                                  ? null
+                                  : () => handlePick(ImageSource.camera),
+                              icon: const Icon(Icons.photo_camera_outlined),
+                              label: const Text('Kamera'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      const Text(
+                        'Pilih Kategori',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: _categoryOptions
+                            .map(
+                              (option) => _buildCategoryCard(
+                                option: option,
+                                isSelected: selectedCategory == option.value,
+                                onTap: isUploading
+                                    ? null
+                                    : () {
+                                        setDialogState(() {
+                                          selectedCategory = option.value;
+                                        });
+                                      },
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: descriptionController,
+                        minLines: 2,
+                        maxLines: 4,
+                        textInputAction: TextInputAction.done,
+                        enabled: !isUploading,
+                        decoration: InputDecoration(
+                          labelText: 'Keterangan',
+                          hintText: 'Tambahkan catatan jika diperlukan',
+                          alignLabelWithHint: true,
+                          filled: true,
+                          fillColor: const Color(0xFFF7FAFF),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(18),
+                            borderSide: BorderSide(
+                              color: const Color(
+                                0xFF2D77D0,
+                              ).withValues(alpha: 0.12),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(18),
+                            borderSide: BorderSide(
+                              color: const Color(
+                                0xFF2D77D0,
+                              ).withValues(alpha: 0.12),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(18),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF2D77D0),
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (dialogError != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          dialogError!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.red[700],
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed:
+                              isUploading ||
+                                  selectedFile == null ||
+                                  selectedCategory == null
+                              ? null
+                              : handleUpload,
+                          icon: isUploading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.cloud_upload_outlined),
+                          label: Text(isUploading ? 'Upload...' : 'Upload'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1D8F5A),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    descriptionController.dispose();
   }
 
   Widget _buildSearchSection() {
@@ -595,6 +705,11 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
                         spacing: 8,
                         runSpacing: 8,
                         children: [
+                          if (entry.category.isNotEmpty)
+                            _buildMiniBadge(
+                              icon: Icons.sell_outlined,
+                              label: _formatCategoryLabel(entry.category),
+                            ),
                           _buildMiniBadge(
                             icon: Icons.folder_outlined,
                             label: _formatBytes(entry.fileSize),
@@ -837,6 +952,9 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
                         title: 'Informasi File',
                         content: [
                           'Nama file: ${entry.fileName}',
+                          'Kategori: ${_formatCategoryLabel(entry.category)}',
+                          if (entry.description.trim().isNotEmpty)
+                            'Keterangan: ${entry.description.trim()}',
                           'Ukuran: ${_formatBytes(entry.fileSize)}',
                           'Waktu upload: ${_formatDateTime(entry.uploadedAt)}',
                           'Drive file ID: ${entry.driveFileId}',
@@ -943,8 +1061,30 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
     return '$bytes B';
   }
 
+  String _formatCategoryLabel(String value) {
+    for (final option in _categoryOptions) {
+      if (option.value == value) return option.label;
+    }
+    return value;
+  }
+
   bool get _usesDesktopFilePicker {
     if (kIsWeb) return false;
     return Platform.isMacOS || Platform.isWindows || Platform.isLinux;
   }
+}
+
+class _DocumentationCategoryOption {
+  final String value;
+  final String label;
+  final IconData icon;
+
+  const _DocumentationCategoryOption(this.value, this.label, this.icon);
+}
+
+class _PickedDocumentationFile {
+  final File file;
+  final String? originalName;
+
+  const _PickedDocumentationFile({required this.file, this.originalName});
 }
