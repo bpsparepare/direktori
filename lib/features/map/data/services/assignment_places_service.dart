@@ -15,7 +15,7 @@ class AssignmentPlacesService {
   static const String lastFullSyncKey = 'assignment_places_last_full_sync_time';
   static const String cacheVersionKey = 'assignment_places_cache_version';
   static const String cacheOwnerKey = 'assignment_places_cache_owner';
-  static const String cacheVersion = 'rpc_v1';
+  static const String cacheVersion = 'rpc_v2_minimal';
 
   final SupabaseClient _client = SupabaseConfig.client;
   final StorageService _storage = StorageServiceFactory.create();
@@ -158,11 +158,16 @@ class AssignmentPlacesService {
     List<AssignmentPlaceRecord> updates,
   ) {
     final map = <String, AssignmentPlaceRecord>{
-      for (final record in existing) record.id: record,
+      for (final record in existing) _recordKey(record): record,
     };
     for (final record in updates) {
-      map[record.id] = record;
+      map[_recordKey(record)] = record;
     }
     return map.values.toList();
+  }
+
+  String _recordKey(AssignmentPlaceRecord record) {
+    if (record.assignmentId.isNotEmpty) return record.assignmentId;
+    return '${record.namaUsaha}:${record.noBang ?? ''}:${record.latitude}:${record.longitude}';
   }
 }

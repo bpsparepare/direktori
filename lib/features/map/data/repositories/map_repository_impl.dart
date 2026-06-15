@@ -1,9 +1,7 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:path_provider/path_provider.dart';
 import '../../domain/entities/map_config.dart';
 import '../../domain/entities/place.dart';
 import '../../domain/repositories/map_repository.dart';
@@ -12,7 +10,6 @@ import '../models/assignment_place_record.dart';
 import '../models/direktori_model.dart';
 import '../../../../core/config/supabase_config.dart';
 import 'package:flutter/foundation.dart';
-import '../../../../core/config/app_constants.dart';
 import '../services/assignment_places_service.dart';
 import '../services/groundcheck_supabase_service.dart';
 import '../../../../core/utils/debug_monitor.dart';
@@ -37,12 +34,6 @@ class MapRepositoryImpl implements MapRepository {
       debugPrint('MapRepository: Error loading local places: $e');
       return [];
     }
-  }
-
-  double? _parseDouble(dynamic v) {
-    if (v == null) return null;
-    if (v is num) return v.toDouble();
-    return double.tryParse(v.toString());
   }
 
   void invalidatePlacesCache() {
@@ -695,21 +686,24 @@ class MapRepositoryImpl implements MapRepository {
 
   Place _assignmentRecordToPlace(AssignmentPlaceRecord record) {
     final descParts = <String>[];
-    if (record.alamat.isNotEmpty) descParts.add(record.alamat);
-    if (record.statusText.isNotEmpty)
-      descParts.add('Status: ${record.statusText}');
-    if (record.kodeUsaha.isNotEmpty)
-      descParts.add('Kode usaha: ${record.kodeUsaha}');
-    if (record.fullcodeSubsls.isNotEmpty) {
-      descParts.add('Wilayah tugas: ${record.fullcodeSubsls}');
+    if (record.noBang != null) {
+      descParts.add('No. Bang: ${record.noBang}');
     }
+    final placeId = record.assignmentId.isNotEmpty
+        ? record.assignmentId
+        : 'assignment:${record.namaUsaha}:${record.latitude}:${record.longitude}';
+    final placeName = record.namaUsaha.isNotEmpty
+        ? record.namaUsaha
+        : (record.noBang != null
+              ? 'Assignment ${record.noBang}'
+              : 'Assignment');
     return Place(
-      id: record.id,
-      name: record.namaUsaha.isNotEmpty ? record.namaUsaha : record.idsbr,
+      id: placeId,
+      name: placeName,
       description: descParts.join(' | '),
       position: LatLng(record.latitude, record.longitude),
-      address: record.alamat,
-      statusPerusahaan: record.statusText,
+      address: '',
+      statusPerusahaan: '',
     );
   }
 
