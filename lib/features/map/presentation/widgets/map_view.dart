@@ -12,6 +12,8 @@ import '../../domain/entities/polygon_data.dart';
 import 'map_controls.dart';
 import 'map_type.dart';
 
+enum MarkerLabelMode { nama, nomor }
+
 class MapView extends StatefulWidget {
   final MapConfig config;
   final List<Place> places;
@@ -79,6 +81,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   bool _showMarkerLabels = true;
   bool _showGroundcheckMarkers = true;
   bool _showNonVerifiedGroundchecks = true;
+  MarkerLabelMode _markerLabelMode = MarkerLabelMode.nama;
   double _baseFontSize = 10.0; // Initial font size
   Timer? _boundsDebounce;
   LatLng? _clipboardCheckedPoint;
@@ -679,7 +682,38 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                 markers: renderList.map((p) {
                   final isSelected = widget.selectedPlace?.id == p.id;
                   final fontSize = _baseFontSize;
-                  final baseColor = isSelected ? Colors.blue : Colors.red;
+                  final showMarkerNumber = _markerLabelMode == MarkerLabelMode.nomor;
+                  final baseColor = showMarkerNumber
+                      ? Colors.black
+                      : (isSelected ? Colors.blue : Colors.red);
+                  final markerLabel = showMarkerNumber && p.noBang != null
+                      ? p.noBang.toString()
+                      : p.name;
+                  final markerIcon = showMarkerNumber
+                      ? Container(
+                          width: isSelected ? 26 : 22,
+                          height: isSelected ? 26 : 22,
+                          decoration: BoxDecoration(
+                            color: Colors.black,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isSelected ? Colors.blue : Colors.white,
+                              width: isSelected ? 3 : 2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.35),
+                                blurRadius: isSelected ? 12 : 8,
+                                spreadRadius: isSelected ? 2 : 1,
+                              ),
+                            ],
+                          ),
+                        )
+                      : Icon(
+                          Icons.location_on,
+                          color: baseColor,
+                          size: isSelected ? 40 : 32,
+                        );
                   return Marker(
                     key: ValueKey(p.id),
                     point: p.position,
@@ -708,11 +742,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                                       ],
                                     )
                                   : null,
-                              child: Icon(
-                                Icons.location_on,
-                                color: baseColor,
-                                size: isSelected ? 40 : 32,
-                              ),
+                              child: markerIcon,
                             ),
                             const SizedBox(height: 2),
                             if (_showMarkerLabels)
@@ -720,7 +750,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                                 alignment: Alignment.center,
                                 children: [
                                   Text(
-                                    p.name,
+                                    markerLabel,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     textAlign: TextAlign.center,
@@ -734,7 +764,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                                     ),
                                   ),
                                   Text(
-                                    p.name,
+                                    markerLabel,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     textAlign: TextAlign.center,
@@ -880,6 +910,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           showDirectoryMarkers: _showDirectoryMarkers,
           showGroundcheckMarkers: _showGroundcheckMarkers,
           showMarkerLabels: _showMarkerLabels,
+          showMarkerNumbers: _markerLabelMode == MarkerLabelMode.nomor,
           showNonVerifiedGroundchecks: _showNonVerifiedGroundchecks,
           onResetPosition: () {
             // Animate rotation to north smoothly
@@ -912,6 +943,13 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           onToggleMarkerLabels: (bool value) {
             setState(() {
               _showMarkerLabels = value;
+            });
+          },
+          onToggleMarkerNumberMode: () {
+            setState(() {
+              _markerLabelMode = _markerLabelMode == MarkerLabelMode.nama
+                  ? MarkerLabelMode.nomor
+                  : MarkerLabelMode.nama;
             });
           },
           onToggleNonVerifiedGroundchecks: (bool value) {

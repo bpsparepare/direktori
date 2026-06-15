@@ -5992,6 +5992,7 @@ class MapPage extends StatelessWidget {
                                                 name: p.name,
                                                 description: p.description,
                                                 position: p.position,
+                                                noBang: p.noBang,
                                                 urlGambar: p.urlGambar,
                                                 gcsResult: newCode,
                                                 address: p.address,

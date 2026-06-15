@@ -5,6 +5,7 @@ class Place {
   final String name;
   final String description;
   final LatLng position;
+  final int? noBang;
   final String? urlGambar;
   final String? gcsResult;
   final String? address;
@@ -15,6 +16,7 @@ class Place {
     required this.name,
     required this.description,
     required this.position,
+    this.noBang,
     this.urlGambar,
     this.gcsResult,
     this.address,
@@ -28,6 +30,7 @@ class Place {
       'description': description,
       'lat': position.latitude,
       'lng': position.longitude,
+      'noBang': noBang,
       'urlGambar': urlGambar,
       'gcsResult': gcsResult,
       'address': address,
@@ -36,6 +39,7 @@ class Place {
   }
 
   factory Place.fromJson(Map<String, dynamic> json) {
+    final rawNoBang = json['noBang'];
     return Place(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -44,6 +48,11 @@ class Place {
         (json['lat'] as num).toDouble(),
         (json['lng'] as num).toDouble(),
       ),
+      noBang: rawNoBang is int
+          ? rawNoBang
+          : rawNoBang is num
+          ? rawNoBang.toInt()
+          : int.tryParse(rawNoBang?.toString() ?? ''),
       urlGambar: json['urlGambar'] as String?,
       gcsResult: json['gcsResult'] as String?,
       address: json['address'] as String?,

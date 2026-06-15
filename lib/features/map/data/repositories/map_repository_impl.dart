@@ -702,6 +702,7 @@ class MapRepositoryImpl implements MapRepository {
       name: placeName,
       description: descParts.join(' | '),
       position: LatLng(record.latitude, record.longitude),
+      noBang: record.noBang,
       address: '',
       statusPerusahaan: '',
     );

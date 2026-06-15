@@ -71,6 +71,8 @@ class MapControls extends StatefulWidget {
   final bool preserveAssignmentFocusOnInit;
   final bool isPolygonSelected; // Boolean to track if a polygon is selected
   final VoidCallback? onToggleFontSize; // Callback for font size toggle
+  final bool showMarkerNumbers;
+  final VoidCallback? onToggleMarkerNumberMode;
   final void Function(LatLng point, String label)? onClipboardPointSelected;
 
   const MapControls({
@@ -103,6 +105,8 @@ class MapControls extends StatefulWidget {
     this.preserveAssignmentFocusOnInit = false,
     this.isPolygonSelected = false, // Initialize
     this.onToggleFontSize,
+    this.showMarkerNumbers = false,
+    this.onToggleMarkerNumberMode,
     this.onClipboardPointSelected,
   });
 
@@ -892,6 +896,32 @@ class _MapControlsState extends State<MapControls> {
                     ),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: widget.showMarkerNumbers ? Colors.black : Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: IconButton(
+                onPressed: widget.onToggleMarkerNumberMode,
+                icon: Icon(
+                  widget.showMarkerNumbers ? Icons.looks_one : Icons.badge,
+                  color: widget.showMarkerNumbers
+                      ? Colors.white
+                      : Colors.black87,
+                ),
+                tooltip: widget.showMarkerNumbers
+                    ? 'Tampilkan marker nama'
+                    : 'Tampilkan marker nomor',
               ),
             ),
             const SizedBox(height: 8),
