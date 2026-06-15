@@ -1,7 +1,7 @@
 {
-  "version": "1.2.3",
-  "build_number": "9",
-  "min_version": "1.2.1",
+  "version": "2.0.0",
+  "build_number": "13",
+  "min_version": "2.0.0",
   "force_update": false,
   "download_url": "https://direktori.bpsparepare.id",
   "android_url": "https://play.google.com/store/apps/details?id=id.bpsparepare.direktori",

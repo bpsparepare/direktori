@@ -27,6 +27,7 @@ class MapView extends StatefulWidget {
   final bool showAssignmentPolygons;
   final MapFocusBounds? assignmentFocusBounds;
   final void Function(Place) onPlaceTap;
+  final void Function(LatLng point)? onMapLongPress;
   final VoidCallback? onToggleAssignmentPolygons;
   final void Function(int)? onPolygonSelected;
   final void Function(List<PolygonData>)?
@@ -50,6 +51,7 @@ class MapView extends StatefulWidget {
     this.showAssignmentPolygons = false,
     this.assignmentFocusBounds,
     required this.onPlaceTap,
+    this.onMapLongPress,
     this.onToggleAssignmentPolygons,
     this.onPolygonSelected,
     this.onMultiplePolygonsSelected,
@@ -538,6 +540,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
             interactionOptions: const InteractionOptions(
               flags: InteractiveFlag.all,
             ),
+            onLongPress: (_, point) {
+              widget.onMapLongPress?.call(point);
+            },
             onMapEvent: (evt) {
               bool shouldSetState = false;
               // Only update state if zoom or rotation changed significantly
@@ -682,7 +687,8 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                 markers: renderList.map((p) {
                   final isSelected = widget.selectedPlace?.id == p.id;
                   final fontSize = _baseFontSize;
-                  final showMarkerNumber = _markerLabelMode == MarkerLabelMode.nomor;
+                  final showMarkerNumber =
+                      _markerLabelMode == MarkerLabelMode.nomor;
                   final baseColor = showMarkerNumber
                       ? Colors.black
                       : (isSelected ? Colors.blue : Colors.red);
@@ -722,6 +728,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: () => widget.onPlaceTap(p),
+                      onLongPress: () {},
                       child: Transform.translate(
                         offset: Offset(0, isSelected ? -20 : -16),
                         child: Column(

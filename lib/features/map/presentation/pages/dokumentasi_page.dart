@@ -1,44 +1,17 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/services/documentation_upload_service.dart';
-
-const List<_DocumentationCategoryOption> _categoryOptions = [
-  _DocumentationCategoryOption(
-    'koordinasi',
-    'Koordinasi',
-    Icons.groups_rounded,
-  ),
-  _DocumentationCategoryOption(
-    'pendataan',
-    'Pendataan',
-    Icons.edit_note_rounded,
-  ),
-  _DocumentationCategoryOption(
-    'pengawasan',
-    'Pengawasan',
-    Icons.verified_user_rounded,
-  ),
-  _DocumentationCategoryOption(
-    'pertemuan',
-    'Pertemuan',
-    Icons.handshake_rounded,
-  ),
-  _DocumentationCategoryOption('lainnya', 'Lainnya', Icons.category_rounded),
-  _DocumentationCategoryOption(
-    'bukti paket data',
-    'Bukti Paket Data',
-    Icons.receipt_long_rounded,
-  ),
-];
+import '../widgets/documentation_upload_dialog.dart';
 
 class DokumentasiPage extends StatefulWidget {
-  const DokumentasiPage({super.key});
+  final ValueListenable<int>? refreshListenable;
+
+  const DokumentasiPage({super.key, this.refreshListenable});
 
   @override
   State<DokumentasiPage> createState() => _DokumentasiPageState();
@@ -46,7 +19,6 @@ class DokumentasiPage extends StatefulWidget {
 
 class _DokumentasiPageState extends State<DokumentasiPage> {
   final DocumentationUploadService _service = DocumentationUploadService();
-  final ImagePicker _picker = ImagePicker();
   final TextEditingController _searchController = TextEditingController();
 
   bool _isLoading = true;
@@ -57,13 +29,28 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
   @override
   void initState() {
     super.initState();
+    widget.refreshListenable?.addListener(_handleExternalRefresh);
     _loadData();
   }
 
   @override
+  void didUpdateWidget(covariant DokumentasiPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshListenable != widget.refreshListenable) {
+      oldWidget.refreshListenable?.removeListener(_handleExternalRefresh);
+      widget.refreshListenable?.addListener(_handleExternalRefresh);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.refreshListenable?.removeListener(_handleExternalRefresh);
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _handleExternalRefresh() {
+    unawaited(_loadData());
   }
 
   Future<void> _loadData() async {
@@ -97,6 +84,26 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
     });
   }
 
+  Future<void> _handleUploadPressed() async {
+    final entry = await showDocumentationUploadDialog(
+      context,
+      service: _service,
+    );
+    if (!mounted || entry == null) return;
+
+    setState(() {
+      _entries.removeWhere((item) => item.id == entry.id);
+      _entries.insert(0, entry);
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Upload dokumentasi berhasil'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   List<DocumentationEntry> get _filteredEntries {
     final query = _query.trim().toLowerCase();
     if (query.isEmpty) return _entries;
@@ -121,7 +128,7 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         floatingActionButton: FloatingActionButton(
-          onPressed: _showUploadDialog,
+          onPressed: _handleUploadPressed,
           backgroundColor: const Color(0xFF1D8F5A),
           foregroundColor: Colors.white,
           child: const Icon(Icons.add_rounded),
@@ -180,382 +187,6 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
         ),
       ),
     );
-  }
-
-  Widget _buildSelectedPreview(File? selectedFile) {
-    if (selectedFile == null) {
-      return Container(
-        height: 180,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF7FAFF),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: const Color(0xFF2D77D0).withValues(alpha: 0.1),
-          ),
-        ),
-        child: const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.image_outlined, size: 44, color: Color(0xFF2D77D0)),
-            SizedBox(height: 10),
-            Text(
-              'Belum ada gambar dipilih',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: Image.file(
-        selectedFile,
-        height: 220,
-        width: double.infinity,
-        fit: BoxFit.cover,
-      ),
-    );
-  }
-
-  Widget _buildCategoryCard({
-    required _DocumentationCategoryOption option,
-    required bool isSelected,
-    required VoidCallback? onTap,
-  }) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: onTap,
-      child: Ink(
-        width: 160,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFEAF3FF) : const Color(0xFFF7FAFF),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: isSelected
-                ? const Color(0xFF2D77D0)
-                : const Color(0xFF2D77D0).withValues(alpha: 0.10),
-            width: isSelected ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF2D77D0) : Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                option.icon,
-                size: 20,
-                color: isSelected ? Colors.white : const Color(0xFF2D77D0),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                option.label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: isSelected
-                      ? const Color(0xFF143A70)
-                      : const Color(0xFF314760),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<_PickedDocumentationFile?> _pickImage(ImageSource source) async {
-    if (source == ImageSource.gallery && _usesDesktopFilePicker) {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: false,
-        withData: false,
-      );
-      final path = result?.files.single.path;
-      if (path == null) return null;
-      return _PickedDocumentationFile(
-        file: File(path),
-        originalName: result?.files.single.name,
-      );
-    }
-
-    if (source == ImageSource.camera && _usesDesktopFilePicker) {
-      throw Exception('Kamera belum didukung di macOS. Gunakan Galeri.');
-    }
-
-    final image = await _picker.pickImage(
-      source: source,
-      maxWidth: 1920,
-      maxHeight: 1920,
-      imageQuality: 88,
-    );
-    if (image == null) return null;
-
-    return _PickedDocumentationFile(
-      file: File(image.path),
-      originalName: image.name,
-    );
-  }
-
-  Future<void> _showUploadDialog() async {
-    File? selectedFile;
-    String? selectedOriginalName;
-    String? selectedCategory;
-    String? dialogError;
-    bool isUploading = false;
-    final descriptionController = TextEditingController();
-
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: !isUploading,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (dialogContext, setDialogState) {
-            Future<void> handlePick(ImageSource source) async {
-              try {
-                final picked = await _pickImage(source);
-                if (picked == null) return;
-                setDialogState(() {
-                  selectedFile = picked.file;
-                  selectedOriginalName = picked.originalName;
-                  dialogError = null;
-                });
-              } catch (e) {
-                setDialogState(() {
-                  dialogError = 'Gagal memilih gambar: $e';
-                });
-              }
-            }
-
-            Future<void> handleUpload() async {
-              final file = selectedFile;
-              final category = selectedCategory;
-              if (file == null || category == null) return;
-
-              setDialogState(() {
-                isUploading = true;
-                dialogError = null;
-              });
-
-              try {
-                final entry = await _service.uploadDocumentation(
-                  file,
-                  originalName: selectedOriginalName,
-                  category: category,
-                  description: descriptionController.text,
-                );
-                if (!mounted) return;
-
-                setState(() {
-                  _entries.insert(0, entry);
-                });
-
-                if (dialogContext.mounted) {
-                  Navigator.of(dialogContext).pop();
-                }
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Upload dokumentasi berhasil'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              } catch (e) {
-                setDialogState(() {
-                  isUploading = false;
-                  dialogError = e.toString();
-                });
-              }
-            }
-
-            return Dialog(
-              insetPadding: const EdgeInsets.symmetric(
-                horizontal: 18,
-                vertical: 24,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
-              ),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Upload Dokumentasi',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF10243E),
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: isUploading
-                                ? null
-                                : () => Navigator.of(dialogContext).pop(),
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      _buildSelectedPreview(selectedFile),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: isUploading
-                                  ? null
-                                  : () => handlePick(ImageSource.gallery),
-                              icon: const Icon(Icons.photo_library_outlined),
-                              label: const Text('Galeri'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: isUploading
-                                  ? null
-                                  : () => handlePick(ImageSource.camera),
-                              icon: const Icon(Icons.photo_camera_outlined),
-                              label: const Text('Kamera'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      const Text(
-                        'Pilih Kategori',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: _categoryOptions
-                            .map(
-                              (option) => _buildCategoryCard(
-                                option: option,
-                                isSelected: selectedCategory == option.value,
-                                onTap: isUploading
-                                    ? null
-                                    : () {
-                                        setDialogState(() {
-                                          selectedCategory = option.value;
-                                        });
-                                      },
-                              ),
-                            )
-                            .toList(),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: descriptionController,
-                        minLines: 2,
-                        maxLines: 4,
-                        textInputAction: TextInputAction.done,
-                        enabled: !isUploading,
-                        decoration: InputDecoration(
-                          labelText: 'Keterangan',
-                          hintText: 'Tambahkan catatan jika diperlukan',
-                          alignLabelWithHint: true,
-                          filled: true,
-                          fillColor: const Color(0xFFF7FAFF),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(18),
-                            borderSide: BorderSide(
-                              color: const Color(
-                                0xFF2D77D0,
-                              ).withValues(alpha: 0.12),
-                            ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(18),
-                            borderSide: BorderSide(
-                              color: const Color(
-                                0xFF2D77D0,
-                              ).withValues(alpha: 0.12),
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(18),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF2D77D0),
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (dialogError != null) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          dialogError!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.red[700],
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 18),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              isUploading ||
-                                  selectedFile == null ||
-                                  selectedCategory == null
-                              ? null
-                              : handleUpload,
-                          icon: isUploading
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.cloud_upload_outlined),
-                          label: Text(isUploading ? 'Upload...' : 'Upload'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1D8F5A),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    descriptionController.dispose();
   }
 
   Widget _buildSearchSection() {
@@ -1062,29 +693,21 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
   }
 
   String _formatCategoryLabel(String value) {
-    for (final option in _categoryOptions) {
-      if (option.value == value) return option.label;
+    switch (value) {
+      case 'koordinasi':
+        return 'Koordinasi';
+      case 'pendataan':
+        return 'Pendataan';
+      case 'pengawasan':
+        return 'Pengawasan';
+      case 'pertemuan':
+        return 'Pertemuan';
+      case 'bukti paket data':
+        return 'Bukti Paket Data';
+      case 'lainnya':
+        return 'Lainnya';
+      default:
+        return value;
     }
-    return value;
   }
-
-  bool get _usesDesktopFilePicker {
-    if (kIsWeb) return false;
-    return Platform.isMacOS || Platform.isWindows || Platform.isLinux;
-  }
-}
-
-class _DocumentationCategoryOption {
-  final String value;
-  final String label;
-  final IconData icon;
-
-  const _DocumentationCategoryOption(this.value, this.label, this.icon);
-}
-
-class _PickedDocumentationFile {
-  final File file;
-  final String? originalName;
-
-  const _PickedDocumentationFile({required this.file, this.originalName});
 }

@@ -15,7 +15,7 @@ class AssignmentPlacesService {
   static const String lastFullSyncKey = 'assignment_places_last_full_sync_time';
   static const String cacheVersionKey = 'assignment_places_cache_version';
   static const String cacheOwnerKey = 'assignment_places_cache_owner';
-  static const String cacheVersion = 'rpc_v2_minimal';
+  static const String cacheVersion = 'rpc_v3_minimal_marker_numbers';
 
   final SupabaseClient _client = SupabaseConfig.client;
   final StorageService _storage = StorageServiceFactory.create();

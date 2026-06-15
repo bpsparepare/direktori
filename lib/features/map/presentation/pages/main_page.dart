@@ -7,6 +7,7 @@ import 'kbli_page.dart';
 import 'dokumentasi_page.dart';
 import 'usaha_organik_page.dart';
 import 'wilayah_tugas_page.dart';
+import '../widgets/documentation_upload_dialog.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
@@ -24,10 +25,13 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _selectedIndex = 0;
+  int _bottomNavIndex = 0;
   late MapController _sharedMapController; // Add shared MapController
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+  final ValueNotifier<int> _documentationRefreshSignal = ValueNotifier<int>(0);
   List<Place> _searchResults = [];
   List<Place> _allPlaces = [];
   String? _se2026Role;
@@ -37,6 +41,7 @@ class _MainPageState extends State<MainPage> {
     super.initState();
     _sharedMapController = MapController();
     _selectedIndex = widget.initialTabIndex ?? 0;
+    _bottomNavIndex = _selectedIndex <= 2 ? _selectedIndex : 0;
     _loadPlaces();
     _checkUserRole();
   }
@@ -55,6 +60,14 @@ class _MainPageState extends State<MainPage> {
     // Load dummy places from repository
     final repository = MapRepositoryImpl();
     _allPlaces = await repository.getPlaces();
+  }
+
+  @override
+  void dispose() {
+    _documentationRefreshSignal.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
   }
 
   void _performSearch(String query) async {
@@ -207,6 +220,60 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
+  void _navigateToIndex(int index, {bool closeDrawer = false}) {
+    if (closeDrawer) {
+      Navigator.of(context).pop();
+    }
+
+    context.read<MapBloc>().add(const PlaceCleared());
+    setState(() {
+      _selectedIndex = index;
+      if (index <= 2) {
+        _bottomNavIndex = index;
+      }
+    });
+  }
+
+  Future<void> _openDocumentationUploadFromExplore() async {
+    final entry = await showDocumentationUploadDialog(context);
+    if (!mounted || entry == null) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Upload dokumentasi berhasil'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    _documentationRefreshSignal.value++;
+    _navigateToIndex(3);
+  }
+
+  Widget _buildDrawerButton() {
+    return Material(
+      color: Colors.white,
+      shape: const CircleBorder(),
+      elevation: 2,
+      child: IconButton(
+        icon: const Icon(Icons.menu),
+        onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+      ),
+    );
+  }
+
+  Widget _buildDrawerMenuItem({
+    required IconData icon,
+    required String title,
+    required int index,
+  }) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      selected: _selectedIndex == index,
+      onTap: () => _navigateToIndex(index, closeDrawer: true),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocListener<MapBloc, MapState>(
@@ -219,6 +286,38 @@ class _MainPageState extends State<MainPage> {
         }
       },
       child: Scaffold(
+        key: _scaffoldKey,
+        drawer: Drawer(
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Text(
+                    'Menu Lainnya',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                _buildDrawerMenuItem(
+                  icon: Icons.photo_camera_back_outlined,
+                  title: 'Dokumentasi',
+                  index: 3,
+                ),
+                _buildDrawerMenuItem(
+                  icon: Icons.apartment_rounded,
+                  title: 'KBLI',
+                  index: 4,
+                ),
+                _buildDrawerMenuItem(
+                  icon: Icons.eco_rounded,
+                  title: 'Usaha Organik',
+                  index: 5,
+                ),
+              ],
+            ),
+          ),
+        ),
         body: Stack(
           children: [
             // Base map layer - always MapPage to maintain consistent map
@@ -231,7 +330,9 @@ class _MainPageState extends State<MainPage> {
                 children: [
                   DashboardPage(mapController: _sharedMapController),
                   const WilayahTugasPage(),
-                  const DokumentasiPage(),
+                  DokumentasiPage(
+                    refreshListenable: _documentationRefreshSignal,
+                  ),
                   const KbliPage(),
                   const UsahaOrganikPage(),
                 ],
@@ -258,10 +359,14 @@ class _MainPageState extends State<MainPage> {
                   ),
                   child: Row(
                     children: [
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: _buildDrawerButton(),
+                      ),
                       // Search TextField
                       Expanded(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
                           child: TextField(
                             controller: _searchController,
                             focusNode: _searchFocusNode,
@@ -335,17 +440,26 @@ class _MainPageState extends State<MainPage> {
                   ),
                 ),
               ),
+            if (_selectedIndex != 0)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 16,
+                left: 16,
+                child: _buildDrawerButton(),
+              ),
           ],
         ),
+        floatingActionButton: _selectedIndex == 0
+            ? FloatingActionButton.extended(
+                onPressed: _openDocumentationUploadFromExplore,
+                backgroundColor: const Color(0xFF1D8F5A),
+                foregroundColor: Colors.white,
+                icon: const Icon(Icons.add_a_photo_outlined),
+                label: const Text('Dokumentasi'),
+              )
+            : null,
         bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _selectedIndex,
-          onTap: (index) {
-            // Clear place selection when switching tabs
-            context.read<MapBloc>().add(const PlaceCleared());
-            setState(() {
-              _selectedIndex = index;
-            });
-          },
+          currentIndex: _bottomNavIndex,
+          onTap: _navigateToIndex,
           type: BottomNavigationBarType.fixed,
           selectedItemColor: Colors.blue,
           unselectedItemColor: Colors.grey,
@@ -361,18 +475,6 @@ class _MainPageState extends State<MainPage> {
             const BottomNavigationBarItem(
               icon: Icon(Icons.map_outlined),
               label: 'Wilayah',
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.photo_camera_back_outlined),
-              label: 'Dokumentasi',
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.apartment_rounded),
-              label: 'KBLI',
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.eco_rounded),
-              label: 'Usaha Organik',
             ),
           ],
         ),

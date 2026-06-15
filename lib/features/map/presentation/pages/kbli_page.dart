@@ -385,20 +385,6 @@ class _KbliPageState extends State<KbliPage> {
               },
             ),
           ),
-          if (_statusMessage != null) ...[
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                _statusMessage!,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.blueGrey[600],
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -412,22 +398,6 @@ class _KbliPageState extends State<KbliPage> {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
       child: Row(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Daftar Pekerjaan',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$resultCount hasil • $referenceCount referensi tampil',
-                  style: TextStyle(color: Colors.blueGrey[600], fontSize: 13),
-                ),
-              ],
-            ),
-          ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
