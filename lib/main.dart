@@ -16,16 +16,7 @@ import 'features/auth/domain/usecases/sign_in_with_google_usecase.dart';
 import 'features/auth/domain/usecases/sign_out_usecase.dart';
 import 'features/auth/presentation/widgets/auth_wrapper.dart';
 import 'core/widgets/version_check_wrapper.dart';
-import 'features/map/presentation/bloc/map_bloc.dart';
-import 'features/map/presentation/bloc/map_event.dart';
 import 'features/map/data/repositories/map_repository_impl.dart';
-import 'features/map/domain/usecases/get_initial_map_config.dart';
-import 'features/map/domain/usecases/get_places.dart';
-import 'features/map/domain/usecases/get_places_in_bounds.dart';
-import 'features/map/domain/usecases/refresh_places.dart';
-import 'features/map/domain/usecases/get_first_polygon_meta_from_geojson.dart';
-import 'features/map/domain/usecases/get_all_polygons_meta_from_geojson.dart';
-import 'features/map/domain/usecases/get_polygon_points.dart';
 // import 'core/widgets/debug_overlay.dart';
 
 void main() async {
@@ -89,25 +80,6 @@ class MyApp extends StatelessWidget {
               signInWithGoogleUseCase: SignInWithGoogleUseCase(authRepository),
               signOutUseCase: SignOutUseCase(authRepository),
             )..add(AuthCheckRequested()),
-          ),
-          BlocProvider<MapBloc>(
-            create: (context) =>
-                MapBloc(
-                    getInitialMapConfig: GetInitialMapConfig(mapRepository),
-                    getPlaces: GetPlaces(mapRepository),
-                    refreshPlaces: RefreshPlaces(mapRepository),
-                    getPlacesInBounds: GetPlacesInBounds(mapRepository),
-                    getFirstPolygonMeta: GetFirstPolygonMetaFromGeoJson(
-                      mapRepository,
-                    ),
-                    getAllPolygonsMeta: GetAllPolygonsMetaFromGeoJson(
-                      mapRepository,
-                    ),
-                    getPolygonPoints: GetPolygonPoints(mapRepository),
-                  )
-                  ..add(const MapInitRequested())
-                  ..add(const PlacesRequested())
-                  ..add(const PolygonsListRequested()),
           ),
         ],
         child: MaterialApp(

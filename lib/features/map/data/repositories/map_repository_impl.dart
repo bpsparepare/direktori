@@ -38,8 +38,17 @@ class MapRepositoryImpl implements MapRepository {
 
   void invalidatePlacesCache() {
     _allPlacesCache = null;
+    _placesLoadingFuture = null;
     _boundsCache.clear();
     debugPrint('MapRepository: Places cache invalidated');
+  }
+
+  void clearSessionCaches() {
+    invalidatePlacesCache();
+    _polygonCache.clear();
+    _cachedMetadata = null;
+    _cachedGeometries = null;
+    debugPrint('MapRepository: Session caches cleared');
   }
 
   @override
@@ -875,7 +884,7 @@ class MapRepositoryImpl implements MapRepository {
         ? properties['nmdesa'] as String?
         : null;
     final String? idsls = properties != null
-        ? properties['idsls'] as String?
+        ? properties['idsls']?.toString()
         : null;
     final String? idsubsls = properties != null
         ? properties['idsubsls']?.toString()
@@ -991,7 +1000,7 @@ class MapRepositoryImpl implements MapRepository {
       try {
         debugPrint('GeoJSON(points): loading optimized geometries...');
         final jsonStr = await rootBundle.loadString(
-          'assets/geojson/final_sls_optimized.geojson',
+          'assets/geojson/final_sls_optimized_v2.json',
         );
         _cachedGeometries = await compute(_parseOptimizedGeoJson, jsonStr);
         debugPrint(
@@ -1345,7 +1354,7 @@ List<PolygonData> _parseGeoJsonList(String jsonStr) {
         ? properties['nmdesa'] as String?
         : null;
     final String? idsls = properties != null
-        ? properties['idsls'] as String?
+        ? properties['idsls']?.toString()
         : null;
     final String? idsubsls = properties != null
         ? properties['idsubsls']?.toString()
@@ -1452,7 +1461,7 @@ Map<String, List<LatLng>> _parseOptimizedGeoJson(String jsonStr) {
     final Map<String, dynamic>? properties =
         feature['properties'] as Map<String, dynamic>?;
     final String? idsls = properties != null
-        ? properties['idsls'] as String?
+        ? properties['idsls']?.toString()
         : null;
 
     if (idsls == null) continue;

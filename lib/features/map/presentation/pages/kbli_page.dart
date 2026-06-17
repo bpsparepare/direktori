@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../data/services/kbli_supabase_service.dart';
+import '../../data/services/kbli_sheets_service.dart';
 
 class KbliPage extends StatefulWidget {
   const KbliPage({super.key});
@@ -9,7 +9,7 @@ class KbliPage extends StatefulWidget {
 }
 
 class _KbliPageState extends State<KbliPage> {
-  final KbliSupabaseService _service = KbliSupabaseService();
+  final KbliSheetsService _service = KbliSheetsService();
   final TextEditingController _searchController = TextEditingController();
   static const List<String> _monthNames = <String>[
     'Jan',
@@ -76,7 +76,7 @@ class _KbliPageState extends State<KbliPage> {
         _entries = entries;
         _isLoading = false;
         _lastUpdatedAt = DateTime.now();
-        _statusMessage = 'Data KBLI diperbarui dari server.';
+        _statusMessage = 'Data KBLI diperbarui dari Google Sheets.';
       });
     } catch (e) {
       if (!mounted) return;
@@ -109,7 +109,7 @@ class _KbliPageState extends State<KbliPage> {
         _entries = entries;
         _isLoading = false;
         _lastUpdatedAt = DateTime.now();
-        _statusMessage = 'Data KBLI diperbarui dari server.';
+        _statusMessage = 'Data KBLI diperbarui dari Google Sheets.';
       });
     } catch (e) {
       if (!mounted) return;
@@ -166,6 +166,7 @@ class _KbliPageState extends State<KbliPage> {
         entry.jenisUsaha,
         entry.kategori,
         entry.kbli2025,
+        entry.keteranganKbli,
         entry.aktivitas,
         entry.input,
         entry.proses,
@@ -445,13 +446,7 @@ class _KbliPageState extends State<KbliPage> {
   }
 
   Widget _buildKbliTile(_KbliGroupData group, int index) {
-    final categories =
-        group.items
-            .map((item) => item.kategori)
-            .where((item) => item.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
+    final preview = _buildPreviewText(group);
 
     return Material(
       color: Colors.transparent,
@@ -509,6 +504,19 @@ class _KbliPageState extends State<KbliPage> {
                           color: Color(0xFF10243E),
                         ),
                       ),
+                      if (preview.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          preview,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.blueGrey[700],
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -536,6 +544,7 @@ class _KbliPageState extends State<KbliPage> {
   String _buildPreviewText(_KbliGroupData group) {
     final previews = group.items
         .map((item) {
+          if (item.keteranganKbli.isNotEmpty) return item.keteranganKbli;
           if (item.aktivitas.isNotEmpty) return item.aktivitas;
           if (item.proses.isNotEmpty) return item.proses;
           if (item.output.isNotEmpty) return item.output;
@@ -574,6 +583,20 @@ class _KbliPageState extends State<KbliPage> {
               ),
             ),
           ),
+          if (_statusMessage != null) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _statusMessage!,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.blueGrey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -817,6 +840,14 @@ class _KbliPageState extends State<KbliPage> {
             ],
           ),
           const SizedBox(height: 18),
+          if (item.keteranganKbli.isNotEmpty) ...[
+            _buildDetailSection(
+              icon: Icons.info_outline_rounded,
+              title: 'Keterangan KBLI',
+              content: item.keteranganKbli,
+            ),
+            const SizedBox(height: 12),
+          ],
           _buildDecisionFlow(item),
           const SizedBox(height: 12),
           if (isKategoriC) ...[

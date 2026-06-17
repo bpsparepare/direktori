@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/repositories/map_repository_impl.dart';
 import '../../data/repositories/scraping_repository_impl.dart';
 import '../../data/models/direktori_model.dart';
@@ -37,6 +38,11 @@ class MapPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final userId = context.select<AuthBloc, String?>((bloc) {
+      final state = bloc.state;
+      return state is AuthAuthenticated ? state.user.id : null;
+    });
+
     return BlocBuilder<MapBloc, MapState>(
       builder: (context, state) {
         switch (state.status) {
@@ -98,6 +104,17 @@ class MapPage extends StatelessWidget {
                         const AssignmentPolygonsToggleRequested(),
                       );
                     },
+                  ),
+                  Positioned(
+                    top: 16,
+                    left: 16,
+                    child: SafeArea(
+                      child: _MapSessionDebugBadge(
+                        userId: userId,
+                        wilayahCount: state.assignmentWilayahCount,
+                        polygonCount: state.assignmentPolygons.length,
+                      ),
+                    ),
                   ),
                   // Coordinate mode overlay: center crosshair + actions
                   if (coordinateTarget != null) ...[
@@ -7030,6 +7047,56 @@ class MapPage extends StatelessWidget {
       builder: (context) {
         return VoiceGroundcheckDialog(parentContext: parentContext);
       },
+    );
+  }
+}
+
+class _MapSessionDebugBadge extends StatelessWidget {
+  final String? userId;
+  final int wilayahCount;
+  final int polygonCount;
+
+  const _MapSessionDebugBadge({
+    required this.userId,
+    required this.wilayahCount,
+    required this.polygonCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final shortUserId = userId == null || userId!.isEmpty
+        ? '-'
+        : userId!.substring(0, math.min(8, userId!.length));
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: DefaultTextStyle(
+        style: const TextStyle(
+          fontSize: 11,
+          color: Colors.black87,
+          fontWeight: FontWeight.w600,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('User: $shortUserId'),
+            Text('Wilayah: $wilayahCount'),
+            Text('Polygon: $polygonCount'),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -32,6 +32,7 @@ migrate_working_dir/
 .pub/
 /build/
 /dist/
+/docs/
 /certificates/
 /coverage/
 
@@ -49,6 +50,7 @@ app.*.map.json
 # Environment files
 .env
 .env.*
+.superpowers/
 assets/env
 
 # Dart define JSON environment files

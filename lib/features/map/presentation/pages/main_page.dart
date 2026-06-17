@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'map_page.dart';
-import 'saved_page.dart';
 import 'kbli_page.dart';
 import 'dokumentasi_page.dart';
+import 'fasih_rekap_page.dart';
 import 'usaha_organik_page.dart';
 import 'wilayah_tugas_page.dart';
 import '../widgets/documentation_upload_dialog.dart';
@@ -328,7 +328,7 @@ class _MainPageState extends State<MainPage> {
               child: IndexedStack(
                 index: _selectedIndex == 0 ? 0 : _selectedIndex - 1,
                 children: [
-                  DashboardPage(mapController: _sharedMapController),
+                  const FasihRekapPage(),
                   const WilayahTugasPage(),
                   DokumentasiPage(
                     refreshListenable: _documentationRefreshSignal,

@@ -21,6 +21,7 @@ import 'map_state.dart';
 class MapBloc extends Bloc<MapEvent, MapState> {
   static const String _debugServerUrl = 'http://10.200.3.68:7777/event';
   static const String _debugSessionId = 'assignment-focus-cache';
+  int _lastAssignmentWilayahCount = 0;
   final GetInitialMapConfig getInitialMapConfig;
   final GetPlaces getPlaces;
   final RefreshPlaces refreshPlaces;
@@ -233,7 +234,9 @@ class MapBloc extends Bloc<MapEvent, MapState> {
             'firstPolygonIdSubsls': list.isNotEmpty
                 ? list.first.idsubsls
                 : null,
-            'firstPolygonPointCount': list.isNotEmpty ? list.first.points.length : null,
+            'firstPolygonPointCount': list.isNotEmpty
+                ? list.first.points.length
+                : null,
             'firstAssignmentIdsls': assignmentPolygons.isNotEmpty
                 ? assignmentPolygons.first.idsls
                 : null,
@@ -261,6 +264,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         state.copyWith(
           polygonsMeta: list,
           assignmentPolygons: assignmentPolygons,
+          assignmentWilayahCount: _lastAssignmentWilayahCount,
           showAssignmentPolygons: state.assignmentPolygons.isEmpty
               ? assignmentPolygons.isNotEmpty
               : state.showAssignmentPolygons,
@@ -480,9 +484,28 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     );
   }
 
+  Set<String> _idCandidates(dynamic value) {
+    final raw = value?.toString().trim() ?? '';
+    if (raw.isEmpty) return <String>{};
+
+    final noSpace = raw.replaceAll(RegExp(r'\s+'), '');
+    final noDecimal = noSpace.replaceAll(RegExp(r'\.0+$'), '');
+    final digitsOnly = noDecimal.replaceAll(RegExp(r'[^0-9]'), '');
+
+    final out = <String>{raw, noSpace, noDecimal};
+    if (digitsOnly.isNotEmpty) {
+      out.add(digitsOnly);
+      final noLeadZeros = digitsOnly.replaceFirst(RegExp(r'^0+'), '');
+      out.add(noLeadZeros.isEmpty ? '0' : noLeadZeros);
+    }
+    out.removeWhere((e) => e.isEmpty);
+    return out;
+  }
+
   Future<List<PolygonData>> _loadAssignmentPolygons(
     List<PolygonData> polygonsMeta,
   ) async {
+    _lastAssignmentWilayahCount = 0;
     if (polygonsMeta.isEmpty) return const [];
 
     try {
@@ -501,11 +524,12 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         ),
       );
       // #endregion
-      if (profile == null || !profile.isActive || profile.role == 'admin') {
+      if (profile == null || !profile.isActive) {
         return const [];
       }
 
       final wilayah = await _groundcheckService.fetchCurrentUserWilayahTugas();
+      _lastAssignmentWilayahCount = wilayah.length;
       // #region debug-point B:wilayah-match-input
       unawaited(
         _debugReport(
@@ -514,7 +538,9 @@ class MapBloc extends Bloc<MapEvent, MapState> {
           msg: '[DEBUG] wilayah tugas fetched for polygon matching',
           data: {
             'wilayahCount': wilayah.length,
-            'firstWilayahId': wilayah.isNotEmpty ? wilayah.first['id']?.toString() : null,
+            'firstWilayahId': wilayah.isNotEmpty
+                ? wilayah.first['id']?.toString()
+                : null,
             'firstWilayahIdSls': wilayah.isNotEmpty
                 ? wilayah.first['id_sls']?.toString()
                 : null,
@@ -524,22 +550,20 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       // #endregion
       if (wilayah.isEmpty) return const [];
 
-      final assignmentIds = wilayah
-          .expand((item) {
-            final values = <String>[
-              item['id']?.toString().trim() ?? '',
-              item['id_sls']?.toString().trim() ?? '',
-            ];
-            return values.where((value) => value.isNotEmpty);
-          })
-          .toSet();
+      final assignmentIds = <String>{};
+      for (final item in wilayah) {
+        assignmentIds.addAll(_idCandidates(item['id']));
+        assignmentIds.addAll(_idCandidates(item['id_sls']));
+        assignmentIds.addAll(_idCandidates(item['kode_subsls']));
+        assignmentIds.addAll(_idCandidates(item['kode_sls']));
+      }
       if (assignmentIds.isEmpty) return const [];
 
       final matchedPolygons = polygonsMeta.where((polygon) {
-        final idsubsls = polygon.idsubsls?.trim();
-        final idsls = polygon.idsls?.trim();
-        return (idsubsls != null && assignmentIds.contains(idsubsls)) ||
-            (idsls != null && assignmentIds.contains(idsls));
+        final candidates = <String>{};
+        candidates.addAll(_idCandidates(polygon.idsubsls));
+        candidates.addAll(_idCandidates(polygon.idsls));
+        return candidates.any(assignmentIds.contains);
       }).toList();
 
       // #region debug-point B:wilayah-match-result

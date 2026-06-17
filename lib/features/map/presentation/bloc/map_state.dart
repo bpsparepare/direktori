@@ -20,6 +20,7 @@ class MapState extends Equatable {
   final List<PolygonData> selectedPolygons; // New field for multiple selection
   final bool showAssignmentPolygons;
   final MapFocusBounds? assignmentFocusBounds;
+  final int assignmentWilayahCount;
   final LatLng? temporaryMarker;
   final String? error;
   // Store last bounds to preserve view during refresh
@@ -41,6 +42,7 @@ class MapState extends Equatable {
     this.selectedPolygons = const [], // Initialize
     this.showAssignmentPolygons = false,
     this.assignmentFocusBounds,
+    this.assignmentWilayahCount = 0,
     this.temporaryMarker,
     this.error,
     this.lastSouth,
@@ -62,6 +64,7 @@ class MapState extends Equatable {
     List<PolygonData>? selectedPolygons, // Parameter
     bool? showAssignmentPolygons,
     MapFocusBounds? assignmentFocusBounds,
+    int? assignmentWilayahCount,
     LatLng? temporaryMarker,
     String? error,
     bool clearSelectedPlace = false,
@@ -93,6 +96,8 @@ class MapState extends Equatable {
       assignmentFocusBounds: clearAssignmentFocusBounds
           ? null
           : (assignmentFocusBounds ?? this.assignmentFocusBounds),
+      assignmentWilayahCount:
+          assignmentWilayahCount ?? this.assignmentWilayahCount,
       temporaryMarker: clearTemporaryMarker
           ? null
           : (temporaryMarker ?? this.temporaryMarker),
@@ -118,6 +123,7 @@ class MapState extends Equatable {
     selectedPolygons, // Add to props
     showAssignmentPolygons,
     assignmentFocusBounds,
+    assignmentWilayahCount,
     temporaryMarker,
     error,
     lastSouth,
