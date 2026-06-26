@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/config/supabase_config.dart';
+import '../models/anomali_temuan_item.dart';
 import '../../domain/entities/groundcheck_record.dart';
 import '../../domain/entities/place.dart';
 import 'package:latlong2/latlong.dart';
@@ -360,7 +361,9 @@ class GroundcheckSupabaseService {
     try {
       final authUser = _client.auth.currentUser;
       if (authUser == null) {
-        debugPrint('[assignment-focus-cache][E] profile fetch skipped: auth user null');
+        debugPrint(
+          '[assignment-focus-cache][E] profile fetch skipped: auth user null',
+        );
         return null;
       }
 
@@ -448,12 +451,142 @@ class GroundcheckSupabaseService {
         );
         return result;
       }
-      debugPrint('[assignment-focus-cache][B] wilayah fetched with non-list response');
+      debugPrint(
+        '[assignment-focus-cache][B] wilayah fetched with non-list response',
+      );
       return [];
     } catch (e) {
       debugPrint('[assignment-focus-cache][B] wilayah fetch exception: $e');
       return [];
     }
+  }
+
+  Future<List<AnomaliTemuanItem>>
+  fetchAnomaliTemuanByCurrentUserWilayah() async {
+    try {
+      final profile = await fetchCurrentSe2026Profile();
+      if (profile == null || !profile.isActive) {
+        debugPrint(
+          '[anomali-wilayah][B] fetch skipped: profile null or inactive',
+        );
+        return [];
+      }
+
+      final wilayah = await fetchCurrentUserWilayahTugas();
+      final kodeWilayahList = wilayah
+          .map((item) => (item['id'] ?? '').toString().trim())
+          .where((value) => value.isNotEmpty)
+          .toSet()
+          .toList();
+
+      if (kodeWilayahList.isEmpty) {
+        debugPrint('[anomali-wilayah][B] fetch skipped: no wilayah tugas');
+        return [];
+      }
+
+      final response = await _client
+          .from('se2026_anomali_temuan')
+          .select(
+            'id, anomali_id, scope, assignment_id, kode_wilayah, nama, '
+            'wilayah, keterangan, detail, status_tindak_lanjut, '
+            'catatan_petugas, diperiksa_oleh, diperiksa_at, created_at',
+          )
+          .filter('kode_wilayah', 'in', kodeWilayahList)
+          .order('created_at', ascending: false)
+          .limit(5000);
+
+      DebugMonitor().logUsage('se2026_anomali_temuan', 'SELECT', response);
+
+      if (response.isEmpty) {
+        return [];
+      }
+
+      final rows = List<Map<String, dynamic>>.from(response);
+      final anomaliIds = rows
+          .map((item) => (item['anomali_id'] ?? '').toString().trim())
+          .where((value) => value.isNotEmpty)
+          .toSet()
+          .toList();
+
+      final Map<String, Map<String, dynamic>> kategoriById = {};
+      if (anomaliIds.isNotEmpty) {
+        final kategoriResponse = await _client
+            .from('se2026_anomali_kategori')
+            .select('anomali_id, kategori, deskripsi_rule')
+            .filter('anomali_id', 'in', anomaliIds);
+
+        DebugMonitor().logUsage(
+          'se2026_anomali_kategori',
+          'SELECT',
+          kategoriResponse,
+        );
+
+        final kategoriRows = List<Map<String, dynamic>>.from(kategoriResponse);
+        for (final row in kategoriRows) {
+          final anomaliId = (row['anomali_id'] ?? '').toString().trim();
+          if (anomaliId.isNotEmpty) {
+            kategoriById[anomaliId] = row;
+          }
+        }
+      }
+
+      return rows
+          .map(
+            (item) => AnomaliTemuanItem.fromJson(
+              item,
+              kategoriJson: kategoriById[item['anomali_id']?.toString() ?? ''],
+            ),
+          )
+          .toList();
+    } catch (e) {
+      debugPrint('[anomali-wilayah][B] fetch exception: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> updateAnomaliTemuanTindakLanjut({
+    required int temuanId,
+    required String statusTindakLanjut,
+    String? catatanPetugas,
+  }) async {
+    final payload = {
+      'status_tindak_lanjut': statusTindakLanjut,
+      'catatan_petugas': _nullableTrim(catatanPetugas),
+      'diperiksa_oleh': await _buildCurrentPemeriksaLabel(),
+      'diperiksa_at': DateTime.now().toIso8601String(),
+    };
+
+    DebugMonitor().logUsage('se2026_anomali_temuan', 'UPDATE', {
+      'id': temuanId,
+      ...payload,
+    }, isResponse: false);
+
+    await _client
+        .from('se2026_anomali_temuan')
+        .update(payload)
+        .eq('id', temuanId);
+  }
+
+  Future<String> _buildCurrentPemeriksaLabel() async {
+    final name = (await fetchCurrentUserName())?.trim() ?? '';
+    final profile = await fetchCurrentSe2026Profile();
+    final authUser = _client.auth.currentUser;
+    final email = authUser?.email?.trim() ?? '';
+
+    final displayIdentity = name.isNotEmpty
+        ? name
+        : (email.isNotEmpty ? email : authUser?.id ?? 'user');
+
+    if (profile == null) {
+      return displayIdentity;
+    }
+
+    return '${profile.role}:${profile.petugasId} - $displayIdentity';
+  }
+
+  String? _nullableTrim(String? value) {
+    final trimmed = value?.trim() ?? '';
+    return trimmed.isEmpty ? null : trimmed;
   }
 
   Future<bool> deleteRecords(List<String> idsbrList) async {
@@ -547,15 +680,14 @@ class GroundcheckSupabaseService {
 
       // Update local cache
       // Pastikan status isRevisi tersimpan di lokal jika berubah
-      final recordToSave =
-          (record.isUploaded && !record.isRevisi)
-              ? record.copyWith(
-                  isRevisi: true,
-                  updatedAt: updateTimestamp ? nowIso : record.updatedAt,
-                )
-              : record.copyWith(
-                  updatedAt: updateTimestamp ? nowIso : record.updatedAt,
-                );
+      final recordToSave = (record.isUploaded && !record.isRevisi)
+          ? record.copyWith(
+              isRevisi: true,
+              updatedAt: updateTimestamp ? nowIso : record.updatedAt,
+            )
+          : record.copyWith(
+              updatedAt: updateTimestamp ? nowIso : record.updatedAt,
+            );
       await updateLocalRecord(recordToSave);
     } catch (e) {
       print('Error updateRecord: $e');
@@ -575,9 +707,11 @@ class GroundcheckSupabaseService {
       // Chunking to avoid payload too large
       const int batchSize = 100;
       for (var i = 0; i < records.length; i += batchSize) {
-        final end = (i + batchSize < records.length) ? i + batchSize : records.length;
+        final end = (i + batchSize < records.length)
+            ? i + batchSize
+            : records.length;
         final chunk = records.sublist(i, end);
-        
+
         final payload = chunk.map((record) {
           final data = {
             'idsbr': record.idsbr,
@@ -606,7 +740,7 @@ class GroundcheckSupabaseService {
           if (record.isUploaded || record.isRevisi) {
             data['is_revisi'] = true;
           }
-          
+
           return data;
         }).toList();
 

@@ -1,0 +1,454 @@
+{
+  "jenis_usaha": {
+    "label": "9. a. Apa jenis usaha/perusahaan ini?",
+    "options": [
+      {
+        "value": "1",
+        "label": "1. Usaha di dalam bangunan tempat tinggal"
+      },
+      {
+        "value": "2",
+        "label": "2. Usaha keliling"
+      },
+      {
+        "value": "3",
+        "label": "3. Usaha di luar bangunan tempat tinggal dengan lokasi tetap dan perlengkapan usaha dipindah/dibongkar pasang"
+      },
+      {
+        "value": "4",
+        "label": "4. Usaha konstruksi perorangan, usaha pertambangan dan penggalian perorangan"
+      },
+      {
+        "value": "5",
+        "label": "5. Usaha persewaan rumah/kamar/kantor"
+      },
+      {
+        "value": "6",
+        "label": "6. Usaha pertanian"
+      }
+    ]
+  },
+  "badan_usaha": {
+    "label": "11. a. Apa status badan usaha dari usaha/perusahaan ini?",
+    "options": [
+      {
+        "value": "01a",
+        "label": "1.a. Perseroan (PT/NV, PT Persero, PT Tbk, PT Persero Tbk, Perseroan Daerah"
+      },
+      {
+        "value": "01b",
+        "label": "1.b. Perseroan perorangan"
+      },
+      {
+        "value": "02",
+        "label": "2. Yayasan"
+      },
+      {
+        "value": "03",
+        "label": "3. Koperasi"
+      },
+      {
+        "value": "04",
+        "label": "4. Dana Pensiun"
+      },
+      {
+        "value": "05",
+        "label": "5. Perum/Perumda"
+      },
+      {
+        "value": "06",
+        "label": "6. BUM Desa"
+      },
+      {
+        "value": "07",
+        "label": "7. Persekutuan Komanditer (CV)"
+      },
+      {
+        "value": "08",
+        "label": "8. Persekutuan Firma (Fa)"
+      },
+      {
+        "value": "09",
+        "label": "9. Persekutuan Perdata (Maatschap)"
+      },
+      {
+        "value": "10",
+        "label": "10. Kantor Perwakilan Luar Negeri"
+      },
+      {
+        "value": "11",
+        "label": "11. Badan Usaha Luar Negeri"
+      },
+      {
+        "value": "12",
+        "label": "12. Badan Usaha Lainnya (Contoh: BLU, PTN-BH)"
+      },
+      {
+        "value": "13",
+        "label": "13. Bukan Badan Usaha"
+      }
+    ]
+  },
+  "produk_sendiri": {
+    "label": "13. b1. Apakah memproduksi barang di lokasi ini?",
+    "options": [
+      {
+        "value": "1",
+        "label": "1. Ya"
+      },
+      {
+        "value": "2",
+        "label": "2. Tidak"
+      }
+    ]
+  },
+  "layanan_mamin": {
+    "label": "13. b2. Apakah menyediakan layanan makan minum? Ciri: terdapat kegiatan peracikkan, pemanasan ulang,",
+    "options": [
+      {
+        "value": "1",
+        "label": "1. Ya"
+      },
+      {
+        "value": "2",
+        "label": "2. Tidak"
+      }
+    ]
+  },
+  "keg_penjualan": {
+    "label": "13. b3. Apakah melakukan penjualan barang?",
+    "options": [
+      {
+        "value": "1",
+        "label": "1. Ya"
+      },
+      {
+        "value": "2",
+        "label": "2. Tidak"
+      }
+    ]
+  },
+  "keg_jasa": {
+    "label": "13. b4. Pilih salah satu aktivitas yang dilakukan:",
+    "options": [
+      {
+        "value": "1",
+        "label": "1. Jasa"
+      },
+      {
+        "value": "2",
+        "label": "2. Pertanian, Perikanan, dan Kehutanan"
+      }
+    ]
+  },
+  "lokasi_usaha": {
+    "label": "13. c. Di mana usaha tersebut biasa dilakukan?",
+    "options": [
+      {
+        "value": "01",
+        "label": "1. Apotek"
+      },
+      {
+        "value": "02",
+        "label": "2. Swalayan"
+      },
+      {
+        "value": "03",
+        "label": "3. Los Pasar"
+      },
+      {
+        "value": "04",
+        "label": "4. Toko, ruko, dan sejenisnya"
+      },
+      {
+        "value": "05",
+        "label": "5. Kedai, stan, tenda"
+      },
+      {
+        "value": "06",
+        "label": "6. Bar"
+      },
+      {
+        "value": "07",
+        "label": "7. Kelab malam, diskotek"
+      },
+      {
+        "value": "08",
+        "label": "8. Kafe"
+      },
+      {
+        "value": "09",
+        "label": "9. Restoran, warung makan, dan sejenisnya"
+      },
+      {
+        "value": "10",
+        "label": "10. Keliling"
+      },
+      {
+        "value": "11",
+        "label": "11. Daring (online)"
+      }
+    ]
+  },
+  "peran_mbg": {
+    "label": "22. Apakah usaha/perusahaan ini terlibat dalam program Makan Bergizi Gratis (MBG)?",
+    "options": [
+      {
+        "value": "1",
+        "label": "1. Ya, sebagai SATUAN PELAYANAN PEMENUHAN GIZI (SPPG)"
+      },
+      {
+        "value": "2",
+        "label": "2. Ya, sebagai supplier"
+      },
+      {
+        "value": "3",
+        "label": "3. Ya, sebagai penerima manfaat MBG (Sekolah, Puskesmas)"
+      },
+      {
+        "value": "4",
+        "label": "4. Ya, peran lainnya"
+      },
+      {
+        "value": "5",
+        "label": "5. Tidak terlibat MBG"
+      }
+    ]
+  },
+  "status_kepemilikan": {
+    "label": "3. a. Apa status kepemilikan bangunan tempat tinggal yang ditempati?",
+    "options": [
+      {
+        "value": "1",
+        "label": "1. Milik sendiri"
+      },
+      {
+        "value": "2",
+        "label": "2. Kontrak/sewa"
+      },
+      {
+        "value": "3",
+        "label": "3. Bebas sewa"
+      },
+      {
+        "value": "4",
+        "label": "4. Dinas"
+      },
+      {
+        "value": "5",
+        "label": "5. Lainnya"
+      }
+    ]
+  },
+  "jns_lantai": {
+    "label": "6. a. Apakah bahan bangunan utama lantai rumah terluas?",
+    "options": [
+      {
+        "value": "1",
+        "label": "1. Marmer/granit"
+      },
+      {
+        "value": "2",
+        "label": "2. Keramik"
+      },
+      {
+        "value": "3",
+        "label": "3. Parket/vinil/permadani"
+      },
+      {
+        "value": "4",
+        "label": "4. Ubin/tegel/traso"
+      },
+      {
+        "value": "5",
+        "label": "5. Kayu/papan"
+      },
+      {
+        "value": "6",
+        "label": "6. Semen/bata merah"
+      },
+      {
+        "value": "7",
+        "label": "7. Bambu"
+      },
+      {
+        "value": "8",
+        "label": "8. Tanah"
+      },
+      {
+        "value": "9",
+        "label": "9. Lainnya"
+      }
+    ]
+  },
+  "jns_dinding": {
+    "label": "7. a. Apakah bahan bangunan utama dinding rumah terluas?",
+    "options": [
+      {
+        "value": "1",
+        "label": "1. Tembok"
+      },
+      {
+        "value": "2",
+        "label": "2. Plesteran anyaman bambu/kawat"
+      },
+      {
+        "value": "3",
+        "label": "3. Kayu/Papan/Gypsum/GRC/Calciboard"
+      },
+      {
+        "value": "4",
+        "label": "4. Anyaman bambu"
+      },
+      {
+        "value": "5",
+        "label": "5. Batang kayu"
+      },
+      {
+        "value": "6",
+        "label": "6. Bambu"
+      },
+      {
+        "value": "7",
+        "label": "7. Lainnya"
+      }
+    ]
+  },
+  "jns_atap": {
+    "label": "8. a. Apakah bahan bangunan utama atap rumah terluas?",
+    "options": [
+      {
+        "value": "1",
+        "label": "1. Beton"
+      },
+      {
+        "value": "2",
+        "label": "2. Genteng"
+      },
+      {
+        "value": "3",
+        "label": "3. Seng"
+      },
+      {
+        "value": "4",
+        "label": "4. Asbes"
+      },
+      {
+        "value": "5",
+        "label": "5. Bambu"
+      },
+      {
+        "value": "6",
+        "label": "6. Kayu/sirap"
+      },
+      {
+        "value": "7",
+        "label": "7. Jerami/ijuk/daun daunan/rumbia"
+      },
+      {
+        "value": "8",
+        "label": "8. Lainnya"
+      }
+    ]
+  },
+  "tempat_bab": {
+    "label": "9. Apakah memiliki fasilitas tempat buang air besar dan siapa saja yang menggunakan?",
+    "options": [
+      {
+        "value": "1",
+        "label": "1. Ada, digunakan oleh anggota keluarga dalam satu rumah"
+      },
+      {
+        "value": "2",
+        "label": "2. Ada, digunakan bersama oleh anggota keluarga dari beberapa rumah"
+      },
+      {
+        "value": "3",
+        "label": "3. Ada, di MCK komunal"
+      },
+      {
+        "value": "4",
+        "label": "4. Ada, di MCK umum/siapapun menggunakan"
+      },
+      {
+        "value": "5",
+        "label": "5. Ada, anggota keluarga tidak menggunakan"
+      },
+      {
+        "value": "6",
+        "label": "6. Tidak ada"
+      }
+    ]
+  },
+  "jns_closet": {
+    "label": "10. Apakah jenis kloset yang digunakan?",
+    "options": [
+      {
+        "value": "1",
+        "label": "1. Leher angsa"
+      },
+      {
+        "value": "2",
+        "label": "2. Plengsengan dengan tutup"
+      },
+      {
+        "value": "3",
+        "label": "3. Plengsengan tanpa tutup"
+      },
+      {
+        "value": "4",
+        "label": "4. Cemplung/cubluk"
+      }
+    ]
+  },
+  "buang_tinja": {
+    "label": "11. Di manakah tempat pembuangan akhir tinja?",
+    "options": [
+      {
+        "value": "1",
+        "label": "1. Tangki septik"
+      },
+      {
+        "value": "2",
+        "label": "2. Instalasi Pengolahan Air Limbah (IPAL)"
+      },
+      {
+        "value": "3",
+        "label": "3. Kolam/sawah/sungai/danau/laut"
+      },
+      {
+        "value": "4",
+        "label": "4. Lubang tanah"
+      },
+      {
+        "value": "5",
+        "label": "5. Pantai/tanah lapang/kebun"
+      },
+      {
+        "value": "6",
+        "label": "6. Lainnya"
+      }
+    ]
+  },
+  "sumber_penerangan": {
+    "label": "13. Apakah sumber utama penerangan rumah tangga ini?",
+    "options": [
+      {
+        "value": "1",
+        "label": "1. Listrik PLN dengan meteran"
+      },
+      {
+        "value": "2",
+        "label": "2. Listrik PLN tanpa meteran"
+      },
+      {
+        "value": "3",
+        "label": "3. Listrik Non-PLN"
+      },
+      {
+        "value": "4",
+        "label": "4. Bukan listrik"
+      }
+    ]
+  }
+}

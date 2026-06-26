@@ -4,9 +4,10 @@ import 'package:flutter_map/flutter_map.dart';
 import 'map_page.dart';
 import 'kbli_page.dart';
 import 'dokumentasi_page.dart';
-import 'fasih_rekap_page.dart';
+import 'fasih_dashboard_page.dart';
 import 'usaha_organik_page.dart';
-import 'wilayah_tugas_page.dart';
+import 'nik_tidak_valid_page.dart';
+import 'wilayah_anomali_page.dart';
 import '../widgets/documentation_upload_dialog.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
@@ -314,6 +315,11 @@ class _MainPageState extends State<MainPage> {
                   title: 'Usaha Organik',
                   index: 5,
                 ),
+                _buildDrawerMenuItem(
+                  icon: Icons.fingerprint,
+                  title: 'NIK Tidak Valid',
+                  index: 6,
+                ),
               ],
             ),
           ),
@@ -328,13 +334,14 @@ class _MainPageState extends State<MainPage> {
               child: IndexedStack(
                 index: _selectedIndex == 0 ? 0 : _selectedIndex - 1,
                 children: [
-                  const FasihRekapPage(),
-                  const WilayahTugasPage(),
+                  const FasihDashboardPage(),
+                  const WilayahAnomaliPage(),
                   DokumentasiPage(
                     refreshListenable: _documentationRefreshSignal,
                   ),
                   const KbliPage(),
                   const UsahaOrganikPage(),
+                  const NikTidakValidPage(),
                 ],
               ),
             ),
