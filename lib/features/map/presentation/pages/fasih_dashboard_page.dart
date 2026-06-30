@@ -1,3 +1,4 @@
+import 'dart:math' show max;
 import 'package:flutter/material.dart';
 
 import '../../data/services/fasih_rekap_service.dart';
@@ -106,6 +107,8 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
   _AdminViewMode _adminViewMode = _AdminViewMode.byPengawas;
   _ViewMode _viewMode = _ViewMode.card;
   double _textScale = 1.0;
+  String? _tableSortKey;
+  bool _tableSortAsc = true;
 
   UnifiedRekapRow? _selectedPengawas;
   UnifiedRekapRow? _selectedPetugas;
@@ -283,6 +286,85 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
     return sorted;
   }
 
+  List<UnifiedRekapRow> get _tableSortedRows {
+    final key = _tableSortKey;
+    if (key == null) return _sortedRows;
+    final list = List<UnifiedRekapRow>.from(_sortedRows);
+    final asc = _tableSortAsc ? 1 : -1;
+    list.sort((a, b) {
+      switch (key) {
+        case 'title':
+          return a.title.compareTo(b.title) * asc;
+        case 'kumul':
+          return a.totalAssignment.compareTo(b.totalAssignment) * asc;
+        case 'delta':
+          return a.delta.compareTo(b.delta) * asc;
+        case 'kmrn':
+          return a.yesterdayCount.compareTo(b.yesterdayCount) * asc;
+        default:
+          final av = a.statusCounts[key] ?? 0;
+          final bv = b.statusCounts[key] ?? 0;
+          return av.compareTo(bv) * asc;
+      }
+    });
+    return list;
+  }
+
+  void _onTableHeaderTap(String key) {
+    setState(() {
+      if (_tableSortKey == key) {
+        _tableSortAsc = !_tableSortAsc;
+      } else {
+        _tableSortKey = key;
+        _tableSortAsc = true;
+      }
+    });
+  }
+
+  // Returns a tappable header cell with sort indicator.
+  Widget _sortableTh(
+    String label,
+    String key,
+    double w,
+    TextStyle style, {
+    bool leftAlign = false,
+  }) {
+    final active = _tableSortKey == key;
+    final activeColor = const Color(0xFF0F4C81);
+    return GestureDetector(
+      onTap: () => _onTableHeaderTap(key),
+      child: SizedBox(
+        width: w,
+        child: Row(
+          mainAxisAlignment: leftAlign
+              ? MainAxisAlignment.start
+              : MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                textAlign: leftAlign ? TextAlign.left : TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: active ? style.copyWith(color: activeColor) : style,
+              ),
+            ),
+            if (active) ...[
+              const SizedBox(width: 2),
+              Icon(
+                _tableSortAsc
+                    ? Icons.arrow_upward_rounded
+                    : Icons.arrow_downward_rounded,
+                size: 10,
+                color: activeColor,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   String get _role => _profile?.role ?? '';
 
   bool get _isToday {
@@ -387,9 +469,9 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
               : _error != null
               ? _buildError()
               : MediaQuery(
-                  data: MediaQuery.of(context).copyWith(
-                    textScaler: TextScaler.linear(_textScale),
-                  ),
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(_textScale)),
                   child: RefreshIndicator(
                     onRefresh: _loadData,
                     child: ListView(
@@ -407,7 +489,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                         if (_rows.isEmpty)
                           _buildEmpty()
                         else if (_viewMode == _ViewMode.table)
-                          _buildTableView(_sortedRows)
+                          _buildTableView(_tableSortedRows)
                         else if (_viewMode == _ViewMode.chart)
                           _buildChartView(_sortedRows)
                         else
@@ -576,15 +658,15 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'KUMULATIF',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.55),
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
-            ),
-          ),
+          // Text(
+          //   'KUMULATIF',
+          //   style: TextStyle(
+          //     color: Colors.white.withValues(alpha: 0.55),
+          //     fontSize: 9,
+          //     fontWeight: FontWeight.w700,
+          //     letterSpacing: 0.8,
+          //   ),
+          // ),
           const SizedBox(height: 5),
           Wrap(
             spacing: 5,
@@ -593,28 +675,28 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                 .map((e) => _statusPill(e.key, '${e.value}'))
                 .toList(),
           ),
-          if (today.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Container(height: 0.5, color: Colors.white.withValues(alpha: 0.15)),
-            const SizedBox(height: 6),
-            Text(
-              'HARI INI',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.55),
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
-            ),
-            const SizedBox(height: 5),
-            Wrap(
-              spacing: 5,
-              runSpacing: 4,
-              children: today.entries
-                  .map((e) => _statusPill(e.key, '+${e.value}', isToday: true))
-                  .toList(),
-            ),
-          ],
+          // if (today.isNotEmpty) ...[
+          //   const SizedBox(height: 8),
+          //   Container(height: 0.5, color: Colors.white.withValues(alpha: 0.15)),
+          //   const SizedBox(height: 6),
+          //   Text(
+          //     'HARI INI',
+          //     style: TextStyle(
+          //       color: Colors.white.withValues(alpha: 0.55),
+          //       fontSize: 9,
+          //       fontWeight: FontWeight.w700,
+          //       letterSpacing: 0.8,
+          //     ),
+          //   ),
+          //   const SizedBox(height: 5),
+          //   Wrap(
+          //     spacing: 5,
+          //     runSpacing: 4,
+          //     children: today.entries
+          //         .map((e) => _statusPill(e.key, '+${e.value}', isToday: true))
+          //         .toList(),
+          //   ),
+          // ],
         ],
       ),
     );
@@ -1001,7 +1083,15 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
 
   // ── Sort + View toggles ───────────────────────────────────────────────────────
 
-  static const List<double> _textScaleSteps = [1.0, 1.2, 1.5, 1.8, 2.2, 2.6, 3.0];
+  static const List<double> _textScaleSteps = [
+    1.0,
+    1.2,
+    1.5,
+    1.8,
+    2.2,
+    2.6,
+    3.0,
+  ];
 
   void _cycleTextScale() {
     final idx = _textScaleSteps.indexOf(_textScale);
@@ -1040,21 +1130,20 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
               _textScale <= 1.0
                   ? 'A'
                   : _textScale <= 1.2
-                      ? 'A+'
-                      : _textScale <= 1.5
-                          ? 'A++'
-                          : _textScale <= 1.8
-                              ? 'A+++'
-                              : _textScale <= 2.2
-                                  ? '2×'
-                                  : _textScale <= 2.6
-                                      ? '2.5×'
-                                      : '3×',
+                  ? 'A+'
+                  : _textScale <= 1.5
+                  ? 'A++'
+                  : _textScale <= 1.8
+                  ? 'A+++'
+                  : _textScale <= 2.2
+                  ? '2×'
+                  : _textScale <= 2.6
+                  ? '2.5×'
+                  : '3×',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color:
-                    active ? const Color(0xFF0F4C81) : Colors.blueGrey[500],
+                color: active ? const Color(0xFF0F4C81) : Colors.blueGrey[500],
               ),
             ),
           ],
@@ -1066,23 +1155,20 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
   Widget _buildSortToggle() {
     final isAsc = _sortDir == _SortDir.asc;
     return GestureDetector(
-      onTap: () => setState(
-          () => _sortDir = isAsc ? _SortDir.desc : _SortDir.asc),
+      onTap: () =>
+          setState(() => _sortDir = isAsc ? _SortDir.desc : _SortDir.asc),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-              color: Colors.blueGrey.withValues(alpha: 0.3)),
+          border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.3)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              isAsc
-                  ? Icons.arrow_upward_rounded
-                  : Icons.arrow_downward_rounded,
+              isAsc ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
               size: 12,
               color: const Color(0xFF0F4C81),
             ),
@@ -1130,8 +1216,11 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
           color: sel ? const Color(0xFF0F4C81) : Colors.transparent,
           borderRadius: BorderRadius.circular(18),
         ),
-        child: Icon(icon,
-            size: 14, color: sel ? Colors.white : Colors.blueGrey[400]),
+        child: Icon(
+          icon,
+          size: 14,
+          color: sel ? Colors.white : Colors.blueGrey[400],
+        ),
       ),
     );
   }
@@ -1139,73 +1228,122 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
   // ── Table view ────────────────────────────────────────────────────────────────
 
   Widget _buildTableView(List<UnifiedRekapRow> rows) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+    // Collect all status keys sorted by aggregate total desc
+    final keyTotals = <String, int>{};
+    for (final r in rows) {
+      for (final e in r.statusCounts.entries) {
+        keyTotals[e.key] = (keyTotals[e.key] ?? 0) + e.value;
+      }
+    }
+    final statusKeys =
+        (keyTotals.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))
+            .map((e) => e.key)
+            .toList();
+
+    final decoration = BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.04),
+          blurRadius: 8,
+          offset: const Offset(0, 3),
+        ),
+      ],
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // ≥560 wide = desktop: fixed-width columns + status cols + horiz scroll
+        // <560 wide = mobile : Expanded columns, base cols only, no horiz scroll
+        final isDesktop = constraints.maxWidth >= 560;
+
+        return Container(
+          decoration: decoration,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: isDesktop
+                ? _buildDesktopTable(rows, statusKeys, constraints.maxWidth)
+                : _buildMobileTable(rows, statusKeys),
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Header
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: const BoxDecoration(
-              color: Color(0xFFF1F5F9),
-              borderRadius:
-                  BorderRadius.vertical(top: Radius.circular(16)),
+        );
+      },
+    );
+  }
+
+  // Desktop: columns fill full width proportionally; horizontal scroll only
+  // when many status cols push content beyond availableWidth.
+  // Subtitle/email intentionally omitted.
+  Widget _buildDesktopTable(
+    List<UnifiedRekapRow> rows,
+    List<String> statusKeys,
+    double availableWidth,
+  ) {
+    // Proportional widths: name = 3 units, each num col = 1 unit.
+    const double hPad = 24.0; // 12px left + 12px right padding
+    const double minNumW = 52.0;
+    const double minNameW = 110.0;
+    final int numCols = 3 + statusKeys.length;
+    final double minTotal = minNameW + numCols * minNumW + hPad;
+    final double tableWidth = max(availableWidth, minTotal);
+    final double unit = (tableWidth - hPad) / (3 + numCols);
+    final double nameW = unit * 3;
+    final double numW = unit;
+
+    const headerStyle = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      color: Color(0xFF64748B),
+    );
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: SizedBox(
+        width: tableWidth,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              color: const Color(0xFFF1F5F9),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  _sortableTh(
+                    'Nama',
+                    'title',
+                    nameW,
+                    headerStyle,
+                    leftAlign: true,
+                  ),
+                  _sortableTh('Kumul', 'kumul', numW, headerStyle),
+                  _sortableTh('Hr Ini', 'delta', numW, headerStyle),
+                  _sortableTh('Kmrn', 'kmrn', numW, headerStyle),
+                  for (final k in statusKeys)
+                    _sortableTh(k, k, numW, headerStyle),
+                ],
+              ),
             ),
-            child: Row(
-              children: [
-                const Expanded(
-                  flex: 3,
-                  child: Text('Nama',
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF64748B))),
-                ),
-                _thCell('Kumul'),
-                _thCell('Hr Ini'),
-                _thCell('Kmrn'),
-              ],
-            ),
-          ),
-          // Rows
-          for (int i = 0; i < rows.length; i++) ...[
-            if (i > 0)
-              Divider(
+            for (int i = 0; i < rows.length; i++) ...[
+              if (i > 0)
+                Divider(
                   height: 1,
-                  color: Colors.blueGrey.withValues(alpha: 0.08)),
-            _buildTableRow(rows[i]),
+                  color: Colors.blueGrey.withValues(alpha: 0.08),
+                ),
+              _buildDesktopTableRow(rows[i], statusKeys, nameW, numW),
+            ],
+            const SizedBox(height: 4),
           ],
-          const SizedBox(height: 4),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _thCell(String label) {
-    return Expanded(
-      child: Text(
-        label,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF64748B)),
-      ),
-    );
-  }
-
-  Widget _buildTableRow(UnifiedRekapRow row) {
+  Widget _buildDesktopTableRow(
+    UnifiedRekapRow row,
+    List<String> statusKeys,
+    double nameW,
+    double numW,
+  ) {
     final color = _accentColor(row.delta);
     final canOpen = _canDrill;
     final delta = row.delta;
@@ -1214,84 +1352,262 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
     return GestureDetector(
       onTap: canOpen ? () => _handleRowTap(row) : null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         child: Row(
           children: [
-            Container(
-              width: 3,
-              height: 28,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              flex: 3,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            SizedBox(
+              width: nameW,
+              child: Row(
                 children: [
-                  Text(
-                    row.title,
-                    style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w600),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Container(
+                    width: 3,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                  if (row.subtitle.isNotEmpty)
-                    Text(
-                      row.subtitle,
-                      style: TextStyle(
-                          fontSize: 10, color: Colors.blueGrey[500]),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      row.title,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                  ),
                 ],
               ),
             ),
-            Expanded(
+            SizedBox(
+              width: numW,
               child: Text(
                 '${row.totalAssignment}',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF2D77D0)),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF2D77D0),
+                ),
               ),
             ),
-            Expanded(
+            SizedBox(
+              width: numW,
               child: Text(
                 deltaStr,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color:
-                      delta > 0 ? const Color(0xFF10B981) : Colors.grey[400],
+                  color: delta > 0 ? const Color(0xFF10B981) : Colors.grey[400],
                 ),
               ),
             ),
-            Expanded(
+            SizedBox(
+              width: numW,
               child: Text(
                 '${row.yesterdayCount}',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
               ),
             ),
+            for (final k in statusKeys)
+              SizedBox(
+                width: numW,
+                child: Text(
+                  '${row.statusCounts[k] ?? 0}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 11),
+                ),
+              ),
           ],
         ),
       ),
     );
   }
 
+  // Mobile: sticky Nama column (fixed left) + scrollable numeric/status cols.
+  // Fixed row heights keep both sides aligned without IntrinsicHeight.
+  Widget _buildMobileTable(
+    List<UnifiedRekapRow> rows,
+    List<String> statusKeys,
+  ) {
+    const double nameW = 100.0;
+    const double numW = 54.0;
+    const double headerH = 40.0;
+    const double rowH = 36.0;
+    final divColor = Colors.blueGrey.withValues(alpha: 0.08);
+    const headerStyle = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      color: Color(0xFF64748B),
+    );
+
+    // ── Sticky left: Nama ────────────────────────────────────────────────────
+    final nameColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          height: headerH,
+          color: const Color(0xFFF1F5F9),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          alignment: Alignment.centerLeft,
+          child: _sortableTh(
+            'Nama',
+            'title',
+            nameW - 16,
+            headerStyle,
+            leftAlign: true,
+          ),
+        ),
+        for (int i = 0; i < rows.length; i++) ...[
+          if (i > 0) Divider(height: 1, color: divColor),
+          GestureDetector(
+            onTap: _canDrill ? () => _handleRowTap(rows[i]) : null,
+            child: SizedBox(
+              width: nameW,
+              height: rowH,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 3,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: _accentColor(rows[i].delta),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        rows[i].title,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 4),
+      ],
+    );
+
+    // ── Scrollable right: numeric + status cols ───────────────────────────────
+    final numColumns = SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: headerH,
+            color: const Color(0xFFF1F5F9),
+            child: Row(
+              children: [
+                _sortableTh('Kumul', 'kumul', numW, headerStyle),
+                _sortableTh('Hr Ini', 'delta', numW, headerStyle),
+                _sortableTh('Kmrn', 'kmrn', numW, headerStyle),
+                for (final k in statusKeys)
+                  _sortableTh(k, k, numW, headerStyle),
+              ],
+            ),
+          ),
+          for (int i = 0; i < rows.length; i++) ...[
+            if (i > 0) Divider(height: 1, color: divColor),
+            GestureDetector(
+              onTap: _canDrill ? () => _handleRowTap(rows[i]) : null,
+              child: SizedBox(
+                height: rowH,
+                child: Row(
+                  children: [
+                    _tableNumCell(
+                      '${rows[i].totalAssignment}',
+                      numW,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF2D77D0),
+                      ),
+                    ),
+                    _tableNumCell(
+                      rows[i].delta > 0
+                          ? '+${rows[i].delta}'
+                          : '${rows[i].delta}',
+                      numW,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: rows[i].delta > 0
+                            ? const Color(0xFF10B981)
+                            : Colors.grey[400],
+                      ),
+                    ),
+                    _tableNumCell(
+                      '${rows[i].yesterdayCount}',
+                      numW,
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                    ),
+                    for (final k in statusKeys)
+                      _tableNumCell(
+                        '${rows[i].statusCounts[k] ?? 0}',
+                        numW,
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 4),
+        ],
+      ),
+    );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Sticky column with subtle right divider
+        Container(
+          decoration: BoxDecoration(
+            border: Border(
+              right: BorderSide(
+                color: Colors.blueGrey.withValues(alpha: 0.18),
+                width: 1,
+              ),
+            ),
+          ),
+          child: nameColumn,
+        ),
+        Expanded(child: numColumns),
+      ],
+    );
+  }
+
+  Widget _tableNumCell(String text, double w, {required TextStyle style}) =>
+      SizedBox(
+        width: w,
+        child: Text(text, textAlign: TextAlign.center, style: style),
+      );
+
   // ── Chart view ────────────────────────────────────────────────────────────────
 
   Widget _buildChartView(List<UnifiedRekapRow> rows) {
     final isCumul = _sortField == _SortField.kumulatif;
-    final values =
-        rows.map((r) => isCumul ? r.totalAssignment : r.delta).toList();
-    final maxVal =
-        values.fold(0, (prev, v) => v > prev ? v : prev);
+    final values = rows
+        .map((r) => isCumul ? r.totalAssignment : r.delta)
+        .toList();
+    final maxVal = values.fold(0, (prev, v) => v > prev ? v : prev);
 
     return Container(
       decoration: BoxDecoration(
@@ -1312,9 +1628,10 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
           Text(
             isCumul ? 'Kumulatif' : 'Hari Ini',
             style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF64748B)),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF64748B),
+            ),
           ),
           const SizedBox(height: 10),
           for (int i = 0; i < rows.length; i++) ...[
@@ -1329,8 +1646,9 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
   Widget _buildBarRow(UnifiedRekapRow row, int val, int maxVal) {
     final color = _accentColor(row.delta);
     final canOpen = _canDrill;
-    final fraction =
-        (maxVal == 0 || val <= 0) ? 0.0 : (val / maxVal).clamp(0.0, 1.0);
+    final fraction = (maxVal == 0 || val <= 0)
+        ? 0.0
+        : (val / maxVal).clamp(0.0, 1.0);
 
     return GestureDetector(
       onTap: canOpen ? () => _handleRowTap(row) : null,
@@ -1340,8 +1658,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
             width: 80,
             child: Text(
               row.title,
-              style: const TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w500),
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
