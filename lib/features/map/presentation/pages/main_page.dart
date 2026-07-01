@@ -8,6 +8,7 @@ import 'fasih_dashboard_page.dart';
 import 'usaha_organik_page.dart';
 import 'nik_tidak_valid_page.dart';
 import 'wilayah_anomali_page.dart';
+import 'anomali_pusat_page.dart';
 import '../widgets/documentation_upload_dialog.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
@@ -320,6 +321,11 @@ class _MainPageState extends State<MainPage> {
                   title: 'NIK Tidak Valid',
                   index: 6,
                 ),
+                _buildDrawerMenuItem(
+                  icon: Icons.assessment_outlined,
+                  title: 'Anomali Pusat',
+                  index: 7,
+                ),
               ],
             ),
           ),
@@ -342,6 +348,7 @@ class _MainPageState extends State<MainPage> {
                   const KbliPage(),
                   const UsahaOrganikPage(),
                   const NikTidakValidPage(),
+                  const AnomaliPusatPage(),
                 ],
               ),
             ),

@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/config/supabase_config.dart';
 import '../models/anomali_item.dart';
+import '../models/anomali_pusat_item.dart';
+import '../models/keterangan_pusat_item.dart';
 
 class AnomalyService {
   final SupabaseClient _client = SupabaseConfig.client;
@@ -41,6 +43,88 @@ class AnomalyService {
       debugPrint('[AnomalyService] STACK: $stack');
       rethrow;
     }
+  }
+
+  Future<List<AnomaliPusatItem>> fetchAnomalyPusat({
+    String? petugasId,
+    String? pengawasId,
+    String? kategori,
+    String? status,
+    int limit = 500,
+    int offset = 0,
+  }) async {
+    final params = <String, dynamic>{
+      'p_limit': limit,
+      'p_offset': offset,
+    };
+    if (petugasId != null) params['p_petugas_id'] = petugasId;
+    if (pengawasId != null) params['p_pengawas_id'] = pengawasId;
+    if (kategori != null) params['p_kategori'] = kategori;
+    if (status != null) params['p_status'] = status;
+
+    debugPrint('[AnomalyService] fetchAnomalyPusat params: $params');
+
+    try {
+      final response = await _client.rpc('get_anomali_pusat', params: params);
+      debugPrint('[AnomalyService] pusat response type: ${response.runtimeType}');
+      if (response is! List) return [];
+      return response
+          .map((item) => AnomaliPusatItem.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e, stack) {
+      debugPrint('[AnomalyService] ERROR pusat: $e');
+      debugPrint('[AnomalyService] STACK: $stack');
+      rethrow;
+    }
+  }
+
+  /// Ambil set key (assignment_id|nama_anomali) yang sudah diisi keterangan
+  /// oleh user yang sedang login. RLS otomatis filter per petugas.
+  Future<Set<String>> fetchMyKeteranganKeys() async {
+    try {
+      final response = await _client
+          .from('se2026_anomali_pusat_keterangan')
+          .select('assignment_id, nama_anomali')
+          .neq('keterangan', '');
+      return {
+        for (final row in response)
+          '${row['assignment_id']}|${row['nama_anomali']}'
+      };
+    } catch (e) {
+      debugPrint('[AnomalyService] fetchMyKeteranganKeys ERROR: $e');
+      return {};
+    }
+  }
+
+  Future<List<KeteranganPusatItem>> fetchKeteranganPusat({
+    required String assignmentId,
+    required String namaAnomali,
+  }) async {
+    try {
+      final response = await _client.rpc('get_anomali_pusat_keterangan', params: {
+        'p_assignment_id': assignmentId,
+        'p_nama_anomali': namaAnomali,
+      });
+      if (response is! List) return [];
+      return response
+          .map((e) => KeteranganPusatItem.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint('[AnomalyService] fetchKeteranganPusat ERROR: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> upsertKeteranganPusat({
+    required String assignmentId,
+    required String namaAnomali,
+    required String keterangan,
+  }) async {
+    await _client.rpc('upsert_anomali_pusat_keterangan', params: {
+      'p_assignment_id': assignmentId,
+      'p_nama_anomali': namaAnomali,
+      'p_keterangan': keterangan,
+    });
   }
 
   Future<int?> upsertTindakLanjut({

@@ -521,6 +521,7 @@ class _WilayahAnomaliPageState extends State<WilayahAnomaliPage> {
   }
 
   Widget _buildAnomaliTile(AnomalyItem item, int index) {
+    final hasCatatan = item.catatanPetugas.isNotEmpty;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -528,10 +529,12 @@ class _WilayahAnomaliPageState extends State<WilayahAnomaliPage> {
         onTap: () => _showAnomaliDetail(item),
         child: Ink(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: hasCatatan ? const Color(0xFFFFF3E0) : Colors.white,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: _statusColor(item.statusTindakLanjut).withValues(alpha: 0.2),
+              color: hasCatatan
+                  ? const Color(0xFFFFB74D).withValues(alpha: 0.6)
+                  : _statusColor(item.statusTindakLanjut).withValues(alpha: 0.2),
             ),
             boxShadow: [
               BoxShadow(
@@ -641,6 +644,28 @@ class _WilayahAnomaliPageState extends State<WilayahAnomaliPage> {
                               color: Colors.blueGrey[500],
                               fontWeight: FontWeight.w500,
                             ),
+                          ),
+                        ),
+                      if (hasCatatan)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Row(
+                            children: const [
+                              Icon(
+                                Icons.check_circle_rounded,
+                                size: 14,
+                                color: Color(0xFFE65100),
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'Sudah ada catatan',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFFE65100),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                     ],
