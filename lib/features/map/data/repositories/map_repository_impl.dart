@@ -24,11 +24,11 @@ class MapRepositoryImpl implements MapRepository {
 
   Future<List<Place>> _loadPlacesFromLocal() async {
     try {
+      // Model per-SLS: JANGAN download semua (bisa 20k, kena limit 1000).
+      // Titik hanya dimuat on-demand lewat getPlacesBySls saat SLS dipilih.
+      // Di sini cukup kembalikan cache lokal SLS terakhir (jika ada).
       final service = AssignmentPlacesService();
-      var records = await service.getVisibleLocalRecords();
-      if (records.isEmpty && _supabaseClient.auth.currentUser != null) {
-        records = await service.syncRecords();
-      }
+      final records = await service.getVisibleLocalRecords();
       return _placesFromAssignmentRecords(records);
     } catch (e) {
       debugPrint('MapRepository: Error loading local places: $e');
@@ -679,6 +679,22 @@ class MapRepositoryImpl implements MapRepository {
     } catch (e) {
       debugPrint('MapRepository: Error downloading full places: $e');
       return _allPlacesCache ?? [];
+    }
+  }
+
+  @override
+  Future<List<Place>> getPlacesBySls(String idsls) async {
+    try {
+      final service = AssignmentPlacesService();
+      final records = await service.fetchBySls(idsls);
+      final places = _placesFromAssignmentRecords(records);
+      // Replace: hanya titik SLS terpilih yang tampil.
+      _allPlacesCache = places;
+      _boundsCache.clear();
+      return _allPlacesCache ?? [];
+    } catch (e) {
+      debugPrint('MapRepository: Error loading places by SLS: $e');
+      return [];
     }
   }
 

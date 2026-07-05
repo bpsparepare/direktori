@@ -3,6 +3,7 @@ class KeteranganPusatItem {
   final String namaPetugas;
   final String role;
   final String keterangan;
+  final String jenisRespons;
   final DateTime updatedAt;
 
   const KeteranganPusatItem({
@@ -10,6 +11,7 @@ class KeteranganPusatItem {
     required this.namaPetugas,
     required this.role,
     required this.keterangan,
+    required this.jenisRespons,
     required this.updatedAt,
   });
 
@@ -19,6 +21,7 @@ class KeteranganPusatItem {
       namaPetugas: (json['nama_petugas'] ?? '').toString(),
       role: (json['role'] ?? '').toString(),
       keterangan: (json['keterangan'] ?? '').toString(),
+      jenisRespons: (json['jenis_respons'] ?? '').toString(),
       updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? '') ??
           DateTime.now(),
     );

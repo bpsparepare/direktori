@@ -2,12 +2,99 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/config/supabase_config.dart';
+import '../models/anomali_gabungan_item.dart';
 import '../models/anomali_item.dart';
 import '../models/anomali_pusat_item.dart';
 import '../models/keterangan_pusat_item.dart';
 
 class AnomalyService {
   final SupabaseClient _client = SupabaseConfig.client;
+
+  /// List gabungan sumber 'kualitas' (wilayah) + 'pusat_baru' (excel Fasih),
+  /// lihat get_anomali_gabungan() di
+  /// supabase/migrations/20260703130000_anomali_gabungan_kategori_besar_rincian.sql.
+  Future<List<AnomaliGabunganItem>> fetchAnomaliGabungan({
+    String? sumber,
+    String? kategoriBesar,
+    String? kategoriKode,
+    String? status,
+    String? pengawasId,
+    String? petugasId,
+    int limit = 500,
+    int offset = 0,
+  }) async {
+    final params = <String, dynamic>{
+      'p_limit': limit,
+      'p_offset': offset,
+    };
+    if (sumber != null) params['p_sumber'] = sumber;
+    if (kategoriBesar != null) params['p_kategori_besar'] = kategoriBesar;
+    if (kategoriKode != null) params['p_kategori_kode'] = kategoriKode;
+    if (status != null) params['p_status'] = status;
+    if (pengawasId != null) params['p_pengawas_id'] = pengawasId;
+    if (petugasId != null) params['p_petugas_id'] = petugasId;
+
+    try {
+      final response =
+          await _client.rpc('get_anomali_gabungan', params: params);
+      if (response is! List) return [];
+      return response
+          .map((item) =>
+              AnomaliGabunganItem.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e, stack) {
+      debugPrint('[AnomalyService] fetchAnomaliGabungan ERROR: $e');
+      debugPrint('[AnomalyService] STACK: $stack');
+      rethrow;
+    }
+  }
+
+  /// Respons petugas gabungan (dipakai sumber 'kualitas' maupun
+  /// 'pusat_baru'), 2 pilihan: 'perbaikan' atau 'konfirmasi_valid'
+  /// (keterangan wajib utk konfirmasi_valid). Multi-petugas per kasus.
+  /// Lihat upsert_anomali_respons() di
+  /// supabase/migrations/20260703150000_anomali_respons_gabungan.sql.
+  Future<void> upsertAnomaliRespons({
+    required String sumber,
+    required String scope,
+    required String assignmentId,
+    required String kategoriKode,
+    required String jenisRespons,
+    String namaSubjek = '',
+    String? keterangan,
+  }) async {
+    await _client.rpc('upsert_anomali_respons', params: {
+      'p_sumber': sumber,
+      'p_scope': scope,
+      'p_assignment_id': assignmentId,
+      'p_kategori_kode': kategoriKode,
+      'p_jenis_respons': jenisRespons,
+      'p_nama_subjek': namaSubjek,
+      'p_keterangan': keterangan,
+    });
+  }
+
+  /// Thread multi-petugas untuk satu kasus (baik 'kualitas' maupun
+  /// 'pusat_baru').
+  Future<List<KeteranganPusatItem>> fetchAnomaliRespons({
+    required String sumber,
+    required String scope,
+    required String assignmentId,
+    required String kategoriKode,
+    String namaSubjek = '',
+  }) async {
+    final response = await _client.rpc('get_anomali_respons', params: {
+      'p_sumber': sumber,
+      'p_scope': scope,
+      'p_assignment_id': assignmentId,
+      'p_kategori_kode': kategoriKode,
+      'p_nama_subjek': namaSubjek,
+    });
+    if (response is! List) return [];
+    return response
+        .map((e) => KeteranganPusatItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
 
   Future<List<AnomalyItem>> fetchAnomalyWilayah({
     String? kategori,

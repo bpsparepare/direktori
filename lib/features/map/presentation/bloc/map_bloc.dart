@@ -13,6 +13,7 @@ import '../../domain/usecases/get_first_polygon_meta_from_geojson.dart';
 import '../../domain/usecases/get_polygon_points.dart';
 import '../../domain/usecases/get_initial_map_config.dart';
 import '../../domain/usecases/get_places.dart';
+import '../../domain/usecases/get_places_by_sls.dart';
 import '../../domain/usecases/get_places_in_bounds.dart';
 import '../../domain/usecases/refresh_places.dart';
 import 'map_event.dart';
@@ -24,6 +25,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   int _lastAssignmentWilayahCount = 0;
   final GetInitialMapConfig getInitialMapConfig;
   final GetPlaces getPlaces;
+  final GetPlacesBySls getPlacesBySls;
   final RefreshPlaces refreshPlaces;
   final GetPlacesInBounds getPlacesInBounds;
   final GetFirstPolygonMetaFromGeoJson getFirstPolygonMeta;
@@ -37,6 +39,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   MapBloc({
     required this.getInitialMapConfig,
     required this.getPlaces,
+    required this.getPlacesBySls,
     required this.refreshPlaces,
     required this.getFirstPolygonMeta,
     required this.getAllPolygonsMeta,
@@ -324,6 +327,8 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         selectedPolygons: [], // Clear multiple selection
       ),
     );
+
+    await _loadPlacesForSls(sel.idsubsls ?? sel.idsls, emit);
   }
 
   Future<void> _onPolygonSelected(
@@ -367,6 +372,22 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         selectedPolygons: [], // Clear multiple selection
       ),
     );
+
+    await _loadPlacesForSls(sel.idsubsls ?? sel.idsls, emit);
+  }
+
+  /// Muat titik assignment untuk SLS/sub-SLS terpilih dan tampilkan,
+  /// menggantikan titik sebelumnya (model "replace"). [code] boleh 14 digit
+  /// (idsls, seluruh SLS) atau 16 digit (idsubsls, sub-SLS persis).
+  Future<void> _loadPlacesForSls(String? code, Emitter<MapState> emit) async {
+    final trimmed = code?.trim() ?? '';
+    if (trimmed.length < 14) return;
+    try {
+      final places = await getPlacesBySls(trimmed);
+      emit(state.copyWith(places: places));
+    } catch (e) {
+      debugPrint('BLoC: failed to load places for SLS $trimmed: $e');
+    }
   }
 
   void _onPlaceSelected(PlaceSelected event, Emitter<MapState> emit) {

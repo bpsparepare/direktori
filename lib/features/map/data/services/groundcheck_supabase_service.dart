@@ -511,12 +511,12 @@ class GroundcheckSupabaseService {
       final Map<String, Map<String, dynamic>> kategoriById = {};
       if (anomaliIds.isNotEmpty) {
         final kategoriResponse = await _client
-            .from('se2026_anomali_kategori')
+            .from('anomali_pusat_kategori')
             .select('anomali_id, kategori, deskripsi_rule')
             .filter('anomali_id', 'in', anomaliIds);
 
         DebugMonitor().logUsage(
-          'se2026_anomali_kategori',
+          'anomali_pusat_kategori',
           'SELECT',
           kategoriResponse,
         );

@@ -153,6 +153,50 @@ class AssignmentPlacesService {
     }
   }
 
+  /// Ambil titik assignment untuk SATU SLS saja (on-demand) via RPC
+  /// `get_assignment_places_by_sls`, lalu simpan sebagai cache lokal aktif
+  /// menggantikan SLS sebelumnya (model "replace"). [idsls] adalah kode SLS
+  /// 14 digit (prov+kab+kec+desa+sls).
+  Future<List<AssignmentPlaceRecord>> fetchBySls(String idsls) async {
+    final trimmed = idsls.trim();
+    if (trimmed.length < 14) return [];
+
+    final records = await _fetchRecordsBySls(trimmed);
+
+    final authUser = _client.auth.currentUser;
+    if (authUser != null) {
+      await saveLocalRecords(records);
+      await _saveCacheMetadata(authUser.id);
+      final prefs = await SharedPreferences.getInstance();
+      final now = DateTime.now().toUtc().toIso8601String();
+      await prefs.setString(lastSyncKey, now);
+      await prefs.setString(lastFullSyncKey, now);
+    }
+    return records;
+  }
+
+  Future<List<AssignmentPlaceRecord>> _fetchRecordsBySls(String idsls) async {
+    try {
+      final response = await _client.rpc(
+        'get_assignment_places_by_sls',
+        params: {'p_idsls': idsls},
+      );
+      if (response is! List) {
+        return [];
+      }
+      return response
+          .whereType<Map>()
+          .map(
+            (item) =>
+                AssignmentPlaceRecord.fromJson(Map<String, dynamic>.from(item)),
+          )
+          .toList();
+    } catch (e) {
+      debugPrint('AssignmentPlacesService: Error fetching by SLS: $e');
+      return [];
+    }
+  }
+
   List<AssignmentPlaceRecord> _mergeRecords(
     List<AssignmentPlaceRecord> existing,
     List<AssignmentPlaceRecord> updates,

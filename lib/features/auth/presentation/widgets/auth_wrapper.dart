@@ -8,6 +8,7 @@ import '../../../map/domain/usecases/get_all_polygons_meta_from_geojson.dart';
 import '../../../map/domain/usecases/get_first_polygon_meta_from_geojson.dart';
 import '../../../map/domain/usecases/get_initial_map_config.dart';
 import '../../../map/domain/usecases/get_places.dart';
+import '../../../map/domain/usecases/get_places_by_sls.dart';
 import '../../../map/domain/usecases/get_places_in_bounds.dart';
 import '../../../map/domain/usecases/get_polygon_points.dart';
 import '../../../map/domain/usecases/refresh_places.dart';
@@ -63,6 +64,7 @@ class AuthWrapper extends StatelessWidget {
                 MapBloc(
                     getInitialMapConfig: GetInitialMapConfig(mapRepository),
                     getPlaces: GetPlaces(mapRepository),
+                    getPlacesBySls: GetPlacesBySls(mapRepository),
                     refreshPlaces: RefreshPlaces(mapRepository),
                     getPlacesInBounds: GetPlacesInBounds(mapRepository),
                     getFirstPolygonMeta: GetFirstPolygonMetaFromGeoJson(

@@ -31,6 +31,20 @@ class UnifiedRekapRow {
   });
 }
 
+class _StatusDetailSection {
+  final String title;
+  final String total;
+  final Map<String, int> statuses;
+  final Color accent;
+
+  const _StatusDetailSection({
+    required this.title,
+    required this.total,
+    required this.statuses,
+    required this.accent,
+  });
+}
+
 List<UnifiedRekapRow> _mergeRows(
   List<FasihRekapRow> rekap,
   List<DailyContributionRow> daily,
@@ -153,6 +167,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
           pengawasId: effectivePengawasId,
           petugasId: petugasId,
           allPetugas: isAllPetugas,
+          progressMode: _progressModeParam,
         ),
       ]);
 
@@ -367,6 +382,16 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
 
   String get _role => _profile?.role ?? '';
 
+  String get _progressModeParam =>
+      _role == 'admin' &&
+          _selectedPengawas == null &&
+          _selectedPetugas == null &&
+          _adminViewMode == _AdminViewMode.byPengawas
+      ? 'pengawas'
+      : 'petugas';
+
+  String _formatSigned(int value) => value > 0 ? '+$value' : '$value';
+
   bool get _isToday {
     final now = DateTime.now();
     return _targetDate.year == now.year &&
@@ -574,13 +599,26 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                 label: 'Total Kumulatif',
                 value: '$_totalAssignmentAll',
                 icon: Icons.assignment_rounded,
+                onTap: () => _showStatusDetail(
+                  title: 'Detail Kumulatif',
+                  totalLabel: 'Total Kumulatif',
+                  totalValue: _totalAssignmentAll,
+                  statuses: _aggregatedStatusCumul,
+                ),
               ),
               const SizedBox(width: 12),
               _buildHeroStat(
                 label: 'Progress Hari Ini',
-                value: '+$_totalDeltaToday',
+                value: _formatSigned(_totalDeltaToday),
                 icon: Icons.trending_up_rounded,
                 highlight: true,
+                onTap: () => _showStatusDetail(
+                  title: 'Detail Hari Ini',
+                  totalLabel: 'Progress Hari Ini',
+                  totalValue: _totalDeltaToday,
+                  statuses: _aggregatedStatusToday,
+                  isToday: true,
+                ),
               ),
               const SizedBox(width: 12),
               _buildHeroStat(
@@ -590,10 +628,6 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
               ),
             ],
           ),
-          if (_aggregatedStatusCumul.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _buildStatusBreakdown(),
-          ],
           const SizedBox(height: 10),
           _buildDateNav(),
         ],
@@ -606,135 +640,416 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
     required String value,
     required IconData icon,
     bool highlight = false,
+    VoidCallback? onTap,
   }) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: highlight
-              ? Colors.white.withValues(alpha: 0.22)
-              : Colors.white.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(16),
-          border: highlight
-              ? Border.all(color: Colors.white.withValues(alpha: 0.4))
-              : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: Colors.white70, size: 16),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: highlight ? 22 : 20,
-                fontWeight: FontWeight.w800,
-              ),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: highlight
+                ? Colors.white.withValues(alpha: 0.22)
+                : Colors.white.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: onTap != null
+                  ? Colors.white.withValues(alpha: 0.40)
+                  : Colors.white.withValues(alpha: highlight ? 0.40 : 0.0),
             ),
-            Text(
-              label,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.75),
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, color: Colors.white70, size: 16),
+                  if (onTap != null) ...[
+                    const Spacer(),
+                    Icon(
+                      Icons.info_outline_rounded,
+                      color: Colors.white.withValues(alpha: 0.7),
+                      size: 13,
+                    ),
+                  ],
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 6),
+              Text(
+                value,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: highlight ? 22 : 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                label,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.75),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildStatusBreakdown() {
-    final cumul = _aggregatedStatusCumul;
-    final today = _aggregatedStatusToday;
+  void _showStatusDetail({
+    required String title,
+    required String totalLabel,
+    required int totalValue,
+    required Map<String, int> statuses,
+    bool isToday = false,
+  }) {
+    final d = _targetDate;
+    final dateLabel = _isToday
+        ? 'Hari ini'
+        : '${d.day.toString().padLeft(2, '0')} ${_monthName(d.month)} ${d.year}';
+    final accent = isToday ? const Color(0xFF10B981) : const Color(0xFF2D77D0);
+    final totalText = isToday ? _formatSigned(totalValue) : '$totalValue';
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        isToday
+                            ? Icons.trending_up_rounded
+                            : Icons.assignment_rounded,
+                        color: accent,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          Text(
+                            dateLabel,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.blueGrey[500],
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        totalText,
+                        style: TextStyle(
+                          color: accent,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  totalLabel,
+                  style: TextStyle(
+                    color: Colors.blueGrey[600],
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (statuses.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Text(
+                      'Belum ada detail status.',
+                      style: TextStyle(
+                        color: Colors.blueGrey[500],
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  )
+                else
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 360),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: statuses.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 6),
+                      itemBuilder: (context, index) {
+                        final entry = statuses.entries.elementAt(index);
+                        return _buildStatusDetailRow(entry, accent);
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showRowStatusDetail(UnifiedRekapRow row) {
+    final d = _targetDate;
+    final dateLabel = _isToday
+        ? 'Hari ini'
+        : '${d.day.toString().padLeft(2, '0')} ${_monthName(d.month)} ${d.year}';
+    final todayAccent = const Color(0xFF10B981);
+    final cumulAccent = const Color(0xFF2D77D0);
+    final sections = _sortField == _SortField.delta
+        ? [
+            _StatusDetailSection(
+              title: 'Hari Ini',
+              total: _formatSigned(row.delta),
+              statuses: row.statusCountsToday,
+              accent: todayAccent,
+            ),
+            _StatusDetailSection(
+              title: 'Kumulatif',
+              total: '${row.totalAssignment}',
+              statuses: row.statusCounts,
+              accent: cumulAccent,
+            ),
+          ]
+        : [
+            _StatusDetailSection(
+              title: 'Kumulatif',
+              total: '${row.totalAssignment}',
+              statuses: row.statusCounts,
+              accent: cumulAccent,
+            ),
+            _StatusDetailSection(
+              title: 'Hari Ini',
+              total: _formatSigned(row.delta),
+              statuses: row.statusCountsToday,
+              accent: todayAccent,
+            ),
+          ];
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.58,
+            minChildSize: 0.32,
+            maxChildSize: 0.88,
+            builder: (context, scrollController) {
+              return ListView(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: const Color(
+                            0xFF0F4C81,
+                          ).withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.fact_check_rounded,
+                          color: Color(0xFF0F4C81),
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              row.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                            Text(
+                              dateLabel,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.blueGrey[500],
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  for (final section in sections) ...[
+                    _buildStatusDetailSection(section),
+                    const SizedBox(height: 12),
+                  ],
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatusDetailSection(_StatusDetailSection section) {
+    final entries = section.statuses.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(14),
+        color: section.accent.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: section.accent.withValues(alpha: 0.16)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Text(
-          //   'KUMULATIF',
-          //   style: TextStyle(
-          //     color: Colors.white.withValues(alpha: 0.55),
-          //     fontSize: 9,
-          //     fontWeight: FontWeight.w700,
-          //     letterSpacing: 0.8,
-          //   ),
-          // ),
-          const SizedBox(height: 5),
-          Wrap(
-            spacing: 5,
-            runSpacing: 4,
-            children: cumul.entries
-                .map((e) => _statusPill(e.key, '${e.value}'))
-                .toList(),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  section.title,
+                  style: TextStyle(
+                    color: section.accent,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: section.accent.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  section.total,
+                  style: TextStyle(
+                    color: section.accent,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
           ),
-          // if (today.isNotEmpty) ...[
-          //   const SizedBox(height: 8),
-          //   Container(height: 0.5, color: Colors.white.withValues(alpha: 0.15)),
-          //   const SizedBox(height: 6),
-          //   Text(
-          //     'HARI INI',
-          //     style: TextStyle(
-          //       color: Colors.white.withValues(alpha: 0.55),
-          //       fontSize: 9,
-          //       fontWeight: FontWeight.w700,
-          //       letterSpacing: 0.8,
-          //     ),
-          //   ),
-          //   const SizedBox(height: 5),
-          //   Wrap(
-          //     spacing: 5,
-          //     runSpacing: 4,
-          //     children: today.entries
-          //         .map((e) => _statusPill(e.key, '+${e.value}', isToday: true))
-          //         .toList(),
-          //   ),
-          // ],
+          const SizedBox(height: 8),
+          if (entries.isEmpty)
+            Text(
+              'Belum ada detail status.',
+              style: TextStyle(
+                color: Colors.blueGrey[500],
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            )
+          else
+            ...entries.map(
+              (entry) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: _buildStatusDetailRow(entry, section.accent),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _statusPill(String label, String value, {bool isToday = false}) {
+  Widget _buildStatusDetailRow(MapEntry<String, int> entry, Color accent) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: isToday
-            ? Colors.white.withValues(alpha: 0.20)
-            : Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-        border: isToday
-            ? Border.all(color: Colors.white.withValues(alpha: 0.30))
-            : null,
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
-      child: RichText(
-        text: TextSpan(
-          children: [
-            TextSpan(
-              text: '$label ',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.70),
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            TextSpan(
-              text: value,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              entry.key,
               style: const TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
+                color: Color(0xFF334155),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
               ),
             ),
-          ],
-        ),
+          ),
+          Text(
+            '${entry.value}',
+            style: TextStyle(
+              color: accent,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -933,25 +1248,45 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
   // ── Card ─────────────────────────────────────────────────────────────────────
 
   Widget _buildCard(UnifiedRekapRow row) {
-    final color = _accentColor(row.delta);
     final canOpen = _canDrill;
     final deltaPositive = row.delta > 0;
     final isSortKumulatif = _sortField == _SortField.kumulatif;
+    final cardTarget = _progressModeParam == 'pengawas' ? 77 : 11;
+    final targetReached = row.delta >= cardTarget;
+    final showTargetColor = !isSortKumulatif;
+    final statusColor = targetReached
+        ? const Color(0xFF10B981)
+        : const Color(0xFFEF4444);
     final badgeValue = isSortKumulatif
         ? '${row.totalAssignment}'
         : (deltaPositive ? '+${row.delta}' : '${row.delta}');
-    final badgeColor = isSortKumulatif
-        ? const Color(0xFF2D77D0)
-        : (deltaPositive ? const Color(0xFF10B981) : Colors.grey[400]!);
+    final badgeColor = isSortKumulatif ? const Color(0xFF2D77D0) : statusColor;
     final deltaLabel = deltaPositive ? '+${row.delta}' : '${row.delta}';
+    final isPengawasMode = _progressModeParam == 'pengawas';
+    final cardColor = showTargetColor
+        ? targetReached
+              ? isPengawasMode
+                    ? const Color(0xFFEFF6FF)
+                    : const Color(0xFFF0FDF4)
+              : const Color(0xFFFEF2F2)
+        : Colors.white;
+    final cardBorderColor = showTargetColor
+        ? targetReached
+              ? isPengawasMode
+                    ? const Color(0xFFBFDBFE)
+                    : const Color(0xFFBBF7D0)
+              : const Color(0xFFFECACA)
+        : const Color(0xFFE2E8F0);
 
     return GestureDetector(
       onTap: canOpen ? () => _handleRowTap(row) : null,
+      onLongPress: () => _showRowStatusDetail(row),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: cardColor,
           borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: cardBorderColor),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
@@ -967,7 +1302,9 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
               Container(
                 width: 5,
                 decoration: BoxDecoration(
-                  color: color,
+                  color: showTargetColor
+                      ? statusColor
+                      : const Color(0xFFCBD5E1),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(16),
                     bottomLeft: Radius.circular(16),
@@ -1027,45 +1364,29 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                       ),
                       const SizedBox(height: 5),
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Wrap(
-                              spacing: 4,
-                              runSpacing: 3,
-                              children: row.statusCounts.entries
-                                  .take(5)
-                                  .map(
-                                    (e) => Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFF1F5F9),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        '${e.key}: ${e.value}',
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF64748B),
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
+                          if (showTargetColor) ...[
+                            Icon(
+                              targetReached
+                                  ? Icons.check_circle_rounded
+                                  : Icons.info_rounded,
+                              color: statusColor,
+                              size: 13,
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            isSortKumulatif
-                                ? '$deltaLabel hari ini  ·  ${row.yesterdayCount} kmrn'
-                                : '${row.totalAssignment} kum  ·  ${row.yesterdayCount} kmrn',
-                            style: TextStyle(
-                              color: Colors.grey[500],
-                              fontSize: 11,
+                            const SizedBox(width: 4),
+                          ],
+                          Expanded(
+                            child: Text(
+                              isSortKumulatif
+                                  ? '$deltaLabel hari ini  ·  ${row.yesterdayCount} kmrn'
+                                  : '${row.totalAssignment} kum  ·  ${row.yesterdayCount} kmrn',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],

@@ -63,4 +63,6 @@ abstract class MapRepository {
   Future<List<Map<String, dynamic>>> getDirektoriLengkapSbrData();
   Future<List<Place>> refreshPlaces();
   Future<List<Place>> downloadFullPlaces();
+  // Muat titik hanya untuk satu SLS (idsls 14 digit), menggantikan yang tampil.
+  Future<List<Place>> getPlacesBySls(String idsls);
 }
