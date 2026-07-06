@@ -21,12 +21,15 @@ class _AnalisisPageState extends State<AnalisisPage> {
   String? _error;
   DateTime? _lastUpdatedAt;
   // 0 = Status, 1 = Kode Bangunan, 2 = Pivot Status × Bangunan,
-  // 3 = Pivot Petugas × Bangunan
+  // 3 = Pivot Petugas × Bangunan, 4 = Pivot Petugas × Usaha,
+  // 5 = Pivot Petugas × Ringkasan (Usaha/Keluarga/Anggota)
   int _view = 0;
   List<StatusAliasStat> _statusStats = [];
   List<StatusAliasStat> _kodeBangStats = [];
   List<StatusKodeBangGroup> _crossStats = [];
   List<StatusKodeBangGroup> _petugasStats = [];
+  List<StatusKodeBangGroup> _usahaStats = [];
+  List<StatusKodeBangGroup> _ringkasanStats = [];
 
   // Sort tabel biasa (view 0/1): key 'label' | 'jumlah'.
   String _tableSortKey = 'jumlah';
@@ -77,6 +80,8 @@ class _AnalisisPageState extends State<AnalisisPage> {
         _service.fetchKodeBangStats(),
         _service.fetchStatusKodeBangStats(),
         _service.fetchPetugasKodeBangStats(),
+        _service.fetchPetugasUsahaStats(),
+        _service.fetchPetugasRingkasanStats(),
       ]);
       if (!mounted) return;
       setState(() {
@@ -84,6 +89,8 @@ class _AnalisisPageState extends State<AnalisisPage> {
         _kodeBangStats = results[1] as List<StatusAliasStat>;
         _crossStats = results[2] as List<StatusKodeBangGroup>;
         _petugasStats = results[3] as List<StatusKodeBangGroup>;
+        _usahaStats = results[4] as List<StatusKodeBangGroup>;
+        _ringkasanStats = results[5] as List<StatusKodeBangGroup>;
         _isLoading = false;
         _lastUpdatedAt = DateTime.now();
       });
@@ -113,10 +120,14 @@ class _AnalisisPageState extends State<AnalisisPage> {
   String get _firstColumnLabel =>
       _view == 0 ? 'Status Assignment' : 'Kode Bangunan';
 
-  bool get _isPivot => _view == 2 || _view == 3;
+  bool get _isPivot => _view >= 2 && _view <= 5;
 
-  List<StatusKodeBangGroup> get _pivotGroups =>
-      _view == 3 ? _petugasStats : _crossStats;
+  List<StatusKodeBangGroup> get _pivotGroups => switch (_view) {
+    5 => _ringkasanStats,
+    4 => _usahaStats,
+    3 => _petugasStats,
+    _ => _crossStats,
+  };
 
   int get _total => _isPivot
       ? _pivotGroups.fold(0, (sum, g) => sum + g.total)
@@ -149,10 +160,7 @@ class _AnalisisPageState extends State<AnalisisPage> {
                         if (_pivotGroups.isEmpty)
                           _buildEmpty()
                         else
-                          _buildCrossPivot(
-                            _pivotGroups,
-                            _view == 3 ? 'Petugas' : 'Status',
-                          )
+                          _buildPivotForView()
                       else if (_stats.isEmpty)
                         _buildEmpty()
                       else
@@ -257,24 +265,21 @@ class _AnalisisPageState extends State<AnalisisPage> {
           chip(2, 'Pivot Status × Bangunan'),
           const SizedBox(width: 8),
           chip(3, 'Pivot Petugas × Bangunan'),
+          const SizedBox(width: 8),
+          chip(4, 'Pivot Petugas × Usaha'),
+          const SizedBox(width: 8),
+          chip(5, 'Pivot Petugas × Ringkasan'),
         ],
       ),
     );
   }
 
-  /// Kode ringkas untuk header kolom pivot dari label bangunan.
-  String _codeForLabel(String label) {
-    for (final e in AnalisisService.kodeBangLabels.entries) {
-      if (e.value == label) return e.key;
-    }
-    if (label == 'Tidak Diketahui') return '?';
-    if (label.startsWith('Kode ')) return label.substring(5);
-    return label;
-  }
-
-  /// Urutan kolom bangunan: kode 1..9 (yang muncul di data) lalu kode lain,
-  /// dan "Tidak Diketahui" paling akhir.
-  List<String> _pivotColumns(List<StatusKodeBangGroup> groups) {
+  /// Urutan kolom untuk pivot dengan [labelMap]: ikuti urutan map (yang muncul
+  /// di data), lalu label lain (alfabet), dan "Tidak Diketahui" paling akhir.
+  List<String> _pivotColumns(
+    List<StatusKodeBangGroup> groups,
+    Map<String, String> labelMap,
+  ) {
     final present = <String>{};
     for (final g in groups) {
       for (final b in g.breakdown) {
@@ -282,16 +287,12 @@ class _AnalisisPageState extends State<AnalisisPage> {
       }
     }
     final result = <String>[];
-    for (final label in AnalisisService.kodeBangLabels.values) {
+    for (final label in labelMap.values) {
       if (present.contains(label)) result.add(label);
     }
     final extras =
         present
-            .where(
-              (l) =>
-                  !AnalisisService.kodeBangLabels.containsValue(l) &&
-                  l != 'Tidak Diketahui',
-            )
+            .where((l) => !labelMap.containsValue(l) && l != 'Tidak Diketahui')
             .toList()
           ..sort();
     result.addAll(extras);
@@ -299,12 +300,58 @@ class _AnalisisPageState extends State<AnalisisPage> {
     return result;
   }
 
+  /// Pilih konfigurasi kolom pivot sesuai view aktif lalu render.
+  Widget _buildPivotForView() {
+    final groups = _pivotGroups;
+    final firstCol = _view == 2 ? 'Status' : 'Petugas';
+    // Ringkasan: kolom metrik tetap, tanpa kolom Total (satuan berbeda-beda).
+    if (_view == 5) {
+      return _buildCrossPivot(
+        groups,
+        firstCol,
+        columns: const [
+          'Usaha',
+          'Usaha Pertanian',
+          'Usaha Non Pertanian',
+          'Keluarga',
+          'Anggota Keluarga',
+          'Rata-rata Anggota Keluarga',
+        ],
+        derived: {
+          'Rata-rata Anggota Keluarga': (m) {
+            final kk = m['Keluarga'] ?? 0;
+            final ak = m['Anggota Keluarga'] ?? 0;
+            return kk == 0 ? 0 : ak / kk;
+          },
+        },
+        showTotalColumn: false,
+      );
+    }
+    final labelMap = _view == 4
+        ? AnalisisService.keberadaanUsahaLabels
+        : AnalisisService.kodeBangLabels;
+    // "Ditemukan" hanya untuk pivot kode bangunan (kode 1, 2, 3).
+    final ditemukanLabels = _view == 4
+        ? const <String>{}
+        : {
+            for (final c in ['1', '2', '3']) AnalisisService.kodeBangLabels[c]!,
+          };
+    return _buildCrossPivot(
+      groups,
+      firstCol,
+      columns: _pivotColumns(groups, labelMap),
+      ditemukanLabels: ditemukanLabels,
+    );
+  }
+
   Widget _buildCrossPivot(
     List<StatusKodeBangGroup> groups,
-    String firstColLabel,
-  ) {
-    final columns = _pivotColumns(groups);
-
+    String firstColLabel, {
+    required List<String> columns,
+    Set<String> ditemukanLabels = const {},
+    bool showTotalColumn = true,
+    Map<String, double Function(Map<String, int>)> derived = const {},
+  }) {
     // Peta jumlah per (baris, label) dan total per kolom.
     final columnTotals = {for (final c in columns) c: 0};
     var grandTotal = 0;
@@ -318,10 +365,11 @@ class _AnalisisPageState extends State<AnalisisPage> {
       grandTotal += g.total;
     }
 
-    // Kolom rekap: "Ditemukan" = kode bangunan 1, 2, 3; "Lainnya" = sisanya.
-    const ditemukanCodes = {'1', '2', '3'};
+    // Kolom rekap "Ditemukan"/"Lainnya" (hanya bila ditemukanLabels diisi,
+    // mis. pivot kode bangunan: 1, 2, 3).
+    final showSummary = ditemukanLabels.isNotEmpty;
     final ditemukanColumns = columns
-        .where((c) => ditemukanCodes.contains(_codeForLabel(c)))
+        .where((c) => ditemukanLabels.contains(c))
         .toList();
     final ditemukanTotal = ditemukanColumns.fold(
       0,
@@ -341,6 +389,8 @@ class _AnalisisPageState extends State<AnalisisPage> {
         case 'lainnya':
           return (groups[i].total - rowDitemukan(i)).toDouble();
         default:
+          final d = derived[_pivotSortKey];
+          if (d != null) return d(rowMaps[i]);
           return (rowMaps[i][_pivotSortKey] ?? 0).toDouble();
       }
     }
@@ -356,6 +406,7 @@ class _AnalisisPageState extends State<AnalisisPage> {
     });
 
     const summaryWidth = 84.0;
+    const categoryWidth = 108.0;
 
     const headerBg = Color(0xFF3B2C86);
     const totalBg = Color(0xFFEDE9F9);
@@ -426,6 +477,18 @@ class _AnalisisPageState extends State<AnalisisPage> {
       );
     }
 
+    // Nilai sel kategori: kolom turunan (derived) dihitung & diformat desimal,
+    // selain itu jumlah biasa. Mengembalikan (teks, apakah nol).
+    (String, bool) cellValue(Map<String, int> m, String c) {
+      final d = derived[c];
+      if (d != null) {
+        final v = d(m);
+        return v <= 0 ? ('·', true) : (v.toStringAsFixed(1), false);
+      }
+      final n = m[c] ?? 0;
+      return n == 0 ? ('·', true) : (_formatNumber(n), false);
+    }
+
     Widget dataRow(int index, int pos) {
       final g = groups[index];
       final map = rowMaps[index];
@@ -439,30 +502,37 @@ class _AnalisisPageState extends State<AnalisisPage> {
         children: [
           cell(g.status, isHeader: false, isStatusCol: true, striped: striped),
           for (final c in columns)
+            () {
+              final (text, isZero) = cellValue(map, c);
+              return cell(
+                text,
+                isHeader: false,
+                striped: striped,
+                colWidth: categoryWidth,
+                textColor: isZero ? const Color(0xFFB6BCCC) : fg,
+              );
+            }(),
+          if (showSummary) ...[
             cell(
-              (map[c] ?? 0) == 0 ? '·' : _formatNumber(map[c]!),
+              _formatNumber(ditemukan),
               isHeader: false,
               striped: striped,
-              textColor: (map[c] ?? 0) == 0 ? const Color(0xFFB6BCCC) : fg,
+              colWidth: summaryWidth,
             ),
-          cell(
-            _formatNumber(ditemukan),
-            isHeader: false,
-            striped: striped,
-            colWidth: summaryWidth,
-          ),
-          cell(
-            _formatNumber(lainnya),
-            isHeader: false,
-            striped: striped,
-            colWidth: summaryWidth,
-          ),
-          cell(
-            _formatNumber(g.total),
-            isHeader: false,
-            isTotal: true,
-            striped: striped,
-          ),
+            cell(
+              _formatNumber(lainnya),
+              isHeader: false,
+              striped: striped,
+              colWidth: summaryWidth,
+            ),
+          ],
+          if (showTotalColumn)
+            cell(
+              _formatNumber(g.total),
+              isHeader: false,
+              isTotal: true,
+              striped: striped,
+            ),
         ],
       );
     }
@@ -473,7 +543,10 @@ class _AnalisisPageState extends State<AnalisisPage> {
         LayoutBuilder(
           builder: (context, constraints) {
             final natural =
-                190.0 + columns.length * 56.0 + summaryWidth * 2 + 56.0;
+                190.0 +
+                columns.length * categoryWidth +
+                (showSummary ? summaryWidth * 2 : 0.0) +
+                (showTotalColumn ? 56.0 : 0.0);
             pivotScale = natural < constraints.maxWidth
                 ? constraints.maxWidth / natural
                 : 1.0;
@@ -494,24 +567,34 @@ class _AnalisisPageState extends State<AnalisisPage> {
                 scrollDirection: Axis.horizontal,
                 child: Column(
                   children: [
-                    // Header (klik untuk sort)
-                    Row(
-                      children: [
-                        headerCell(firstColLabel, '__row__', isStatusCol: true),
-                        for (final c in columns)
-                          headerCell(_codeForLabel(c), c),
-                        headerCell(
-                          'Ditemukan',
-                          'ditemukan',
-                          colWidth: summaryWidth,
-                        ),
-                        headerCell(
-                          'Lainnya',
-                          'lainnya',
-                          colWidth: summaryWidth,
-                        ),
-                        headerCell('Total', 'total'),
-                      ],
+                    // Header (klik untuk sort). IntrinsicHeight+stretch agar
+                    // sel yang labelnya membungkus tetap sama tinggi.
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          headerCell(
+                            firstColLabel,
+                            '__row__',
+                            isStatusCol: true,
+                          ),
+                          for (final c in columns)
+                            headerCell(c, c, colWidth: categoryWidth),
+                          if (showSummary) ...[
+                            headerCell(
+                              'Ditemukan',
+                              'ditemukan',
+                              colWidth: summaryWidth,
+                            ),
+                            headerCell(
+                              'Lainnya',
+                              'lainnya',
+                              colWidth: summaryWidth,
+                            ),
+                          ],
+                          if (showTotalColumn) headerCell('Total', 'total'),
+                        ],
+                      ),
                     ),
                     for (var pos = 0; pos < order.length; pos++)
                       dataRow(order[pos], pos),
@@ -526,27 +609,31 @@ class _AnalisisPageState extends State<AnalisisPage> {
                         ),
                         for (final c in columns)
                           cell(
-                            _formatNumber(columnTotals[c]!),
+                            cellValue(columnTotals, c).$1,
+                            isHeader: false,
+                            isTotal: true,
+                            colWidth: categoryWidth,
+                          ),
+                        if (showSummary) ...[
+                          cell(
+                            _formatNumber(ditemukanTotal),
+                            isHeader: false,
+                            isTotal: true,
+                            colWidth: summaryWidth,
+                          ),
+                          cell(
+                            _formatNumber(lainnyaTotal),
+                            isHeader: false,
+                            isTotal: true,
+                            colWidth: summaryWidth,
+                          ),
+                        ],
+                        if (showTotalColumn)
+                          cell(
+                            _formatNumber(grandTotal),
                             isHeader: false,
                             isTotal: true,
                           ),
-                        cell(
-                          _formatNumber(ditemukanTotal),
-                          isHeader: false,
-                          isTotal: true,
-                          colWidth: summaryWidth,
-                        ),
-                        cell(
-                          _formatNumber(lainnyaTotal),
-                          isHeader: false,
-                          isTotal: true,
-                          colWidth: summaryWidth,
-                        ),
-                        cell(
-                          _formatNumber(grandTotal),
-                          isHeader: false,
-                          isTotal: true,
-                        ),
                       ],
                     ),
                   ],
@@ -555,69 +642,7 @@ class _AnalisisPageState extends State<AnalisisPage> {
             );
           },
         ),
-        const SizedBox(height: 12),
-        _buildPivotLegend(columns),
       ],
-    );
-  }
-
-  Widget _buildPivotLegend(List<String> columns) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Keterangan kode bangunan',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1F2544),
-            ),
-          ),
-          const SizedBox(height: 8),
-          for (final c in columns)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 24,
-                    child: Text(
-                      _codeForLabel(c),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF5B3FB5),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      c,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF6B7280),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
     );
   }
 

@@ -60,32 +60,73 @@ class AnalisisService {
     return kodeBangLabels[code] ?? 'Kode $code';
   }
 
+  /// Label keberadaan_usaha (kode 5–8 memang tidak dipakai).
+  static const Map<String, String> keberadaanUsahaLabels = {
+    '0': 'Tidak Ditemukan',
+    '1': 'Ditemukan',
+    '2': 'Baru',
+    '3': 'Tutup',
+    '4': 'Ganda',
+    '9': 'Non Respon',
+  };
+
+  static String _keberadaanUsahaLabel(dynamic raw) {
+    final code = raw?.toString().trim() ?? '';
+    if (code.isEmpty) return 'Tidak Diketahui';
+    return keberadaanUsahaLabels[code] ?? 'Kode $code';
+  }
+
   /// Statistik silang Status Assignment × Kode Bangunan, dikelompokkan per
   /// status (urut jumlah terbesar). Rincian kode_bang di dalam tiap status
   /// juga urut jumlah terbesar.
   Future<List<StatusKodeBangGroup>> fetchStatusKodeBangStats() {
-    return _fetchKodeBangPivot(
+    return _fetchPivot(
       'get_se2026_status_kode_bang_stats',
-      groupKey: (json) => (json['status_text'] ?? json['assignment_status_alias'])
-          ?.toString()
-          .trim(),
+      groupKey: (json) =>
+          (json['status_text'] ?? json['assignment_status_alias'])
+              ?.toString()
+              .trim(),
+      colLabel: (json) => _kodeBangLabel(json['kode_bang']),
     );
   }
 
   /// Statistik silang Petugas × Kode Bangunan. Petugas = pencacah (ppl_id) di
   /// se2026_wilayah_tugas, dicocokkan via wilayah 16 digit; nama dari users.
   Future<List<StatusKodeBangGroup>> fetchPetugasKodeBangStats() {
-    return _fetchKodeBangPivot(
+    return _fetchPivot(
       'get_se2026_petugas_kode_bang_stats',
       groupKey: (json) => json['petugas']?.toString().trim(),
+      colLabel: (json) => _kodeBangLabel(json['kode_bang']),
     );
   }
 
-  /// Ambil hasil RPC pivot (kolom pengelompokan × kode_bang × jumlah) lalu
-  /// susun menjadi grup per nilai [groupKey] dengan rincian kode_bang.
-  Future<List<StatusKodeBangGroup>> _fetchKodeBangPivot(
+  /// Statistik silang Petugas × Keberadaan Usaha. Jumlah dari se2026_usaha,
+  /// petugas = pencacah wilayah (16 digit). Nilai keberadaan_usaha ditampilkan
+  /// apa adanya (kosong -> "Tidak Diketahui").
+  Future<List<StatusKodeBangGroup>> fetchPetugasUsahaStats() {
+    return _fetchPivot(
+      'get_se2026_petugas_usaha_stats',
+      groupKey: (json) => json['petugas']?.toString().trim(),
+      colLabel: (json) => _keberadaanUsahaLabel(json['keberadaan_usaha']),
+    );
+  }
+
+  /// Ringkasan perolehan per petugas: metrik Usaha (keberadaan 1&2), Keluarga,
+  /// dan Anggota Keluarga. Kolom = nama metrik dari RPC.
+  Future<List<StatusKodeBangGroup>> fetchPetugasRingkasanStats() {
+    return _fetchPivot(
+      'get_se2026_petugas_ringkasan_stats',
+      groupKey: (json) => json['petugas']?.toString().trim(),
+      colLabel: (json) => json['metrik']?.toString().trim() ?? '-',
+    );
+  }
+
+  /// Ambil hasil RPC pivot (kolom pengelompokan × subkategori × jumlah) lalu
+  /// susun menjadi grup per nilai [groupKey] dengan rincian per [colLabel].
+  Future<List<StatusKodeBangGroup>> _fetchPivot(
     String rpcName, {
     required String? Function(Map<String, dynamic>) groupKey,
+    required String Function(Map<String, dynamic>) colLabel,
   }) async {
     final response = await _client.rpc(rpcName);
     DebugMonitor().logUsage(rpcName, 'RPC', response);
@@ -101,13 +142,12 @@ class AnalisisService {
       final jumlah = rawJumlah is num
           ? rawJumlah.toInt()
           : int.tryParse(rawJumlah?.toString() ?? '') ?? 0;
-      grouped.putIfAbsent(label, () {
-        ordered.add(label);
-        return [];
-      }).add(StatusAliasStat(
-        alias: _kodeBangLabel(json['kode_bang']),
-        jumlah: jumlah,
-      ));
+      grouped
+          .putIfAbsent(label, () {
+            ordered.add(label);
+            return [];
+          })
+          .add(StatusAliasStat(alias: colLabel(json), jumlah: jumlah));
     }
 
     final groups = ordered.map((label) {
@@ -118,8 +158,7 @@ class AnalisisService {
         total: total,
         breakdown: breakdown,
       );
-    }).toList()
-      ..sort((a, b) => b.total.compareTo(a.total));
+    }).toList()..sort((a, b) => b.total.compareTo(a.total));
 
     return groups;
   }

@@ -12,6 +12,9 @@ class UnifiedRekapRow {
   final String title;
   final String subtitle;
   final int totalAssignment;
+
+  /// Jumlah final (semua status kecuali OPEN & DRAFT).
+  final int totalTerkirim;
   final Map<String, int> statusCounts;
   final int todayCount;
   final int yesterdayCount;
@@ -23,6 +26,7 @@ class UnifiedRekapRow {
     required this.title,
     required this.subtitle,
     required this.totalAssignment,
+    required this.totalTerkirim,
     required this.statusCounts,
     required this.todayCount,
     required this.yesterdayCount,
@@ -57,6 +61,7 @@ List<UnifiedRekapRow> _mergeRows(
       title: r.title,
       subtitle: r.subtitle,
       totalAssignment: r.totalAssignment,
+      totalTerkirim: r.totalTerkirim,
       statusCounts: r.statusCounts,
       todayCount: d?.todayCount ?? 0,
       yesterdayCount: d?.yesterdayCount ?? 0,
@@ -111,6 +116,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
 
   List<UnifiedRekapRow> _rows = [];
   int _totalAssignmentAll = 0;
+  int _totalTerkirimAll = 0;
   int _totalDeltaToday = 0;
   int _activeUnitsToday = 0;
   String _level = '';
@@ -161,7 +167,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
           _selectedPetugas == null;
 
       final results = await Future.wait([
-        _fetchRekap(role, effectivePengawasId, petugasId),
+        _fetchRekap(effectivePengawasId, petugasId, isAllPetugas),
         _dailyService.fetchDailyContribution(
           targetDate: _targetDate,
           pengawasId: effectivePengawasId,
@@ -184,6 +190,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
             : _inferLevel(role, effectivePengawasId, petugasId);
         _rows = merged;
         _totalAssignmentAll = rekapPayload.summary.totalAssignments;
+        _totalTerkirimAll = rekapPayload.summary.totalTerkirim;
         _totalDeltaToday = dailyPayload.summary.totalDelta;
         _activeUnitsToday = merged.where((r) => r.delta > 0).length;
         _isLoading = false;
@@ -198,56 +205,16 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
   }
 
   Future<FasihRekapPayload> _fetchRekap(
-    String role,
     String? pengawasId,
     String? petugasId,
+    bool allPetugas,
   ) {
-    switch (role) {
-      case 'pendata':
-        return _rekapService.fetchPendataWilayah(
-          sortBy: 'title',
-          sortDir: 'asc',
-        );
-      case 'pengawas':
-        if (petugasId != null) {
-          return _rekapService.fetchPengawasWilayahPetugas(
-            petugasId: petugasId,
-            sortBy: 'title',
-            sortDir: 'asc',
-          );
-        }
-        return _rekapService.fetchPengawasPetugas(
-          sortBy: 'total_assignment',
-          sortDir: 'desc',
-        );
-      case 'admin':
-        if (petugasId != null) {
-          return _rekapService.fetchAdminWilayahByPetugas(
-            petugasId: petugasId,
-            sortBy: 'title',
-            sortDir: 'asc',
-          );
-        }
-        if (pengawasId != null) {
-          return _rekapService.fetchAdminPetugasByPengawas(
-            pengawasId: pengawasId,
-            sortBy: 'total_assignment',
-            sortDir: 'desc',
-          );
-        }
-        if (_adminViewMode == _AdminViewMode.allPetugas) {
-          return _rekapService.fetchAdminPetugas(
-            sortBy: 'total_assignment',
-            sortDir: 'desc',
-          );
-        }
-        return _rekapService.fetchAdminPengawas(
-          sortBy: 'total_assignment',
-          sortDir: 'desc',
-        );
-      default:
-        return Future.value(FasihRekapPayload.empty());
-    }
+    // RPC gabungan: role & pemilihan level ditentukan server-side dari auth.uid().
+    return _rekapService.fetchRekap(
+      pengawasId: pengawasId,
+      petugasId: petugasId,
+      allPetugas: allPetugas,
+    );
   }
 
   String _inferLevel(String role, String? pengawasId, String? petugasId) {
@@ -291,10 +258,10 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
     final sorted = List<UnifiedRekapRow>.from(_rows);
     sorted.sort((a, b) {
       final va = _sortField == _SortField.kumulatif
-          ? a.totalAssignment
+          ? a.totalTerkirim
           : a.delta;
       final vb = _sortField == _SortField.kumulatif
-          ? b.totalAssignment
+          ? b.totalTerkirim
           : b.delta;
       return _sortDir == _SortDir.desc ? vb.compareTo(va) : va.compareTo(vb);
     });
@@ -312,6 +279,8 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
           return a.title.compareTo(b.title) * asc;
         case 'kumul':
           return a.totalAssignment.compareTo(b.totalAssignment) * asc;
+        case 'terkirim':
+          return a.totalTerkirim.compareTo(b.totalTerkirim) * asc;
         case 'delta':
           return a.delta.compareTo(b.delta) * asc;
         case 'kmrn':
@@ -605,6 +574,12 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                   totalValue: _totalAssignmentAll,
                   statuses: _aggregatedStatusCumul,
                 ),
+              ),
+              const SizedBox(width: 12),
+              _buildHeroStat(
+                label: 'Terkirim (final)',
+                value: '$_totalTerkirimAll',
+                icon: Icons.task_alt_rounded,
               ),
               const SizedBox(width: 12),
               _buildHeroStat(
@@ -1192,7 +1167,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
             ),
             const SizedBox(width: 8),
             _buildToggleChip(
-              label: 'Kumulatif',
+              label: 'Terkirim',
               selected: _sortField == _SortField.kumulatif,
               onTap: () => setState(() => _sortField = _SortField.kumulatif),
             ),
@@ -1258,7 +1233,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
         ? const Color(0xFF10B981)
         : const Color(0xFFEF4444);
     final badgeValue = isSortKumulatif
-        ? '${row.totalAssignment}'
+        ? '${row.totalTerkirim}'
         : (deltaPositive ? '+${row.delta}' : '${row.delta}');
     final badgeColor = isSortKumulatif ? const Color(0xFF2D77D0) : statusColor;
     final deltaLabel = deltaPositive ? '+${row.delta}' : '${row.delta}';
@@ -1379,7 +1354,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                             child: Text(
                               isSortKumulatif
                                   ? '$deltaLabel hari ini  ·  ${row.yesterdayCount} kmrn'
-                                  : '${row.totalAssignment} kum  ·  ${row.yesterdayCount} kmrn',
+                                  : '${row.totalTerkirim} terkirim  ·  ${row.yesterdayCount} kmrn',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -1604,7 +1579,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
     const double hPad = 24.0; // 12px left + 12px right padding
     const double minNumW = 52.0;
     const double minNameW = 110.0;
-    final int numCols = 3 + statusKeys.length;
+    final int numCols = 4 + statusKeys.length;
     final double minTotal = minNameW + numCols * minNumW + hPad;
     final double tableWidth = max(availableWidth, minTotal);
     final double unit = (tableWidth - hPad) / (3 + numCols);
@@ -1637,6 +1612,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                     leftAlign: true,
                   ),
                   _sortableTh('Kumul', 'kumul', numW, headerStyle),
+                  _sortableTh('Submitted', 'terkirim', numW, headerStyle),
                   _sortableTh('Hr Ini', 'delta', numW, headerStyle),
                   _sortableTh('Kmrn', 'kmrn', numW, headerStyle),
                   for (final k in statusKeys)
@@ -1712,6 +1688,18 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF2D77D0),
+                ),
+              ),
+            ),
+            SizedBox(
+              width: numW,
+              child: Text(
+                '${row.totalTerkirim}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF059669),
                 ),
               ),
             ),
@@ -1837,6 +1825,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
             child: Row(
               children: [
                 _sortableTh('Kumul', 'kumul', numW, headerStyle),
+                _sortableTh('Submitted', 'terkirim', numW, headerStyle),
                 _sortableTh('Hr Ini', 'delta', numW, headerStyle),
                 _sortableTh('Kmrn', 'kmrn', numW, headerStyle),
                 for (final k in statusKeys)
@@ -1859,6 +1848,15 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                         color: Color(0xFF2D77D0),
+                      ),
+                    ),
+                    _tableNumCell(
+                      '${rows[i].totalTerkirim}',
+                      numW,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF059669),
                       ),
                     ),
                     _tableNumCell(
@@ -1926,7 +1924,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
   Widget _buildChartView(List<UnifiedRekapRow> rows) {
     final isCumul = _sortField == _SortField.kumulatif;
     final values = rows
-        .map((r) => isCumul ? r.totalAssignment : r.delta)
+        .map((r) => isCumul ? r.totalTerkirim : r.delta)
         .toList();
     final maxVal = values.fold(0, (prev, v) => v > prev ? v : prev);
 
@@ -1947,7 +1945,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            isCumul ? 'Kumulatif' : 'Hari Ini',
+            isCumul ? 'Terkirim' : 'Hari Ini',
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,

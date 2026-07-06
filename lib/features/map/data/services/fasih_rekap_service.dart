@@ -7,10 +7,14 @@ class FasihRekapSummary {
   final int totalUnits;
   final int totalAssignments;
 
+  /// Jumlah assignment yang sudah final (semua status kecuali OPEN & DRAFT).
+  final int totalTerkirim;
+
   const FasihRekapSummary({
     required this.level,
     required this.totalUnits,
     required this.totalAssignments,
+    required this.totalTerkirim,
   });
 
   factory FasihRekapSummary.fromJson(Map<String, dynamic>? json) {
@@ -18,6 +22,7 @@ class FasihRekapSummary {
       level: (json?['level'] ?? '').toString(),
       totalUnits: _toInt(json?['total_units']),
       totalAssignments: _toInt(json?['total_assignments']),
+      totalTerkirim: _toInt(json?['total_terkirim']),
     );
   }
 }
@@ -61,6 +66,9 @@ class FasihRekapRow {
   final String title;
   final String subtitle;
   final int totalAssignment;
+
+  /// Jumlah final (semua status kecuali OPEN & DRAFT).
+  final int totalTerkirim;
   final Map<String, int> statusCounts;
 
   const FasihRekapRow({
@@ -68,6 +76,7 @@ class FasihRekapRow {
     required this.title,
     required this.subtitle,
     required this.totalAssignment,
+    required this.totalTerkirim,
     required this.statusCounts,
   });
 
@@ -77,6 +86,7 @@ class FasihRekapRow {
       title: (json['title'] ?? '-').toString(),
       subtitle: (json['subtitle'] ?? '-').toString(),
       totalAssignment: _toInt(json['total_assignment']),
+      totalTerkirim: _toInt(json['total_terkirim']),
       statusCounts: _intMapFromDynamic(json['status_counts']),
     );
   }
@@ -179,6 +189,7 @@ class FasihRekapPayload {
         level: '',
         totalUnits: 0,
         totalAssignments: 0,
+        totalTerkirim: 0,
       ),
       chart: const [],
       rows: const [],
@@ -309,6 +320,30 @@ class FasihRekapService {
     String sortDir = 'asc',
   }) => _callRpc('get_fasih_rekap_admin_wilayah_by_petugas', {
     'p_petugas_id': petugasId,
+    'p_survey_period_id': surveyPeriodId,
+    'p_search': _normalizeSearch(search),
+    'p_limit': limit,
+    'p_offset': offset,
+    'p_sort_by': sortBy,
+    'p_sort_dir': sortDir,
+  });
+
+  /// RPC gabungan "satu pintu". Role di-derive server-side dari auth.uid(),
+  /// dispatch level ditentukan oleh kombinasi pengawasId/petugasId/allPetugas.
+  Future<FasihRekapPayload> fetchRekap({
+    String? pengawasId,
+    String? petugasId,
+    bool allPetugas = false,
+    String? surveyPeriodId,
+    String? search,
+    int limit = 200,
+    int offset = 0,
+    String? sortBy,
+    String? sortDir,
+  }) => _callRpc('get_fasih_rekap', {
+    'p_pengawas_id': pengawasId,
+    'p_petugas_id': petugasId,
+    'p_all_petugas': allPetugas,
     'p_survey_period_id': surveyPeriodId,
     'p_search': _normalizeSearch(search),
     'p_limit': limit,
