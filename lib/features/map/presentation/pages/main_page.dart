@@ -8,6 +8,8 @@ import 'fasih_dashboard_page.dart';
 import 'usaha_organik_page.dart';
 import 'nik_tidak_valid_page.dart';
 import 'anomali_page.dart';
+import 'analisis_page.dart';
+import 'import_anomali_pusat_page.dart';
 import '../widgets/documentation_upload_dialog.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
@@ -320,6 +322,25 @@ class _MainPageState extends State<MainPage> {
                   title: 'NIK Tidak Valid',
                   index: 6,
                 ),
+                if (_se2026Role == 'admin')
+                  _buildDrawerMenuItem(
+                    icon: Icons.query_stats_rounded,
+                    title: 'Analisis',
+                    index: 7,
+                  ),
+                if (_se2026Role == 'admin')
+                  ListTile(
+                    leading: const Icon(Icons.upload_file_rounded),
+                    title: const Text('Impor Anomali Pusat'),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const ImportAnomaliPusatPage(),
+                        ),
+                      );
+                    },
+                  ),
               ],
             ),
           ),
@@ -342,6 +363,7 @@ class _MainPageState extends State<MainPage> {
                   const KbliPage(),
                   const UsahaOrganikPage(),
                   const NikTidakValidPage(),
+                  const AnalisisPage(),
                 ],
               ),
             ),
@@ -457,6 +479,7 @@ class _MainPageState extends State<MainPage> {
         ),
         floatingActionButton: _selectedIndex == 0
             ? FloatingActionButton.extended(
+                heroTag: 'main_page_explore_fab',
                 onPressed: _openDocumentationUploadFromExplore,
                 backgroundColor: const Color(0xFF1D8F5A),
                 foregroundColor: Colors.white,

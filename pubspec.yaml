@@ -76,6 +76,8 @@ dependencies:
   flutter_inappwebview: ^6.1.5
   package_info_plus: ^9.0.0
   speech_to_text: ^7.3.0
+  archive: ^4.0.9
+  xml: ^6.6.1
 
 dev_dependencies: 
   flutter_test:

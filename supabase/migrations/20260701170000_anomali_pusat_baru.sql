@@ -17,7 +17,11 @@
 -- ============================================================
 -- 1. TEMUAN (hasil import, disegarkan tiap kali file baru diunggah)
 -- ============================================================
-create table public.anomali_pusat_temuan (
+-- Catatan: kode_wilayah SENGAJA tidak menyertakan kode_kec -- kode_desa di
+-- BPS sudah kumulatif (memuat kab+kec+desa), jadi cukup
+-- kode_desa(10) + kode_sls(4) + sub_sls(2) = 16 digit, sama dengan pola
+-- LEFT(kode_wilayah, 16) yang dipakai get_anomali_wilayah.
+create table if not exists public.anomali_pusat_temuan (
   id bigint generated always as identity primary key,
   scope text not null check (scope in ('usaha', 'keluarga')),
   assignment_id text not null,
@@ -34,8 +38,7 @@ create table public.anomali_pusat_temuan (
   kode_sls text,
   sub_sls text,
   kode_wilayah text generated always as (
-    coalesce(kode_kec, '') || coalesce(kode_desa, '') ||
-    coalesce(kode_sls, '') || coalesce(sub_sls, '')
+    coalesce(kode_desa, '') || coalesce(kode_sls, '') || coalesce(sub_sls, '')
   ) stored,
 
   kategori_kode text not null,
@@ -54,17 +57,23 @@ create table public.anomali_pusat_temuan (
   unique (scope, assignment_id, nama_subjek, kategori_kode)
 );
 
-create index idx_anomali_pusat_temuan_wilayah
+create index if not exists idx_anomali_pusat_temuan_wilayah
   on public.anomali_pusat_temuan (kode_wilayah);
-create index idx_anomali_pusat_temuan_scope_active
+create index if not exists idx_anomali_pusat_temuan_scope_active
   on public.anomali_pusat_temuan (scope, is_active);
 
 -- ============================================================
 -- 2. RESPONS PETUGAS (persisten, tidak ikut ter-refresh oleh import)
 -- ============================================================
-create table public.anomali_pusat_respons (
+-- Tabel ini dipakai bersama oleh 2 sumber anomali (kolom `sumber`):
+--   'pusat_baru' -> anomali dari import excel Fasih (tabel ini)
+--   'kualitas'   -> anomali dari rule engine wilayah (anomali_rule_config)
+-- scope juga menampung 'anggota' untuk kebutuhan sumber 'kualitas' yang
+-- beroperasi di level anggota rumah tangga, bukan cuma usaha/keluarga.
+create table if not exists public.anomali_pusat_respons (
   id bigint generated always as identity primary key,
-  scope text not null check (scope in ('usaha', 'keluarga')),
+  sumber text not null default 'pusat_baru' check (sumber in ('kualitas', 'pusat_baru')),
+  scope text not null check (scope in ('usaha', 'keluarga', 'anggota')),
   assignment_id text not null,
   nama_subjek text not null,
   kategori_kode text not null,
@@ -73,7 +82,8 @@ create table public.anomali_pusat_respons (
   keterangan text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (scope, assignment_id, nama_subjek, kategori_kode, petugas_id),
+  constraint anomali_pusat_respons_unique_key
+    unique (sumber, scope, assignment_id, nama_subjek, kategori_kode, petugas_id),
   check (
     jenis_respons <> 'konfirmasi_valid'
     or (keterangan is not null and length(trim(keterangan)) > 0)
@@ -87,11 +97,23 @@ create table public.anomali_pusat_respons (
 --   assignment_id, nama_subjek, kode_prov, nama_provinsi, kode_kab, nama_kab,
 --   kode_kec, nama_kec, kode_desa, nama_desa, kode_sls, sub_sls,
 --   nama_anomali, tindak_lanjut, id_petugas, email_petugas, link_fasih
+--
+-- p_mode menentukan perlakuan terhadap kasus lama (scope yang sama) yang
+-- TIDAK muncul lagi di file yang baru diunggah:
+--   'refresh'   (default) -> nonaktifkan sementara (is_active=false),
+--                             otomatis aktif lagi kalau muncul di file
+--                             berikutnya. Paling aman, tidak menghapus data.
+--   'replace'   -> hapus permanen dari anomali_pusat_temuan. Keterangan
+--                             petugas di anomali_pusat_respons TIDAK ikut
+--                             terhapus (disimpan terpisah, kunci alami sama).
+--   'tambahkan' -> jangan ubah apa pun yang lama, cuma insert/update baris
+--                             yang ada di file ini.
 create or replace function public.import_anomali_pusat_batch(
   p_scope text,
-  p_rows jsonb
+  p_rows jsonb,
+  p_mode text default 'refresh'
 )
-returns table(diperbarui integer, dinonaktifkan integer)
+returns table(diperbarui integer, dinonaktifkan integer, dihapus integer)
 language plpgsql
 security definer
 as $function$
@@ -102,15 +124,22 @@ declare
     v_kategori_nama text;
     v_count         integer := 0;
     v_deactivated   integer := 0;
+    v_deleted       integer := 0;
+    v_keys          text[] := '{}';
 begin
     if p_scope not in ('usaha', 'keluarga') then
         raise exception 'scope tidak valid: %', p_scope;
     end if;
+    if p_mode not in ('refresh', 'replace', 'tambahkan') then
+        raise exception 'mode tidak valid: %', p_mode;
+    end if;
 
-    update public.anomali_pusat_temuan
-    set is_active = false, updated_at = now()
-    where scope = p_scope;
-    get diagnostics v_deactivated = row_count;
+    if p_mode = 'refresh' then
+        update public.anomali_pusat_temuan
+        set is_active = false, updated_at = now()
+        where scope = p_scope;
+        get diagnostics v_deactivated = row_count;
+    end if;
 
     for v_row in select * from jsonb_array_elements(p_rows)
     loop
@@ -170,9 +199,22 @@ begin
             updated_at          = now();
 
         v_count := v_count + 1;
+        v_keys := v_keys || (
+            (v_row ->> 'assignment_id') || '||' ||
+            (v_row ->> 'nama_subjek') || '||' ||
+            v_kategori_kode
+        );
     end loop;
 
-    return query select v_count, v_deactivated;
+    if p_mode = 'replace' then
+        delete from public.anomali_pusat_temuan t
+        where t.scope = p_scope
+          and (t.assignment_id || '||' || t.nama_subjek || '||' || t.kategori_kode)
+              <> all (v_keys);
+        get diagnostics v_deleted = row_count;
+    end if;
+
+    return query select v_count, v_deactivated, v_deleted;
 end;
 $function$;
 
@@ -214,13 +256,13 @@ begin
     end if;
 
     insert into public.anomali_pusat_respons (
-        scope, assignment_id, nama_subjek, kategori_kode,
+        sumber, scope, assignment_id, nama_subjek, kategori_kode,
         petugas_id, jenis_respons, keterangan, updated_at
     ) values (
-        p_scope, p_assignment_id, p_nama_subjek, p_kategori_kode,
+        'pusat_baru', p_scope, p_assignment_id, p_nama_subjek, p_kategori_kode,
         v_petugas_id, p_jenis_respons, p_keterangan, now()
     )
-    on conflict (scope, assignment_id, nama_subjek, kategori_kode, petugas_id)
+    on conflict on constraint anomali_pusat_respons_unique_key
     do update set
         jenis_respons = excluded.jenis_respons,
         keterangan    = excluded.keterangan,
@@ -283,11 +325,13 @@ begin
             t.kategori_kode, t.kategori_nama, t.status_asal, t.link_fasih,
             r_mine.jenis_respons, r_mine.keterangan,
             (select count(*)::integer from public.anomali_pusat_respons r2
-             where r2.scope = t.scope and r2.assignment_id = t.assignment_id
+             where r2.sumber = 'pusat_baru'
+               and r2.scope = t.scope and r2.assignment_id = t.assignment_id
                and r2.nama_subjek = t.nama_subjek and r2.kategori_kode = t.kategori_kode)
         from public.anomali_pusat_temuan t
         left join public.anomali_pusat_respons r_mine
-          on r_mine.scope = t.scope
+          on r_mine.sumber = 'pusat_baru'
+         and r_mine.scope = t.scope
          and r_mine.assignment_id = t.assignment_id
          and r_mine.nama_subjek = t.nama_subjek
          and r_mine.kategori_kode = t.kategori_kode
@@ -375,7 +419,8 @@ begin
         r.updated_at
     from public.anomali_pusat_respons r
     join public.se2026_petugas p on p.id = r.petugas_id
-    where r.scope = p_scope
+    where r.sumber = 'pusat_baru'
+      and r.scope = p_scope
       and r.assignment_id = p_assignment_id
       and r.nama_subjek = p_nama_subjek
       and r.kategori_kode = p_kategori_kode

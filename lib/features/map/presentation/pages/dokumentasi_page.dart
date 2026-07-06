@@ -128,6 +128,7 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         floatingActionButton: FloatingActionButton(
+          heroTag: 'dokumentasi_page_fab',
           onPressed: _handleUploadPressed,
           backgroundColor: const Color(0xFF1D8F5A),
           foregroundColor: Colors.white,
