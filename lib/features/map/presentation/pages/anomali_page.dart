@@ -115,7 +115,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
 
   List<String> get _statusOptions {
     final values = _items
-        .map((item) => item.statusTindakLanjut)
+        .map((item) => item.statusEfektif)
         .where((v) => v.isNotEmpty)
         .toSet()
         .toList()
@@ -154,7 +154,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
       if (_selectedSumber == _sumberWilayah && !item.isWilayah) return false;
       if (_selectedSumber == _sumberPusat && !item.isPusatBaru) return false;
       if (_selectedStatus != _allStatus &&
-          item.statusTindakLanjut != _selectedStatus) {
+          item.statusEfektif != _selectedStatus) {
         return false;
       }
       if (_selectedKategoriBesar != _allKategoriBesar &&
@@ -580,7 +580,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
             border: Border.all(
               color: sudahDiperiksa
                   ? const Color(0xFF0F9D58).withValues(alpha: 0.35)
-                  : _statusColor(item.statusTindakLanjut).withValues(alpha: 0.2),
+                  : _statusColor(item.statusEfektif).withValues(alpha: 0.2),
             ),
             boxShadow: [
               BoxShadow(
@@ -632,7 +632,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          _buildStatusChip(item.statusTindakLanjut),
+                          _buildStatusChip(item.statusEfektif),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -684,41 +684,6 @@ class _AnomaliPageState extends State<AnomaliPage> {
                             ),
                         ],
                       ),
-                      if (item.diperiksaAt != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: Text(
-                            'Diperiksa ${_formatDateTime(item.diperiksaAt)}'
-                            '${item.diperiksaOleh != null ? ' oleh ${item.diperiksaOleh}' : ''}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.blueGrey[500],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      if (sudahDiperiksa)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Row(
-                            children: const [
-                              Icon(
-                                Icons.check_circle_rounded,
-                                size: 14,
-                                color: Color(0xFF0F9D58),
-                              ),
-                              SizedBox(width: 4),
-                              Text(
-                                'Sudah diperiksa',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF0F9D58),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                     ],
                   ),
                 ),
@@ -772,6 +737,23 @@ class _AnomaliPageState extends State<AnomaliPage> {
     );
   }
 
+  IconData _statusIcon(String status) {
+    switch (status) {
+      case 'dikonfirmasi_valid':
+      case 'konfirmasi_valid':
+        return Icons.verified_rounded;
+      case 'sudah_diperiksa':
+        return Icons.check_circle_rounded;
+      case 'dikonfirmasi_salah_entri':
+      case 'perbaikan':
+      case 'sudah_diperbaiki':
+        return Icons.build_rounded;
+      case 'belum_diperiksa':
+      default:
+        return Icons.pending_outlined;
+    }
+  }
+
   Widget _buildStatusChip(String status) {
     final color = _statusColor(status);
     return Container(
@@ -780,13 +762,20 @@ class _AnomaliPageState extends State<AnomaliPage> {
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(30),
       ),
-      child: Text(
-        _prettyOption(status),
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(_statusIcon(status), size: 13, color: color),
+          const SizedBox(width: 4),
+          Text(
+            _prettyOption(status),
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -890,6 +879,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
     switch (status) {
       case 'dikonfirmasi_valid':
       case 'konfirmasi_valid':
+      case 'sudah_diperiksa':
         return const Color(0xFF0F9D58);
       case 'dikonfirmasi_salah_entri':
       case 'perbaikan':
@@ -918,15 +908,6 @@ class _AnomaliPageState extends State<AnomaliPage> {
     return '${value[0].toUpperCase()}${value.substring(1)}';
   }
 
-  String _formatDateTime(DateTime? value) {
-    if (value == null) return '-';
-    final local = value.toLocal();
-    final day = local.day.toString().padLeft(2, '0');
-    final month = local.month.toString().padLeft(2, '0');
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
-    return '$day/$month/${local.year} $hour:$minute';
-  }
 }
 
 // ─── Detail sheet gabungan: respons 2 pilihan (perbaikan/data benar) ──────
@@ -1193,7 +1174,7 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                         padding: EdgeInsets.symmetric(vertical: 12),
                         child: Center(child: CircularProgressIndicator()),
                       )
-                    else if (_thread.length > 1) ...[
+                    else if (_thread.isNotEmpty) ...[
                       _buildThreadSection(),
                       const SizedBox(height: 18),
                     ],

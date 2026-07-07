@@ -95,6 +95,21 @@ class AnomaliGabunganItem {
   /// petugas yang login (dipakai form edit di detail sheet).
   bool get sudahDitindaklanjuti => jumlahRespons > 0;
 
+  /// Status yang ditampilkan di kartu (satu chip). Diselaraskan dengan
+  /// [sudahDitindaklanjuti] supaya tidak kontradiktif (mis. latar hijau tapi
+  /// chip "Belum Diperiksa"):
+  /// - kalau petugas login sudah merespons -> tampilkan respons-nya
+  ///   (perbaikan/konfirmasi_valid);
+  /// - kalau belum, tapi ADA respons dari petugas lain -> "sudah_diperiksa";
+  /// - kalau belum ada respons sama sekali -> "belum_diperiksa".
+  String get statusEfektif {
+    if (statusTindakLanjut.isNotEmpty &&
+        statusTindakLanjut != 'belum_diperiksa') {
+      return statusTindakLanjut;
+    }
+    return jumlahRespons > 0 ? 'sudah_diperiksa' : 'belum_diperiksa';
+  }
+
   String get subjekLabel => subjek.isEmpty ? '-' : subjek;
 
   String get wilayahLabel => namaWilayah.isEmpty ? kodeWilayah : namaWilayah;

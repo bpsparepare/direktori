@@ -69,6 +69,7 @@ class AnomaliPusatImportService {
   static const Map<String, String> _headerAliases = {
     'nama usaha': 'nama_subjek',
     'nama krt': 'nama_subjek',
+    'nama kepala keluarga': 'nama_subjek',
     'kode prov': 'kode_prov',
     'nama provinsi': 'nama_provinsi',
     'kode kab/kota': 'kode_kab',
@@ -90,6 +91,7 @@ class AnomaliPusatImportService {
   static const Map<String, String> _scopeByHeader = {
     'nama usaha': 'usaha',
     'nama krt': 'keluarga',
+    'nama kepala keluarga': 'keluarga',
   };
 
   static final RegExp _kategoriPattern =
