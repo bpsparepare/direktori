@@ -10,6 +10,7 @@ import 'nik_tidak_valid_page.dart';
 import 'anomali_page.dart';
 import 'analisis_page.dart';
 import 'import_anomali_pusat_page.dart';
+import 'responden_sulit_page.dart';
 import '../widgets/documentation_upload_dialog.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
@@ -321,6 +322,18 @@ class _MainPageState extends State<MainPage> {
                   icon: Icons.fingerprint,
                   title: 'NIK Tidak Valid',
                   index: 6,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.person_search_rounded),
+                  title: const Text('Responden Sulit'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const RespondenSulitPage(),
+                      ),
+                    );
+                  },
                 ),
                 if (_se2026Role == 'admin')
                   _buildDrawerMenuItem(

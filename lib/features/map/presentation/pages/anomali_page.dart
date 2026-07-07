@@ -231,7 +231,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
                                 itemBuilder: (context, index) =>
                                     _buildAnomaliTile(items[index], index),
                                 separatorBuilder: (context, index) =>
-                                    const SizedBox(height: 12),
+                                    const SizedBox(height: 8),
                               ),
                             ),
                           SliverToBoxAdapter(
@@ -571,12 +571,12 @@ class _AnomaliPageState extends State<AnomaliPage> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(18),
         onTap: () => _showAnomaliDetail(item),
         child: Ink(
           decoration: BoxDecoration(
             color: sudahDiperiksa ? const Color(0xFFF0FBF4) : Colors.white,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: sudahDiperiksa
                   ? const Color(0xFF0F9D58).withValues(alpha: 0.35)
@@ -591,15 +591,15 @@ class _AnomaliPageState extends State<AnomaliPage> {
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.all(13),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  width: 52,
-                  height: 52,
+                  width: 38,
+                  height: 38,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(12),
                     gradient: LinearGradient(
                       colors: [accentColor, accentColor.withValues(alpha: 0.6)],
                     ),
@@ -609,11 +609,12 @@ class _AnomaliPageState extends State<AnomaliPage> {
                     '${index + 1}',
                     style: const TextStyle(
                       color: Colors.white,
+                      fontSize: 13,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 11),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -625,80 +626,55 @@ class _AnomaliPageState extends State<AnomaliPage> {
                             child: Text(
                               item.subjekLabel,
                               style: const TextStyle(
-                                fontSize: 16,
+                                fontSize: 15,
                                 fontWeight: FontWeight.w700,
                                 color: Color(0xFF10243E),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 8),
                           _buildStatusChip(item.statusEfektif),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 4),
                       Text(
-                        item.wilayahLabel,
+                        item.wilayahLengkapLabel,
                         style: TextStyle(
-                          fontSize: 13,
-                          height: 1.4,
+                          fontSize: 12,
+                          height: 1.3,
                           color: Colors.blueGrey[700],
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 3),
                       Text(
                         item.deskripsi,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 13,
-                          height: 1.45,
+                          fontSize: 12,
+                          height: 1.35,
                           color: Colors.blueGrey[600],
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 9),
                       Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                        spacing: 6,
+                        runSpacing: 6,
                         children: [
                           _buildSumberBadge(item),
                           _buildMiniBadge(
                             icon: Icons.category_outlined,
                             label: item.kategoriBesarLabel,
                           ),
-                          if (item.kategoriKode.isNotEmpty)
+                          if (item.namaPetugas.isNotEmpty)
                             _buildMiniBadge(
-                              icon: Icons.label_outline,
-                              label: item.kategoriRincianLabel,
-                            ),
-                          _buildMiniBadge(
-                            icon: Icons.pin_outlined,
-                            label: item.kodeWilayah.isEmpty
-                                ? 'Kode -'
-                                : item.kodeWilayah,
-                          ),
-                          if ((item.statusAssignment ?? '').isNotEmpty)
-                            _buildMiniBadge(
-                              icon: Icons.assignment_outlined,
-                              label: item.statusAssignment!,
+                              icon: Icons.person_outline,
+                              label: item.namaPetugas,
                             ),
                         ],
                       ),
                     ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: accentColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(
-                    Icons.edit_note_rounded,
-                    size: 20,
-                    color: accentColor,
                   ),
                 ),
               ],
@@ -711,7 +687,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
 
   Widget _buildMiniBadge({required IconData icon, required String label}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: const Color(0xFFF6F9FD),
         borderRadius: BorderRadius.circular(30),
@@ -719,14 +695,14 @@ class _AnomaliPageState extends State<AnomaliPage> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: const Color(0xFF3D6B9D)),
-          const SizedBox(width: 6),
+          Icon(icon, size: 13, color: const Color(0xFF3D6B9D)),
+          const SizedBox(width: 5),
           Flexible(
             child: Text(
               label,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF3D5066),
               ),
@@ -757,7 +733,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
   Widget _buildStatusChip(String status) {
     final color = _statusColor(status);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(30),
@@ -765,13 +741,13 @@ class _AnomaliPageState extends State<AnomaliPage> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(_statusIcon(status), size: 13, color: color),
+          Icon(_statusIcon(status), size: 12, color: color),
           const SizedBox(width: 4),
           Text(
             _prettyOption(status),
             style: TextStyle(
               color: color,
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1080,7 +1056,7 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                item.wilayahLabel,
+                                item.wilayahLengkapLabel,
                                 style: TextStyle(
                                   color: Colors.blueGrey[700],
                                   height: 1.4,
@@ -1135,6 +1111,31 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                             ),
                           ),
                         ),
+                        if (item.namaPetugas.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF6F9FD),
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.person_outline,
+                                    size: 14, color: Color(0xFF3D6B9D)),
+                                const SizedBox(width: 5),
+                                Text(
+                                  item.namaPetugas,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF3D5066),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                     const SizedBox(height: 18),

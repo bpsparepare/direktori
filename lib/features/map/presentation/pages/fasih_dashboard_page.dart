@@ -575,13 +575,13 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                   statuses: _aggregatedStatusCumul,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               _buildHeroStat(
                 label: 'Terkirim (final)',
                 value: '$_totalTerkirimAll',
                 icon: Icons.task_alt_rounded,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               _buildHeroStat(
                 label: 'Progress Hari Ini',
                 value: _formatSigned(_totalDeltaToday),
@@ -595,7 +595,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                   isToday: true,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               _buildHeroStat(
                 label: 'Aktif Hari Ini',
                 value: '$_activeUnitsToday',
@@ -621,7 +621,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: highlight
                 ? Colors.white.withValues(alpha: 0.22)
@@ -650,16 +650,23 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                 ],
               ),
               const SizedBox(height: 6),
-              Text(
-                value,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: highlight ? 22 : 20,
-                  fontWeight: FontWeight.w800,
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: highlight ? 22 : 20,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
               Text(
                 label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.75),
                   fontSize: 10,
@@ -1129,55 +1136,59 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (showAdminToggle) ...[
-          Row(
-            children: [
-              const Text(
-                'Tampilkan:',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-              ),
-              const SizedBox(width: 8),
-              _buildToggleChip(
-                label: 'Per Pengawas',
-                selected: _adminViewMode == _AdminViewMode.byPengawas,
-                onTap: () {
-                  if (_adminViewMode == _AdminViewMode.byPengawas) return;
-                  setState(() => _adminViewMode = _AdminViewMode.byPengawas);
-                  _loadData();
-                },
-              ),
-              const SizedBox(width: 6),
-              _buildToggleChip(
-                label: 'Semua Petugas',
-                selected: _adminViewMode == _AdminViewMode.allPetugas,
-                onTap: () {
-                  if (_adminViewMode == _AdminViewMode.allPetugas) return;
-                  setState(() => _adminViewMode = _AdminViewMode.allPetugas);
-                  _loadData();
-                },
-              ),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildToggleChip(
+                  label: 'Per Pengawas',
+                  selected: _adminViewMode == _AdminViewMode.byPengawas,
+                  onTap: () {
+                    if (_adminViewMode == _AdminViewMode.byPengawas) return;
+                    setState(() => _adminViewMode = _AdminViewMode.byPengawas);
+                    _loadData();
+                  },
+                ),
+                const SizedBox(width: 6),
+                _buildToggleChip(
+                  label: 'Semua Petugas',
+                  selected: _adminViewMode == _AdminViewMode.allPetugas,
+                  onTap: () {
+                    if (_adminViewMode == _AdminViewMode.allPetugas) return;
+                    setState(() => _adminViewMode = _AdminViewMode.allPetugas);
+                    _loadData();
+                  },
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 8),
         ],
         Row(
           children: [
-            const Text(
-              'Berdasarkan:',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            ),
-            const SizedBox(width: 8),
-            _buildToggleChip(
-              label: 'Terkirim',
-              selected: _sortField == _SortField.kumulatif,
-              onTap: () => setState(() => _sortField = _SortField.kumulatif),
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildToggleChip(
+                      label: 'Terkirim',
+                      selected: _sortField == _SortField.kumulatif,
+                      onTap: () =>
+                          setState(() => _sortField = _SortField.kumulatif),
+                    ),
+                    const SizedBox(width: 6),
+                    _buildToggleChip(
+                      label: 'Hari Ini',
+                      selected: _sortField == _SortField.delta,
+                      onTap: () =>
+                          setState(() => _sortField = _SortField.delta),
+                    ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(width: 6),
-            _buildToggleChip(
-              label: 'Hari Ini',
-              selected: _sortField == _SortField.delta,
-              onTap: () => setState(() => _sortField = _SortField.delta),
-            ),
-            const Spacer(),
             _buildTextScaleToggle(),
             const SizedBox(width: 6),
             _buildSortToggle(),

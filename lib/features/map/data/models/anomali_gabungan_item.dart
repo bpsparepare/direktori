@@ -19,6 +19,9 @@ class AnomaliGabunganItem {
   final DateTime? diperiksaAt;
   final String? statusAssignment;
   final int jumlahRespons;
+  final String namaSls;
+  final String subSls;
+  final String namaPetugas;
 
   const AnomaliGabunganItem({
     required this.sumber,
@@ -38,6 +41,9 @@ class AnomaliGabunganItem {
     required this.diperiksaAt,
     this.statusAssignment,
     this.jumlahRespons = 0,
+    this.namaSls = '',
+    this.subSls = '',
+    this.namaPetugas = '',
   });
 
   factory AnomaliGabunganItem.fromJson(Map<String, dynamic> json) {
@@ -74,6 +80,9 @@ class AnomaliGabunganItem {
       jumlahRespons: json['jumlah_respons'] is int
           ? json['jumlah_respons'] as int
           : int.tryParse(json['jumlah_respons']?.toString() ?? '') ?? 0,
+      namaSls: (json['nm_sls'] ?? '').toString(),
+      subSls: (json['sub_sls'] ?? '').toString(),
+      namaPetugas: (json['nama_petugas'] ?? '').toString(),
     );
   }
 
@@ -113,6 +122,25 @@ class AnomaliGabunganItem {
   String get subjekLabel => subjek.isEmpty ? '-' : subjek;
 
   String get wilayahLabel => namaWilayah.isEmpty ? kodeWilayah : namaWilayah;
+
+  /// Kelurahan/desa saja (tanpa kecamatan). [namaWilayah] dari RPC berformat
+  /// "kecamatan / kelurahan"; ambil bagian setelah pemisah pertama.
+  String get _kelurahan {
+    if (namaWilayah.isEmpty) return '';
+    final idx = namaWilayah.indexOf(' / ');
+    return idx >= 0 ? namaWilayah.substring(idx + 3) : namaWilayah;
+  }
+
+  /// Label wilayah: kelurahan + nama SLS + sub SLS (tanpa kecamatan).
+  /// Fallback ke kode 16 digit kalau semua nama tidak tersedia.
+  String get wilayahLengkapLabel {
+    final parts = <String>[];
+    if (_kelurahan.isNotEmpty) parts.add(_kelurahan);
+    if (namaSls.isNotEmpty) parts.add(namaSls);
+    if (subSls.isNotEmpty) parts.add('Sub $subSls');
+    if (parts.isEmpty) return kodeWilayah.isEmpty ? '-' : kodeWilayah;
+    return parts.join(' / ');
+  }
 
   String get sumberLabel => isWilayah ? 'Wilayah' : 'Pusat';
 
