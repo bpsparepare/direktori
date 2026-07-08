@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/models/anomali_gabungan_item.dart';
+import '../../data/models/anomali_progress_item.dart';
 import '../../data/models/keterangan_pusat_item.dart';
 import '../../data/services/anomali_service.dart';
+import '../widgets/progress_donut.dart';
 
 class AnomaliPage extends StatefulWidget {
   const AnomaliPage({super.key});
@@ -18,7 +22,16 @@ class _AnomaliPageState extends State<AnomaliPage> {
   static const String _allStatus = 'Semua status';
   static const String _allKategoriBesar = 'Semua kategori';
   static const String _allKategoriRincian = 'Semua rincian';
+  static const String _allPml = 'Semua PML';
+  static const String _allVerifikasi = 'Semua verifikasi';
+  static const String _sudahVerifikasi = 'Terverifikasi';
+  static const String _belumVerifikasi = 'Belum verifikasi';
   static const int _pageSize = 500;
+
+  // ID survei/kegiatan Fasih untuk menyusun URL halaman edit assignment.
+  // link_fasih dari export berbentuk .../app/assignment-detail/{id}/edit,
+  // sedangkan halaman edit yang benar: .../app/assignment/{surveyId}/{id}/edit.
+  static const String _fasihSurveyId = 'fd68e454-ba45-4b85-8205-f3bf777ded24';
 
   final AnomalyService _service = AnomalyService();
   final TextEditingController _searchController = TextEditingController();
@@ -34,7 +47,11 @@ class _AnomaliPageState extends State<AnomaliPage> {
   String _selectedStatus = _allStatus;
   String _selectedKategoriBesar = _allKategoriBesar;
   String _selectedKategoriRincian = _allKategoriRincian;
+  String _selectedVerifikasi = _allVerifikasi;
   List<AnomaliGabunganItem> _items = [];
+  List<AnomaliProgressItem> _progress = [];
+  List<AnomaliProgressItem> _pmlOptions = [];
+  final Set<String> _selectedPmlNames = {};
 
   @override
   void initState() {
@@ -73,9 +90,15 @@ class _AnomaliPageState extends State<AnomaliPage> {
         limit: _pageSize,
         offset: 0,
       );
+      final progress = await _service.fetchAnomaliProgress();
       if (!mounted) return;
       setState(() {
         _items = items;
+        _progress = progress;
+        // Daftar PML untuk filter (hanya admin -> dimensi 'pml').
+        if (progress.isNotEmpty && progress.first.dimensi == 'pml') {
+          _pmlOptions = progress;
+        }
         _offset = items.length;
         _hasMore = items.length >= _pageSize;
         _isLoading = false;
@@ -114,37 +137,42 @@ class _AnomaliPageState extends State<AnomaliPage> {
   Future<void> _refreshData() => _loadData();
 
   List<String> get _statusOptions {
-    final values = _items
-        .map((item) => item.statusEfektif)
-        .where((v) => v.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final values =
+        _items
+            .map((item) => item.statusEfektif)
+            .where((v) => v.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
     return [_allStatus, ...values];
   }
 
   List<String> get _kategoriBesarOptions {
-    final values = _items
-        .map((item) => item.kategoriBesar)
-        .where((v) => v.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final values =
+        _items
+            .map((item) => item.kategoriBesar)
+            .where((v) => v.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
     return [_allKategoriBesar, ...values];
   }
 
   /// Opsi rincian dibatasi oleh kategori besar yang sedang dipilih, supaya
   /// tidak nyampur kode KP4/UP1 (pusat) dengan ANOM-001 (wilayah) sekaligus.
   List<String> get _kategoriRincianOptions {
-    final values = _items
-        .where((item) =>
-            _selectedKategoriBesar == _allKategoriBesar ||
-            item.kategoriBesar == _selectedKategoriBesar)
-        .map((item) => item.kategoriKode)
-        .where((v) => v.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final values =
+        _items
+            .where(
+              (item) =>
+                  _selectedKategoriBesar == _allKategoriBesar ||
+                  item.kategoriBesar == _selectedKategoriBesar,
+            )
+            .map((item) => item.kategoriKode)
+            .where((v) => v.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
     return [_allKategoriRincian, ...values];
   }
 
@@ -163,6 +191,16 @@ class _AnomaliPageState extends State<AnomaliPage> {
       }
       if (_selectedKategoriRincian != _allKategoriRincian &&
           item.kategoriKode != _selectedKategoriRincian) {
+        return false;
+      }
+      if (_selectedVerifikasi == _sudahVerifikasi && !item.isVerified) {
+        return false;
+      }
+      if (_selectedVerifikasi == _belumVerifikasi && item.isVerified) {
+        return false;
+      }
+      if (_selectedPmlNames.isNotEmpty &&
+          !_selectedPmlNames.contains(item.namaPml)) {
         return false;
       }
       if (query.isEmpty) return true;
@@ -194,6 +232,24 @@ class _AnomaliPageState extends State<AnomaliPage> {
   int get _sudahDitindakCount =>
       _items.where((item) => item.sudahDitindaklanjuti).length;
 
+  /// Progres yang ditampilkan di donut/rincian, mengikuti filter PML (admin).
+  List<AnomaliProgressItem> get _progressForDisplay {
+    if (_selectedPmlNames.isEmpty) return _progress;
+    if (_progress.isNotEmpty && _progress.first.dimensi == 'pml') {
+      return _progress
+          .where((e) => _selectedPmlNames.contains(e.grupNama))
+          .toList();
+    }
+    return _progress;
+  }
+
+  int get _progresTotal => _progressForDisplay.fold(0, (s, e) => s + e.total);
+  int get _progresSudah => _progressForDisplay.fold(0, (s, e) => s + e.sudah);
+  String get _progresDimensi =>
+      _progress.isEmpty ? 'self' : _progress.first.dimensi;
+  bool get _progresBisaDrill =>
+      _progresDimensi != 'self' && _progressForDisplay.isNotEmpty;
+
   @override
   Widget build(BuildContext context) {
     final items = _filteredItems;
@@ -206,40 +262,38 @@ class _AnomaliPageState extends State<AnomaliPage> {
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : _error != null
-                  ? _buildErrorState()
-                  : RefreshIndicator(
-                      onRefresh: _refreshData,
-                      child: CustomScrollView(
-                        controller: _scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        slivers: [
-                          SliverToBoxAdapter(child: _buildHeroSection()),
-                          SliverToBoxAdapter(child: _buildSearchSection()),
-                          SliverToBoxAdapter(
-                            child: _buildSectionHeader(resultCount: items.length),
-                          ),
-                          if (items.isEmpty)
-                            SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: _buildEmptyState(),
-                            )
-                          else
-                            SliverPadding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                              sliver: SliverList.separated(
-                                itemCount: items.length,
-                                itemBuilder: (context, index) =>
-                                    _buildAnomaliTile(items[index], index),
-                                separatorBuilder: (context, index) =>
-                                    const SizedBox(height: 8),
-                              ),
-                            ),
-                          SliverToBoxAdapter(
-                            child: _buildPaginationFooter(),
-                          ),
-                        ],
+              ? _buildErrorState()
+              : RefreshIndicator(
+                  onRefresh: _refreshData,
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverToBoxAdapter(child: _buildHeroSection()),
+                      SliverToBoxAdapter(child: _buildSearchSection()),
+                      SliverToBoxAdapter(
+                        child: _buildSectionHeader(resultCount: items.length),
                       ),
-                    ),
+                      if (items.isEmpty)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _buildEmptyState(),
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          sliver: SliverList.separated(
+                            itemCount: items.length,
+                            itemBuilder: (context, index) =>
+                                _buildAnomaliTile(items[index], index),
+                            separatorBuilder: (context, index) =>
+                                const SizedBox(height: 8),
+                          ),
+                        ),
+                      SliverToBoxAdapter(child: _buildPaginationFooter()),
+                    ],
+                  ),
+                ),
         ),
       ),
     );
@@ -285,62 +339,79 @@ class _AnomaliPageState extends State<AnomaliPage> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final donutSize = (constraints.maxWidth * 0.34).clamp(96.0, 156.0);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.report_problem_outlined,
-                  color: Colors.white,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(
+                            Icons.report_problem_outlined,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        const Expanded(
+                          child: Text(
+                            'Anomali',
+                            style: TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Pantau dan tindak lanjuti anomali wilayah dan '
+                      'pusat dalam satu daftar.',
+                      style: TextStyle(color: Colors.white, height: 1.4),
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildHeroBadge(
+                          icon: Icons.warning_amber_rounded,
+                          label:
+                              '${_items.length}${_hasMore ? '+' : ''} anomali',
+                        ),
+                        _buildHeroBadge(
+                          icon: Icons.map_outlined,
+                          label: '$_wilayahTerdampakCount wilayah',
+                        ),
+                        _buildHeroBadge(
+                          icon: Icons.task_alt_rounded,
+                          label: '$_sudahDitindakCount ditindak',
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 18),
-              const Expanded(
-                child: Text(
-                  'Anomali',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
+              const SizedBox(width: 16),
+              _buildHeroProgress(donutSize),
             ],
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            'Pantau dan tindak lanjuti anomali wilayah dan pusat dalam satu daftar.',
-            style: TextStyle(color: Colors.white, height: 1.45),
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildHeroBadge(
-                icon: Icons.warning_amber_rounded,
-                label: '${_items.length}${_hasMore ? '+' : ''} anomali',
-              ),
-              _buildHeroBadge(
-                icon: Icons.map_outlined,
-                label: '$_wilayahTerdampakCount wilayah terdampak',
-              ),
-              _buildHeroBadge(
-                icon: Icons.task_alt_rounded,
-                label: '$_sudahDitindakCount ditindak',
-              ),
-            ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -366,6 +437,196 @@ class _AnomaliPageState extends State<AnomaliPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildHeroProgress(double size) {
+    final donut = ProgressDonut(
+      sudah: _progresSudah,
+      total: _progresTotal,
+      size: size,
+      stroke: (size * 0.1).clamp(7.0, 14.0),
+      showCount: true,
+    );
+    if (!_progresBisaDrill) return donut;
+    return InkWell(
+      borderRadius: BorderRadius.circular(size),
+      onTap: _showProgressBreakdown,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [donut]),
+    );
+  }
+
+  Future<void> _showProgressBreakdown() async {
+    final dimensi = _progresDimensi;
+    final judul = dimensi == 'pml'
+        ? 'Progres per Pengawas (PML)'
+        : 'Progres per Petugas';
+    final rows = [..._progressForDisplay]
+      ..sort((a, b) => a.persen.compareTo(b.persen));
+    final media = MediaQuery.of(context);
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: const Color(0xFFF7F9FC),
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: media.size.width * 0.05,
+          vertical: 24,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 10, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      judul,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF10243E),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Text(
+                      '$_progresSudah/$_progresTotal',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.blueGrey[600],
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: media.size.height * 0.6),
+                child: SingleChildScrollView(
+                  child: _buildProgressBarChart(rows),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _barColor(double persen) {
+    if (persen >= 0.8) return const Color(0xFF0F9D58);
+    if (persen >= 0.5) return const Color(0xFF1F6FEB);
+    if (persen >= 0.25) return const Color(0xFFD97706);
+    return const Color(0xFF8B1D5E);
+  }
+
+  Widget _buildProgressBarChart(List<AnomaliProgressItem> rows) {
+    const chartHeight = 200.0;
+    const minSlot = 52.0;
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth;
+        final fits = rows.length * minSlot <= maxW;
+        final slot = fits ? maxW / rows.length : minSlot;
+        final row = Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: rows
+              .map(
+                (r) => SizedBox(
+                  width: slot,
+                  child: _buildBar(r, chartHeight, slot),
+                ),
+              )
+              .toList(),
+        );
+        if (fits) return row;
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: row,
+        );
+      },
+    );
+  }
+
+  Widget _buildBar(
+    AnomaliProgressItem item,
+    double chartHeight,
+    double slotWidth,
+  ) {
+    final color = _barColor(item.persen);
+    final fill = (chartHeight * item.persen).clamp(
+      item.sudah > 0 ? 3.0 : 0.0,
+      chartHeight,
+    );
+    final barWidth = (slotWidth - 14).clamp(16.0, 64.0);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '${(item.persen * 100).round()}%',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          width: barWidth,
+          height: chartHeight,
+          decoration: BoxDecoration(
+            color: const Color(0xFFEDF1F6),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          alignment: Alignment.bottomCenter,
+          child: Container(
+            width: barWidth,
+            height: fill,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '${item.sudah}/${item.total}',
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF10243E),
+          ),
+        ),
+        const SizedBox(height: 2),
+        SizedBox(
+          width: slotWidth - 4,
+          child: Text(
+            item.grupNama,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 10,
+              height: 1.2,
+              color: Colors.blueGrey[600],
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -418,6 +679,10 @@ class _AnomaliPageState extends State<AnomaliPage> {
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
+                if (_pmlOptions.isNotEmpty) ...[
+                  _buildPmlFilter(),
+                  const SizedBox(width: 8),
+                ],
                 _buildFilterDropdown(
                   icon: Icons.filter_alt_outlined,
                   label: _selectedSumber,
@@ -446,7 +711,19 @@ class _AnomaliPageState extends State<AnomaliPage> {
                   icon: Icons.label_outline,
                   label: _selectedKategoriRincian,
                   options: _kategoriRincianOptions,
-                  onSelected: (v) => setState(() => _selectedKategoriRincian = v),
+                  onSelected: (v) =>
+                      setState(() => _selectedKategoriRincian = v),
+                ),
+                const SizedBox(width: 8),
+                _buildFilterDropdown(
+                  icon: Icons.verified_user_outlined,
+                  label: _selectedVerifikasi,
+                  options: const [
+                    _allVerifikasi,
+                    _sudahVerifikasi,
+                    _belumVerifikasi,
+                  ],
+                  onSelected: (v) => setState(() => _selectedVerifikasi = v),
                 ),
               ],
             ),
@@ -462,10 +739,12 @@ class _AnomaliPageState extends State<AnomaliPage> {
     required List<String> options,
     required ValueChanged<String> onSelected,
   }) {
-    final isDefault = label == _allSumber ||
+    final isDefault =
+        label == _allSumber ||
         label == _allStatus ||
         label == _allKategoriBesar ||
-        label == _allKategoriRincian;
+        label == _allKategoriRincian ||
+        label == _allVerifikasi;
     return PopupMenuButton<String>(
       onSelected: onSelected,
       itemBuilder: (context) => options
@@ -474,7 +753,9 @@ class _AnomaliPageState extends State<AnomaliPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isDefault ? Colors.white : const Color(0xFF8B1D5E).withValues(alpha: 0.1),
+          color: isDefault
+              ? Colors.white
+              : const Color(0xFF8B1D5E).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isDefault
@@ -488,7 +769,9 @@ class _AnomaliPageState extends State<AnomaliPage> {
             Icon(
               icon,
               size: 16,
-              color: isDefault ? const Color(0xFF526070) : const Color(0xFF6B1245),
+              color: isDefault
+                  ? const Color(0xFF526070)
+                  : const Color(0xFF6B1245),
             ),
             const SizedBox(width: 6),
             Text(
@@ -496,14 +779,239 @@ class _AnomaliPageState extends State<AnomaliPage> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: isDefault ? FontWeight.w500 : FontWeight.w700,
-                color: isDefault ? const Color(0xFF526070) : const Color(0xFF6B1245),
+                color: isDefault
+                    ? const Color(0xFF526070)
+                    : const Color(0xFF6B1245),
               ),
             ),
-            const Icon(Icons.arrow_drop_down_rounded, size: 18, color: Color(0xFF526070)),
+            const Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 18,
+              color: Color(0xFF526070),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildPmlFilter() {
+    final isDefault = _selectedPmlNames.isEmpty;
+    final label = isDefault
+        ? _allPml
+        : (_selectedPmlNames.length == 1
+              ? _selectedPmlNames.first
+              : '${_selectedPmlNames.length} PML');
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: _showPmlFilterDialog,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isDefault
+              ? Colors.white
+              : const Color(0xFF8B1D5E).withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDefault
+                ? Colors.grey.withValues(alpha: 0.24)
+                : const Color(0xFF8B1D5E),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.supervisor_account_outlined,
+              size: 16,
+              color: isDefault
+                  ? const Color(0xFF526070)
+                  : const Color(0xFF6B1245),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isDefault ? FontWeight.w500 : FontWeight.w700,
+                color: isDefault
+                    ? const Color(0xFF526070)
+                    : const Color(0xFF6B1245),
+              ),
+            ),
+            const Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 18,
+              color: Color(0xFF526070),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showPmlFilterDialog() async {
+    final media = MediaQuery.of(context);
+    final temp = {..._selectedPmlNames};
+    var query = '';
+
+    final result = await showDialog<Set<String>>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setLocal) {
+            final filtered = _pmlOptions
+                .where(
+                  (e) =>
+                      query.isEmpty ||
+                      e.grupNama.toLowerCase().contains(query.toLowerCase()),
+                )
+                .toList();
+            return Dialog(
+              backgroundColor: Colors.white,
+              insetPadding: EdgeInsets.symmetric(
+                horizontal: media.size.width * 0.05,
+                vertical: 40,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 12, 4),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Filter Pengawas (PML)',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF10243E),
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${temp.length} dipilih',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.blueGrey[600],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          icon: const Icon(Icons.close_rounded),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                    child: TextField(
+                      autofocus: false,
+                      onChanged: (v) => setLocal(() => query = v),
+                      decoration: InputDecoration(
+                        hintText: 'Cari nama PML...',
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF3F6FB),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Flexible(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: media.size.height * 0.5,
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        padding: EdgeInsets.zero,
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final pml = filtered[index];
+                          final checked = temp.contains(pml.grupNama);
+                          return CheckboxListTile(
+                            value: checked,
+                            dense: true,
+                            controlAffinity: ListTileControlAffinity.leading,
+                            activeColor: const Color(0xFF8B1D5E),
+                            title: Text(
+                              pml.grupNama,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF10243E),
+                              ),
+                            ),
+                            subtitle: Text(
+                              '${pml.sudah}/${pml.total} diperiksa',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.blueGrey[500],
+                              ),
+                            ),
+                            onChanged: (v) => setLocal(() {
+                              if (v == true) {
+                                temp.add(pml.grupNama);
+                              } else {
+                                temp.remove(pml.grupNama);
+                              }
+                            }),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                    child: Row(
+                      children: [
+                        TextButton(
+                          onPressed: () =>
+                              Navigator.of(dialogContext).pop(<String>{}),
+                          child: const Text('Bersihkan'),
+                        ),
+                        const Spacer(),
+                        FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF8B1D5E),
+                          ),
+                          onPressed: () =>
+                              Navigator.of(dialogContext).pop(temp),
+                          child: Text('Terapkan (${temp.length})'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedPmlNames
+          ..clear()
+          ..addAll(result);
+      });
+    }
   }
 
   Widget _buildSectionHeader({required int resultCount}) {
@@ -634,6 +1142,10 @@ class _AnomaliPageState extends State<AnomaliPage> {
                           ),
                           const SizedBox(width: 8),
                           _buildStatusChip(item.statusEfektif),
+                          if (item.isVerified) ...[
+                            const SizedBox(width: 6),
+                            _buildVerifiedBadge(),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 4),
@@ -677,10 +1189,69 @@ class _AnomaliPageState extends State<AnomaliPage> {
                     ],
                   ),
                 ),
+                if (item.linkFasih.isNotEmpty)
+                  IconButton(
+                    onPressed: () => _openFasih(item.linkFasih),
+                    icon: const Icon(Icons.open_in_new_rounded),
+                    iconSize: 20,
+                    color: const Color(0xFF1F6FEB),
+                    tooltip: 'Buka di Fasih',
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(),
+                    padding: const EdgeInsets.only(left: 6, top: 2),
+                  ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _openFasih(String link) async {
+    var url = link.trim();
+    if (url.isEmpty) return;
+    // Ubah rute assignment-detail -> assignment/{surveyId} agar mengarah ke
+    // halaman edit assignment yang benar di Fasih.
+    if (url.contains('/assignment-detail/')) {
+      url = url.replaceFirst(
+        '/assignment-detail/',
+        '/assignment/$_fasihSurveyId/',
+      );
+    }
+    url = url.replaceAll(RegExp(r'/+$'), '');
+    if (!url.endsWith('/edit')) url = '$url/edit';
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tidak bisa membuka link Fasih')),
+      );
+    }
+  }
+
+  Widget _buildVerifiedBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F9D58).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          Icon(Icons.verified_user_rounded, size: 13, color: Color(0xFF0F9D58)),
+          SizedBox(width: 5),
+          Text(
+            'Terverifikasi',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF0F9D58),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -797,6 +1368,8 @@ class _AnomaliPageState extends State<AnomaliPage> {
                   _selectedStatus = _allStatus;
                   _selectedKategoriBesar = _allKategoriBesar;
                   _selectedKategoriRincian = _allKategoriRincian;
+                  _selectedVerifikasi = _allVerifikasi;
+                  _selectedPmlNames.clear();
                 });
               },
               child: const Text('Reset Filter'),
@@ -883,7 +1456,6 @@ class _AnomaliPageState extends State<AnomaliPage> {
     if (value.isEmpty) return value;
     return '${value[0].toUpperCase()}${value.substring(1)}';
   }
-
 }
 
 // ─── Detail sheet gabungan: respons 2 pilihan (perbaikan/data benar) ──────
@@ -913,13 +1485,62 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
   bool _loadingThread = true;
   List<KeteranganPusatItem> _thread = [];
 
+  late bool _verified;
+  DateTime? _verifiedAt;
+  String? _verifiedOleh;
+  bool _savingVerif = false;
+
   @override
   void initState() {
     super.initState();
-    _keteranganController =
-        TextEditingController(text: widget.item.keterangan ?? '');
+    _keteranganController = TextEditingController(
+      text: widget.item.keterangan ?? '',
+    );
     _jenisRespons = widget.item.jenisRespons;
+    _verified = widget.item.isVerified;
+    _verifiedAt = widget.item.verifiedAt;
+    _verifiedOleh = widget.item.verifiedOleh;
     _fetchThread();
+  }
+
+  Future<void> _toggleVerifikasi() async {
+    final item = widget.item;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final target = !_verified;
+    setState(() => _savingVerif = true);
+    try {
+      await widget.service.setVerifikasi(
+        scope: item.kategoriBesar,
+        assignmentId: item.assignmentId,
+        namaSubjek: item.responsNamaSubjek,
+        kategoriKode: item.kategoriKode,
+        verified: target,
+      );
+      if (!mounted) return;
+      setState(() {
+        _verified = target;
+        _verifiedAt = target ? DateTime.now() : null;
+        _verifiedOleh = null;
+        _savingVerif = false;
+      });
+      await widget.onSaved();
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            target ? 'Anomali diverifikasi' : 'Verifikasi dibatalkan',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _savingVerif = false);
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('Gagal memperbarui verifikasi: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -986,17 +1607,59 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
       if (!mounted) return;
       setState(() => _isSaving = false);
       scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('Gagal menyimpan: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Gagal menyimpan: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
 
+  void _salinRespons() {
+    final item = widget.item;
+    final buf = StringBuffer()
+      ..writeln(item.subjekLabel)
+      ..writeln(item.kategoriRincianLabel)
+      ..writeln(item.wilayahLengkapLabel);
+    if (item.deskripsi.isNotEmpty) {
+      buf.writeln('Anomali: ${item.deskripsi}');
+    }
+    buf.writeln('---');
+    if (_thread.isEmpty) {
+      final k = _keteranganController.text.trim();
+      buf.writeln(k.isEmpty ? 'Belum ada respons.' : k);
+    } else {
+      for (final k in _thread) {
+        buf.writeln(
+          '${k.namaPetugas} (${k.roleLabel}) - '
+          '${_pretty(k.jenisRespons)}: '
+          '${k.keterangan.isEmpty ? '-' : k.keterangan}',
+        );
+      }
+    }
+
+    Clipboard.setData(ClipboardData(text: buf.toString().trim()));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Respons disalin ke clipboard')),
+    );
+  }
+
+  void _salinKeterangan(String keterangan) {
+    Clipboard.setData(ClipboardData(text: keterangan.trim()));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Keterangan disalin ke clipboard')),
+    );
+  }
+
   String _pretty(String value) {
     if (value.isEmpty) return '-';
-    return value.split('_').map((w) {
-      if (w.isEmpty) return w;
-      return '${w[0].toUpperCase()}${w.substring(1)}';
-    }).join(' ');
+    return value
+        .split('_')
+        .map((w) {
+          if (w.isEmpty) return w;
+          return '${w[0].toUpperCase()}${w.substring(1)}';
+        })
+        .join(' ');
   }
 
   String _formatDate(DateTime dt) {
@@ -1012,7 +1675,9 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
   Widget build(BuildContext context) {
     final item = widget.item;
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: DraggableScrollableSheet(
         initialChildSize: 0.88,
         minChildSize: 0.5,
@@ -1066,6 +1731,11 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                           ),
                         ),
                         IconButton(
+                          onPressed: _salinRespons,
+                          icon: const Icon(Icons.copy_rounded),
+                          tooltip: 'Salin respons',
+                        ),
+                        IconButton(
                           onPressed: () => Navigator.of(context).pop(),
                           icon: const Icon(Icons.close_rounded),
                         ),
@@ -1077,12 +1747,16 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                       runSpacing: 8,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
-                            color: (item.isWilayah
-                                    ? const Color(0xFF8B1D5E)
-                                    : const Color(0xFF1F6FEB))
-                                .withValues(alpha: 0.12),
+                            color:
+                                (item.isWilayah
+                                        ? const Color(0xFF8B1D5E)
+                                        : const Color(0xFF1F6FEB))
+                                    .withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(30),
                           ),
                           child: Text(
@@ -1097,7 +1771,10 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF6F9FD),
                             borderRadius: BorderRadius.circular(30),
@@ -1114,7 +1791,9 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                         if (item.namaPetugas.isNotEmpty)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 6),
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFFF6F9FD),
                               borderRadius: BorderRadius.circular(30),
@@ -1122,8 +1801,11 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.person_outline,
-                                    size: 14, color: Color(0xFF3D6B9D)),
+                                const Icon(
+                                  Icons.person_outline,
+                                  size: 14,
+                                  color: Color(0xFF3D6B9D),
+                                ),
                                 const SizedBox(width: 5),
                                 Text(
                                   item.namaPetugas,
@@ -1179,6 +1861,11 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                       _buildThreadSection(),
                       const SizedBox(height: 18),
                     ],
+                    if (widget.item.bolehVerifikasi &&
+                        widget.item.sudahDitindaklanjuti) ...[
+                      _buildVerifikasiSection(),
+                      const SizedBox(height: 18),
+                    ],
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -1212,11 +1899,14 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                                   onPressed: _isSaving
                                       ? null
                                       : () => setState(
-                                          () => _jenisRespons = 'perbaikan'),
+                                          () => _jenisRespons = 'perbaikan',
+                                        ),
                                   style: OutlinedButton.styleFrom(
-                                    backgroundColor: _jenisRespons == 'perbaikan'
-                                        ? const Color(0xFFD97706)
-                                            .withValues(alpha: 0.12)
+                                    backgroundColor:
+                                        _jenisRespons == 'perbaikan'
+                                        ? const Color(
+                                            0xFFD97706,
+                                          ).withValues(alpha: 0.12)
                                         : null,
                                     side: BorderSide(
                                       color: _jenisRespons == 'perbaikan'
@@ -1234,13 +1924,16 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                                   onPressed: _isSaving
                                       ? null
                                       : () => setState(
-                                          () => _jenisRespons = 'konfirmasi_valid'),
+                                          () => _jenisRespons =
+                                              'konfirmasi_valid',
+                                        ),
                                   style: OutlinedButton.styleFrom(
                                     backgroundColor:
                                         _jenisRespons == 'konfirmasi_valid'
-                                            ? const Color(0xFF0F9D58)
-                                                .withValues(alpha: 0.12)
-                                            : null,
+                                        ? const Color(
+                                            0xFF0F9D58,
+                                          ).withValues(alpha: 0.12)
+                                        : null,
                                     side: BorderSide(
                                       color: _jenisRespons == 'konfirmasi_valid'
                                           ? const Color(0xFF0F9D58)
@@ -1283,7 +1976,9 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                                       ),
                                     )
                                   : const Icon(Icons.save_outlined),
-                              label: Text(_isSaving ? 'Menyimpan...' : 'Simpan'),
+                              label: Text(
+                                _isSaving ? 'Menyimpan...' : 'Simpan',
+                              ),
                             ),
                           ),
                         ],
@@ -1295,6 +1990,82 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildVerifikasiSection() {
+    const green = Color(0xFF0F9D58);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _verified ? green.withValues(alpha: 0.08) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: _verified
+            ? Border.all(color: green.withValues(alpha: 0.4))
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                _verified
+                    ? Icons.verified_user_rounded
+                    : Icons.verified_user_outlined,
+                size: 20,
+                color: _verified ? green : const Color(0xFF6B7A8D),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Verifikasi PML',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF162F4D),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _verified
+                ? 'Sudah diverifikasi'
+                      '${_verifiedOleh != null ? ' oleh $_verifiedOleh' : ''}'
+                      '${_verifiedAt != null ? ' · ${_formatDate(_verifiedAt!)}' : ''}'
+                : 'Belum diverifikasi. Tandai jika kasus ini sudah Anda '
+                      'periksa dan setujui.',
+            style: TextStyle(fontSize: 12, color: Colors.blueGrey[600]),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _savingVerif ? null : _toggleVerifikasi,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _verified ? Colors.white : green,
+                foregroundColor: _verified ? green : Colors.white,
+                side: _verified ? const BorderSide(color: green) : null,
+                elevation: 0,
+              ),
+              icon: _savingVerif
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      _verified ? Icons.undo_rounded : Icons.verified_rounded,
+                    ),
+              label: Text(
+                _savingVerif
+                    ? 'Menyimpan...'
+                    : (_verified ? 'Batalkan verifikasi' : 'Verifikasi'),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1373,6 +2144,23 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
               Text(
                 _formatDate(k.updatedAt),
                 style: TextStyle(fontSize: 11, color: Colors.blueGrey[400]),
+              ),
+              const SizedBox(width: 4),
+              InkWell(
+                onTap: k.keterangan.trim().isEmpty
+                    ? null
+                    : () => _salinKeterangan(k.keterangan),
+                borderRadius: BorderRadius.circular(20),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.copy_rounded,
+                    size: 16,
+                    color: k.keterangan.trim().isEmpty
+                        ? Colors.blueGrey[200]
+                        : const Color(0xFF1F6FEB),
+                  ),
+                ),
               ),
             ],
           ),

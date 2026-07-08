@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/config/supabase_config.dart';
 import '../models/anomali_gabungan_item.dart';
 import '../models/anomali_item.dart';
+import '../models/anomali_progress_item.dart';
 import '../models/anomali_pusat_item.dart';
 import '../models/keterangan_pusat_item.dart';
 
@@ -71,6 +72,48 @@ class AnomalyService {
       'p_jenis_respons': jenisRespons,
       'p_nama_subjek': namaSubjek,
       'p_keterangan': keterangan,
+    });
+  }
+
+  /// Progres pemeriksaan anomali pusat untuk grafik donut. Breakdown otomatis
+  /// sesuai role (per PML utk admin, per PPL utk pengawas, diri sendiri utk
+  /// pendata). Isi p_pengawas_id/p_petugas_id untuk drill-down.
+  /// Lihat get_anomali_pusat_progress() di
+  /// supabase/migrations/20260707150000_anomali_pusat_progress.sql.
+  Future<List<AnomaliProgressItem>> fetchAnomaliProgress({
+    String? pengawasId,
+    String? petugasId,
+  }) async {
+    final params = <String, dynamic>{};
+    if (pengawasId != null) params['p_pengawas_id'] = pengawasId;
+    if (petugasId != null) params['p_petugas_id'] = petugasId;
+
+    final response =
+        await _client.rpc('get_anomali_pusat_progress', params: params);
+    if (response is! List) return [];
+    return response
+        .map((e) =>
+            AnomaliProgressItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Set / batalkan verifikasi PML atas satu kasus anomali pusat.
+  /// Hanya berhasil untuk role pengawas/admin (divalidasi di server).
+  Future<void> setVerifikasi({
+    required String scope,
+    required String assignmentId,
+    required String namaSubjek,
+    required String kategoriKode,
+    required bool verified,
+    String? catatan,
+  }) async {
+    await _client.rpc('set_anomali_pusat_verifikasi', params: {
+      'p_scope': scope,
+      'p_assignment_id': assignmentId,
+      'p_nama_subjek': namaSubjek,
+      'p_kategori_kode': kategoriKode,
+      'p_verified': verified,
+      'p_catatan': catatan,
     });
   }
 

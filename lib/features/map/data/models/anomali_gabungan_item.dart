@@ -22,6 +22,11 @@ class AnomaliGabunganItem {
   final String namaSls;
   final String subSls;
   final String namaPetugas;
+  final String linkFasih;
+  final String namaPml;
+  final DateTime? verifiedAt;
+  final String? verifiedOleh;
+  final bool bolehVerifikasi;
 
   const AnomaliGabunganItem({
     required this.sumber,
@@ -44,6 +49,11 @@ class AnomaliGabunganItem {
     this.namaSls = '',
     this.subSls = '',
     this.namaPetugas = '',
+    this.linkFasih = '',
+    this.namaPml = '',
+    this.verifiedAt,
+    this.verifiedOleh,
+    this.bolehVerifikasi = false,
   });
 
   factory AnomaliGabunganItem.fromJson(Map<String, dynamic> json) {
@@ -83,6 +93,11 @@ class AnomaliGabunganItem {
       namaSls: (json['nm_sls'] ?? '').toString(),
       subSls: (json['sub_sls'] ?? '').toString(),
       namaPetugas: (json['nama_petugas'] ?? '').toString(),
+      linkFasih: (json['link_fasih'] ?? '').toString(),
+      namaPml: (json['nama_pml'] ?? '').toString(),
+      verifiedAt: parseDate(json['verified_at']),
+      verifiedOleh: nullableString(json['verified_oleh']),
+      bolehVerifikasi: json['boleh_verifikasi'] == true,
     );
   }
 
@@ -103,6 +118,8 @@ class AnomaliGabunganItem {
   /// status_tindak_lanjut/jenis_respons di objek ini tetap spesifik ke
   /// petugas yang login (dipakai form edit di detail sheet).
   bool get sudahDitindaklanjuti => jumlahRespons > 0;
+
+  bool get isVerified => verifiedAt != null;
 
   /// Status yang ditampilkan di kartu (satu chip). Diselaraskan dengan
   /// [sudahDitindaklanjuti] supaya tidak kontradiktif (mis. latar hijau tapi
