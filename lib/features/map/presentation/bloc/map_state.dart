@@ -28,6 +28,10 @@ class MapState extends Equatable {
   final double? lastNorth;
   final double? lastWest;
   final double? lastEast;
+  // Mode edit posisi marker (drag). Saat aktif, marker dapat digeser.
+  final bool markerEditMode;
+  // Perpindahan marker yang belum disimpan: placeId(assignmentId) -> posisi baru.
+  final Map<String, LatLng> stagedMarkerMoves;
 
   const MapState({
     this.status = MapStatus.initial,
@@ -49,6 +53,8 @@ class MapState extends Equatable {
     this.lastNorth,
     this.lastWest,
     this.lastEast,
+    this.markerEditMode = false,
+    this.stagedMarkerMoves = const {},
   });
 
   MapState copyWith({
@@ -75,6 +81,8 @@ class MapState extends Equatable {
     double? lastNorth,
     double? lastWest,
     double? lastEast,
+    bool? markerEditMode,
+    Map<String, LatLng>? stagedMarkerMoves,
   }) {
     return MapState(
       status: status ?? this.status,
@@ -106,6 +114,8 @@ class MapState extends Equatable {
       lastNorth: lastNorth ?? this.lastNorth,
       lastWest: lastWest ?? this.lastWest,
       lastEast: lastEast ?? this.lastEast,
+      markerEditMode: markerEditMode ?? this.markerEditMode,
+      stagedMarkerMoves: stagedMarkerMoves ?? this.stagedMarkerMoves,
     );
   }
 
@@ -130,5 +140,7 @@ class MapState extends Equatable {
     lastNorth,
     lastWest,
     lastEast,
+    markerEditMode,
+    stagedMarkerMoves,
   ];
 }

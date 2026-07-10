@@ -97,6 +97,14 @@ class AnomalyService {
         .toList();
   }
 
+  /// Jumlah notifikasi konfirmasi (kasus di wilayah petugas/PML yang ada
+  /// 'konfirmasi' dari admin dan belum ditanggapi). 0 untuk admin.
+  Future<int> fetchKonfirmasiCount() async {
+    final response = await _client.rpc('get_anomali_konfirmasi_count');
+    if (response is int) return response;
+    return int.tryParse(response?.toString() ?? '') ?? 0;
+  }
+
   /// Set / batalkan verifikasi PML atas satu kasus anomali pusat.
   /// Hanya berhasil untuk role pengawas/admin (divalidasi di server).
   Future<void> setVerifikasi({

@@ -23,6 +23,30 @@ class Place {
     this.statusPerusahaan,
   });
 
+  Place copyWith({
+    String? id,
+    String? name,
+    String? description,
+    LatLng? position,
+    int? noBang,
+    String? urlGambar,
+    String? gcsResult,
+    String? address,
+    String? statusPerusahaan,
+  }) {
+    return Place(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      position: position ?? this.position,
+      noBang: noBang ?? this.noBang,
+      urlGambar: urlGambar ?? this.urlGambar,
+      gcsResult: gcsResult ?? this.gcsResult,
+      address: address ?? this.address,
+      statusPerusahaan: statusPerusahaan ?? this.statusPerusahaan,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

@@ -98,7 +98,13 @@ enum _ViewMode { card, table, chart }
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 class FasihDashboardPage extends StatefulWidget {
-  const FasihDashboardPage({super.key});
+  /// Dipanggil saat baris SLS (level wilayah) ditekan, untuk membuka SLS
+  /// tersebut di peta beserta progres kegiatannya.
+  /// [slsUnitId] = kode wilayah 16 digit (= idsubsls polygon), [slsLabel]
+  /// judul untuk notifikasi.
+  final void Function(String slsUnitId, String slsLabel)? onOpenSlsOnMap;
+
+  const FasihDashboardPage({super.key, this.onOpenSlsOnMap});
 
   @override
   State<FasihDashboardPage> createState() => _FasihDashboardPageState();
@@ -351,6 +357,30 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
 
   String get _role => _profile?.role ?? '';
 
+  /// True saat baris merepresentasikan wilayah/SLS (mis. drill ke wilayah
+  /// kerja petugas), bukan agregat pengawas/petugas.
+  bool get _isWilayahLevel => _level.endsWith('_wilayah');
+
+  /// Sub-SLS = 2 digit terakhir dari kode wilayah 16 digit
+  /// (kode_desa10 + sls4 + subsls2). Null jika kode tidak lengkap.
+  String? _subSls(String unitId) {
+    if (unitId.length >= 16) return unitId.substring(unitId.length - 2);
+    return null;
+  }
+
+  /// Judul baris untuk tampilan. Pada level wilayah, nama SLS ditambah
+  /// keterangan sub-SLS agar SLS dengan nama sama tetap dapat dibedakan.
+  String _displayTitle(UnifiedRekapRow row) {
+    if (!_isWilayahLevel) return row.title;
+    final sub = _subSls(row.unitId);
+    return sub != null ? '${row.title} · Sub $sub' : row.title;
+  }
+
+  bool _hasSubtitle(UnifiedRekapRow row) {
+    final s = row.subtitle.trim();
+    return s.isNotEmpty && s != '-';
+  }
+
   String get _progressModeParam =>
       _role == 'admin' &&
           _selectedPengawas == null &&
@@ -377,10 +407,27 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
       (_role == 'pengawas' && _selectedPetugas == null) ||
       (_role == 'admin' && _selectedPetugas == null);
 
+  /// Baris level wilayah (SLS) dapat dibuka di peta bila callback tersedia.
+  bool get _canOpenSlsOnMap =>
+      _isWilayahLevel && widget.onOpenSlsOnMap != null;
+
+  /// Baris bisa ditekan bila bisa di-drill ATAU bisa dibuka di peta.
+  bool get _canTapRow => _canDrill || _canOpenSlsOnMap;
+
   void _handleRowTap(UnifiedRekapRow row) {
+    // Level wilayah = leaf: buka di peta untuk lihat progres langsung.
+    if (_canOpenSlsOnMap) {
+      widget.onOpenSlsOnMap!(row.unitId, _displayTitle(row));
+      return;
+    }
     if (!_canDrill) return;
     setState(() {
       if (_role == 'pengawas') {
+        _selectedPetugas = row;
+      } else if (_role == 'admin' &&
+          _adminViewMode == _AdminViewMode.allPetugas) {
+        // Mode "Semua Petugas": baris = petugas, langsung ke wilayah kerjanya
+        // tanpa singgah ke level pengawas.
         _selectedPetugas = row;
       } else if (_role == 'admin' && _selectedPengawas == null) {
         _selectedPengawas = row;
@@ -899,7 +946,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              row.title,
+                              _displayTitle(row),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -908,6 +955,17 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                                 color: Color(0xFF0F172A),
                               ),
                             ),
+                            if (_isWilayahLevel && _hasSubtitle(row))
+                              Text(
+                                row.subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blueGrey[500],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             Text(
                               dateLabel,
                               style: TextStyle(
@@ -1090,7 +1148,11 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
 
   Widget _buildBreadcrumb() {
     final crumbs = <String>[];
-    if (_role == 'admin') crumbs.add('Pengawas');
+    if (_role == 'admin') {
+      crumbs.add(
+        _adminViewMode == _AdminViewMode.allPetugas ? 'Petugas' : 'Pengawas',
+      );
+    }
     if (_role == 'pengawas') crumbs.add('Petugas');
     if (_selectedPengawas != null) crumbs.add(_selectedPengawas!.title);
     if (_selectedPetugas != null) crumbs.add(_selectedPetugas!.title);
@@ -1234,7 +1296,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
   // ── Card ─────────────────────────────────────────────────────────────────────
 
   Widget _buildCard(UnifiedRekapRow row) {
-    final canOpen = _canDrill;
+    final canOpen = _canTapRow;
     final deltaPositive = row.delta > 0;
     final isSortKumulatif = _sortField == _SortField.kumulatif;
     final cardTarget = _progressModeParam == 'pengawas' ? 77 : 11;
@@ -1307,12 +1369,12 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                         children: [
                           Expanded(
                             child: Text(
-                              row.title,
+                              _displayTitle(row),
                               style: const TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 14,
                               ),
-                              maxLines: 1,
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -1341,13 +1403,42 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                           if (canOpen) ...[
                             const SizedBox(width: 4),
                             Icon(
-                              Icons.chevron_right_rounded,
-                              color: Colors.grey[400],
-                              size: 18,
+                              _canOpenSlsOnMap
+                                  ? Icons.map_rounded
+                                  : Icons.chevron_right_rounded,
+                              color: _canOpenSlsOnMap
+                                  ? const Color(0xFF0F4C81)
+                                  : Colors.grey[400],
+                              size: _canOpenSlsOnMap ? 17 : 18,
                             ),
                           ],
                         ],
                       ),
+                      if (_isWilayahLevel && _hasSubtitle(row)) ...[
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.location_on_rounded,
+                              color: Colors.blueGrey[400],
+                              size: 12,
+                            ),
+                            const SizedBox(width: 3),
+                            Expanded(
+                              child: Text(
+                                row.subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.blueGrey[500],
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 5),
                       Row(
                         children: [
@@ -1653,7 +1744,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
     double numW,
   ) {
     final color = _accentColor(row.delta);
-    final canOpen = _canDrill;
+    final canOpen = _canTapRow;
     final delta = row.delta;
     final deltaStr = delta > 0 ? '+$delta' : '$delta';
 
@@ -1677,14 +1768,32 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                   ),
                   const SizedBox(width: 6),
                   Expanded(
-                    child: Text(
-                      row.title,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _displayTitle(row),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (_isWilayahLevel && _hasSubtitle(row))
+                          Text(
+                            row.subtitle,
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              color: Colors.blueGrey[400],
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
                     ),
                   ),
                 ],
@@ -1758,7 +1867,8 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
     const double nameW = 100.0;
     const double numW = 54.0;
     const double headerH = 40.0;
-    const double rowH = 36.0;
+    // Baris wilayah butuh 2 baris teks (SLS + kelurahan) → lebih tinggi.
+    final double rowH = _isWilayahLevel ? 48.0 : 36.0;
     final divColor = Colors.blueGrey.withValues(alpha: 0.08);
     const headerStyle = TextStyle(
       fontSize: 11,
@@ -1786,7 +1896,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
         for (int i = 0; i < rows.length; i++) ...[
           if (i > 0) Divider(height: 1, color: divColor),
           GestureDetector(
-            onTap: _canDrill ? () => _handleRowTap(rows[i]) : null,
+            onTap: _canTapRow ? () => _handleRowTap(rows[i]) : null,
             child: SizedBox(
               width: nameW,
               height: rowH,
@@ -1804,14 +1914,32 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                     ),
                     const SizedBox(width: 5),
                     Expanded(
-                      child: Text(
-                        rows[i].title,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _displayTitle(rows[i]),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (_isWilayahLevel && _hasSubtitle(rows[i]))
+                            Text(
+                              rows[i].subtitle,
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: Colors.blueGrey[400],
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
                       ),
                     ),
                   ],
@@ -1847,7 +1975,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
           for (int i = 0; i < rows.length; i++) ...[
             if (i > 0) Divider(height: 1, color: divColor),
             GestureDetector(
-              onTap: _canDrill ? () => _handleRowTap(rows[i]) : null,
+              onTap: _canTapRow ? () => _handleRowTap(rows[i]) : null,
               child: SizedBox(
                 height: rowH,
                 child: Row(
@@ -1966,7 +2094,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
           const SizedBox(height: 10),
           for (int i = 0; i < rows.length; i++) ...[
             _buildBarRow(rows[i], values[i], maxVal),
-            if (i < rows.length - 1) const SizedBox(height: 6),
+            if (i < rows.length - 1) const SizedBox(height: 12),
           ],
         ],
       ),
@@ -1975,60 +2103,71 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
 
   Widget _buildBarRow(UnifiedRekapRow row, int val, int maxVal) {
     final color = _accentColor(row.delta);
-    final canOpen = _canDrill;
+    final canOpen = _canTapRow;
     final fraction = (maxVal == 0 || val <= 0)
         ? 0.0
         : (val / maxVal).clamp(0.0, 1.0);
 
+    final showWilayah = _isWilayahLevel && _hasSubtitle(row);
     return GestureDetector(
       onTap: canOpen ? () => _handleRowTap(row) : null,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              row.title,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+          // Label baris penuh: ikut melebar saat teks diperbesar.
+          Text(
+            _displayTitle(row),
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (showWilayah)
+            Text(
+              row.subtitle,
+              style: TextStyle(
+                fontSize: 9.5,
+                color: Colors.blueGrey[400],
+                fontWeight: FontWeight.w500,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Stack(
-              children: [
-                Container(
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                FractionallySizedBox(
-                  widthFactor: fraction,
-                  child: Container(
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: color,
-                      borderRadius: BorderRadius.circular(4),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    Container(
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
                     ),
-                  ),
+                    FractionallySizedBox(
+                      widthFactor: fraction,
+                      child: Container(
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 30,
-            child: Text(
-              '$val',
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: color,
               ),
-            ),
+              const SizedBox(width: 8),
+              Text(
+                '$val',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ],
           ),
         ],
       ),

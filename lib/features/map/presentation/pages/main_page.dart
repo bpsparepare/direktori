@@ -11,6 +11,7 @@ import 'anomali_page.dart';
 import 'analisis_page.dart';
 import 'import_anomali_pusat_page.dart';
 import 'responden_sulit_page.dart';
+import 'lembar_kerja_page.dart';
 import '../widgets/documentation_upload_dialog.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
@@ -224,6 +225,45 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
+  /// Buka SLS tertentu di peta (tab Jelajah) beserta progresnya. Dipanggil dari
+  /// FasihDashboardPage saat baris SLS ditekan. [slsUnitId] = kode wilayah 16
+  /// digit yang dicocokkan ke `idsubsls` polygon (fallback `idsls`).
+  void _openSlsOnMap(String slsUnitId, String slsLabel) {
+    final mapBloc = context.read<MapBloc>();
+    final metas = mapBloc.state.polygonsMeta;
+    final target = slsUnitId.trim();
+
+    int idx = metas.indexWhere((p) => (p.idsubsls ?? '').trim() == target);
+    if (idx < 0) {
+      idx = metas.indexWhere((p) => (p.idsls ?? '').trim() == target);
+    }
+
+    if (idx < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('SLS "$slsLabel" belum tersedia di peta'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    mapBloc.add(PolygonSelectedByIndex(idx));
+    setState(() {
+      _selectedIndex = 0;
+      _bottomNavIndex = 0;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Menampilkan SLS $slsLabel di peta'),
+        backgroundColor: const Color(0xFF1D8F5A),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   void _navigateToIndex(int index, {bool closeDrawer = false}) {
     if (closeDrawer) {
       Navigator.of(context).pop();
@@ -324,6 +364,18 @@ class _MainPageState extends State<MainPage> {
                   index: 6,
                 ),
                 ListTile(
+                  leading: const Icon(Icons.fact_check_outlined),
+                  title: const Text('Lembar Kerja'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const LembarKerjaPage(),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
                   leading: const Icon(Icons.person_search_rounded),
                   title: const Text('Responden Sulit'),
                   onTap: () {
@@ -368,7 +420,7 @@ class _MainPageState extends State<MainPage> {
               child: IndexedStack(
                 index: _selectedIndex == 0 ? 0 : _selectedIndex - 1,
                 children: [
-                  const FasihDashboardPage(),
+                  FasihDashboardPage(onOpenSlsOnMap: _openSlsOnMap),
                   const AnomaliPage(),
                   DokumentasiPage(
                     refreshListenable: _documentationRefreshSignal,
@@ -491,13 +543,21 @@ class _MainPageState extends State<MainPage> {
           ],
         ),
         floatingActionButton: _selectedIndex == 0
-            ? FloatingActionButton.extended(
-                heroTag: 'main_page_explore_fab',
-                onPressed: _openDocumentationUploadFromExplore,
-                backgroundColor: const Color(0xFF1D8F5A),
-                foregroundColor: Colors.white,
-                icon: const Icon(Icons.add_a_photo_outlined),
-                label: const Text('Dokumentasi'),
+            ? BlocSelector<MapBloc, MapState, bool>(
+                selector: (state) => state.markerEditMode,
+                builder: (context, markerEditMode) {
+                  // Sembunyikan FAB Dokumentasi saat mode edit posisi marker
+                  // agar tidak menutupi bar Simpan/Batal.
+                  if (markerEditMode) return const SizedBox.shrink();
+                  return FloatingActionButton.extended(
+                    heroTag: 'main_page_explore_fab',
+                    onPressed: _openDocumentationUploadFromExplore,
+                    backgroundColor: const Color(0xFF1D8F5A),
+                    foregroundColor: Colors.white,
+                    icon: const Icon(Icons.add_a_photo_outlined),
+                    label: const Text('Dokumentasi'),
+                  );
+                },
               )
             : null,
         bottomNavigationBar: BottomNavigationBar(

@@ -21,6 +21,7 @@ import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
 import '../../../../core/widgets/image_upload_widget.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
+import '../../data/services/koordinat_override_service.dart';
 import '../../../../core/utils/map_utils.dart';
 
 class MapPage extends StatelessWidget {
@@ -104,7 +105,56 @@ class MapPage extends StatelessWidget {
                         const AssignmentPolygonsToggleRequested(),
                       );
                     },
+                    markerEditMode: state.markerEditMode,
+                    onMarkerDragEnd: (placeId, position) {
+                      context.read<MapBloc>().add(
+                        MarkerMovedLocally(placeId, position),
+                      );
+                    },
                   ),
+                  // Tombol aktifkan mode edit posisi (muncul saat ada marker).
+                  if (coordinateTarget == null &&
+                      !state.markerEditMode &&
+                      state.places.isNotEmpty)
+                    Positioned(
+                      right: 16,
+                      bottom: 120,
+                      child: SafeArea(
+                        child: FloatingActionButton.extended(
+                          heroTag: 'map_marker_edit_mode',
+                          backgroundColor: const Color(0xFF6D28D9),
+                          foregroundColor: Colors.white,
+                          icon: const Icon(Icons.edit_location_alt_outlined),
+                          label: const Text('Edit Posisi'),
+                          onPressed: () {
+                            context.read<MapBloc>().add(
+                              const MarkerEditModeToggled(true),
+                            );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Mode edit aktif — geser marker untuk perbaiki posisi',
+                                ),
+                                behavior: SnackBarBehavior.floating,
+                                duration: Duration(seconds: 3),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  // Bar Simpan/Batal saat mode edit posisi aktif.
+                  if (state.markerEditMode)
+                    Positioned(
+                      bottom: 24,
+                      left: 16,
+                      right: 16,
+                      child: SafeArea(
+                        child: _MarkerEditBar(
+                          pendingCount: state.stagedMarkerMoves.length,
+                        ),
+                      ),
+                    ),
                   Positioned(
                     top: 16,
                     left: 16,
@@ -7094,6 +7144,135 @@ class _MapSessionDebugBadge extends StatelessWidget {
             Text('User: $shortUserId'),
             Text('Wilayah: $wilayahCount'),
             Text('Polygon: $polygonCount'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bar aksi saat mode edit posisi marker aktif: info jumlah perubahan +
+/// tombol Simpan (persist ke se2026_koordinat_override) / Batal (revert).
+class _MarkerEditBar extends StatefulWidget {
+  final int pendingCount;
+  const _MarkerEditBar({required this.pendingCount});
+
+  @override
+  State<_MarkerEditBar> createState() => _MarkerEditBarState();
+}
+
+class _MarkerEditBarState extends State<_MarkerEditBar> {
+  bool _saving = false;
+
+  Future<void> _save() async {
+    final bloc = context.read<MapBloc>();
+    final messenger = ScaffoldMessenger.of(context);
+    final staged = Map<String, LatLng>.from(bloc.state.stagedMarkerMoves);
+    if (staged.isEmpty) {
+      bloc.add(const MarkerEditModeToggled(false));
+      return;
+    }
+
+    setState(() => _saving = true);
+    final service = KoordinatOverrideService();
+    int ok = 0;
+    String? err;
+    for (final entry in staged.entries) {
+      final res = await service.upsert(
+        assignmentId: entry.key,
+        latitude: entry.value.latitude,
+        longitude: entry.value.longitude,
+      );
+      if (res.ok) {
+        ok++;
+      } else {
+        err ??= res.error;
+      }
+    }
+    if (!mounted) return;
+    setState(() => _saving = false);
+
+    final failed = staged.length - ok;
+    if (failed == 0) {
+      // Semua sukses → finalisasi (pertahankan posisi baru, keluar mode edit).
+      bloc.add(const MarkerMovesSaved());
+    }
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          failed == 0
+              ? '$ok posisi marker tersimpan'
+              : '$ok tersimpan, $failed gagal${err != null ? ': $err' : ''}',
+        ),
+        backgroundColor: failed == 0
+            ? const Color(0xFF1D8F5A)
+            : Colors.orange,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _cancel() {
+    context.read<MapBloc>().add(const MarkerMovesDiscarded());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = widget.pendingCount;
+    return Card(
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.edit_location_alt_outlined,
+              color: Color(0xFF6D28D9),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Mode Edit Posisi',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    count == 0
+                        ? 'Geser marker untuk memindahkan'
+                        : '$count marker diubah (belum disimpan)',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: _saving ? null : _cancel,
+              child: const Text('Batal'),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: (_saving || count == 0) ? null : _save,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.check),
+              label: const Text('Simpan'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6D28D9),
+                foregroundColor: Colors.white,
+              ),
+            ),
           ],
         ),
       ),

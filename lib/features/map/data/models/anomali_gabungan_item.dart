@@ -27,6 +27,9 @@ class AnomaliGabunganItem {
   final DateTime? verifiedAt;
   final String? verifiedOleh;
   final bool bolehVerifikasi;
+  final bool adaKonfirmasi;
+  final String jenisSemua;
+  final String keteranganSemua;
 
   const AnomaliGabunganItem({
     required this.sumber,
@@ -54,6 +57,9 @@ class AnomaliGabunganItem {
     this.verifiedAt,
     this.verifiedOleh,
     this.bolehVerifikasi = false,
+    this.adaKonfirmasi = false,
+    this.jenisSemua = '',
+    this.keteranganSemua = '',
   });
 
   factory AnomaliGabunganItem.fromJson(Map<String, dynamic> json) {
@@ -98,6 +104,9 @@ class AnomaliGabunganItem {
       verifiedAt: parseDate(json['verified_at']),
       verifiedOleh: nullableString(json['verified_oleh']),
       bolehVerifikasi: json['boleh_verifikasi'] == true,
+      adaKonfirmasi: json['ada_konfirmasi'] == true,
+      jenisSemua: (json['jenis_semua'] ?? '').toString(),
+      keteranganSemua: (json['keterangan_semua'] ?? '').toString(),
     );
   }
 

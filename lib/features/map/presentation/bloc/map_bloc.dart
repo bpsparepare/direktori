@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:latlong2/latlong.dart';
+import '../../domain/entities/place.dart';
 import '../../data/services/map_assignment_focus_cache_service.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
 import '../../domain/entities/map_focus_bounds.dart';
@@ -60,6 +62,105 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     on<TemporaryMarkerAdded>(_onTemporaryMarkerAdded);
     on<TemporaryMarkerRemoved>(_onTemporaryMarkerRemoved);
     on<AssignmentPolygonsToggleRequested>(_onAssignmentPolygonsToggleRequested);
+    on<MarkerEditModeToggled>(_onMarkerEditModeToggled);
+    on<MarkerMovedLocally>(_onMarkerMovedLocally);
+    on<MarkerMovesSaved>(_onMarkerMovesSaved);
+    on<MarkerMovesDiscarded>(_onMarkerMovesDiscarded);
+  }
+
+  // Posisi asli marker sebelum digeser (untuk revert saat Batal).
+  final Map<String, LatLng> _stagedOriginals = {};
+
+  void _onMarkerEditModeToggled(
+    MarkerEditModeToggled event,
+    Emitter<MapState> emit,
+  ) {
+    if (event.enabled) {
+      _stagedOriginals.clear();
+      emit(
+        state.copyWith(
+          markerEditMode: true,
+          stagedMarkerMoves: const <String, LatLng>{},
+        ),
+      );
+    } else {
+      // Nonaktif = batalkan perpindahan yang belum tersimpan.
+      final reverted = _revertStagedPlaces();
+      _stagedOriginals.clear();
+      emit(
+        state.copyWith(
+          places: reverted,
+          markerEditMode: false,
+          stagedMarkerMoves: const <String, LatLng>{},
+        ),
+      );
+    }
+  }
+
+  void _onMarkerMovedLocally(
+    MarkerMovedLocally event,
+    Emitter<MapState> emit,
+  ) {
+    final idx = state.places.indexWhere((p) => p.id == event.placeId);
+    if (idx < 0) return;
+
+    _stagedOriginals.putIfAbsent(
+      event.placeId,
+      () => state.places[idx].position,
+    );
+
+    final updatedPlaces = List<Place>.from(state.places);
+    updatedPlaces[idx] = updatedPlaces[idx].copyWith(position: event.position);
+
+    final staged = Map<String, LatLng>.from(state.stagedMarkerMoves);
+    staged[event.placeId] = event.position;
+
+    emit(state.copyWith(places: updatedPlaces, stagedMarkerMoves: staged));
+  }
+
+  Future<void> _onMarkerMovesSaved(
+    MarkerMovesSaved event,
+    Emitter<MapState> emit,
+  ) async {
+    // Persist dilakukan di layer UI (KoordinatOverrideService). Di sini
+    // finalisasi: keluar mode edit + muat ulang titik SLS dari server agar
+    // koordinat (kini termasuk override) & cache repo konsisten.
+    _stagedOriginals.clear();
+    emit(
+      state.copyWith(
+        markerEditMode: false,
+        stagedMarkerMoves: const <String, LatLng>{},
+      ),
+    );
+    final code =
+        state.selectedPolygonMeta?.idsubsls ?? state.selectedPolygonMeta?.idsls;
+    if (code != null) {
+      await _loadPlacesForSls(code, emit);
+    }
+  }
+
+  void _onMarkerMovesDiscarded(
+    MarkerMovesDiscarded event,
+    Emitter<MapState> emit,
+  ) {
+    final reverted = _revertStagedPlaces();
+    _stagedOriginals.clear();
+    emit(
+      state.copyWith(
+        places: reverted,
+        markerEditMode: false,
+        stagedMarkerMoves: const <String, LatLng>{},
+      ),
+    );
+  }
+
+  /// Kembalikan posisi place yang sempat digeser ke posisi asli.
+  List<Place> _revertStagedPlaces() {
+    if (_stagedOriginals.isEmpty) return state.places;
+    return state.places.map((p) {
+      final orig = _stagedOriginals[p.id];
+      return orig == null ? p : p.copyWith(position: orig);
+    }).toList();
   }
 
   Future<void> _onInit(MapInitRequested event, Emitter<MapState> emit) async {

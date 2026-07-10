@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:open_file/open_file.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/models/anomali_gabungan_item.dart';
 import '../../data/models/anomali_progress_item.dart';
 import '../../data/models/keterangan_pusat_item.dart';
+import '../../data/services/anomali_export_service.dart';
 import '../../data/services/anomali_service.dart';
 import '../widgets/progress_donut.dart';
 
@@ -34,8 +36,10 @@ class _AnomaliPageState extends State<AnomaliPage> {
   static const String _fasihSurveyId = 'fd68e454-ba45-4b85-8205-f3bf777ded24';
 
   final AnomalyService _service = AnomalyService();
+  final AnomaliExportService _exportService = AnomaliExportService();
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  bool _isExporting = false;
 
   bool _isLoading = true;
   bool _isLoadingMore = false;
@@ -52,6 +56,8 @@ class _AnomaliPageState extends State<AnomaliPage> {
   List<AnomaliProgressItem> _progress = [];
   List<AnomaliProgressItem> _pmlOptions = [];
   final Set<String> _selectedPmlNames = {};
+  int _konfirmasiCount = 0;
+  bool _filterKonfirmasi = false;
 
   @override
   void initState() {
@@ -91,10 +97,15 @@ class _AnomaliPageState extends State<AnomaliPage> {
         offset: 0,
       );
       final progress = await _service.fetchAnomaliProgress();
+      int konfirmasi = 0;
+      try {
+        konfirmasi = await _service.fetchKonfirmasiCount();
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _items = items;
         _progress = progress;
+        _konfirmasiCount = konfirmasi;
         // Daftar PML untuk filter (hanya admin -> dimensi 'pml').
         if (progress.isNotEmpty && progress.first.dimensi == 'pml') {
           _pmlOptions = progress;
@@ -136,6 +147,52 @@ class _AnomaliPageState extends State<AnomaliPage> {
 
   Future<void> _refreshData() => _loadData();
 
+  Future<void> _exportExcel() async {
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    try {
+      // Ambil semua halaman dari server supaya ekspor lengkap (bukan hanya
+      // yang sudah ter-scroll), lalu terapkan filter yang sedang aktif.
+      final all = <AnomaliGabunganItem>[];
+      var offset = 0;
+      while (true) {
+        final batch = await _service.fetchAnomaliGabungan(
+          limit: _pageSize,
+          offset: offset,
+        );
+        all.addAll(batch);
+        if (batch.length < _pageSize) break;
+        offset += batch.length;
+      }
+
+      final rows = _filterItems(all);
+      if (rows.isEmpty) {
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(content: Text('Tidak ada anomali untuk diekspor.')),
+        );
+        return;
+      }
+
+      final path = await _exportService.exportToFile(rows);
+      if (!mounted) return;
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text('Berhasil mengekspor ${rows.length} anomali.')),
+      );
+      await OpenFile.open(path);
+    } catch (e) {
+      if (!mounted) return;
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('Gagal mengekspor: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
   List<String> get _statusOptions {
     final values =
         _items
@@ -176,9 +233,11 @@ class _AnomaliPageState extends State<AnomaliPage> {
     return [_allKategoriRincian, ...values];
   }
 
-  List<AnomaliGabunganItem> get _filteredItems {
+  List<AnomaliGabunganItem> get _filteredItems => _filterItems(_items);
+
+  List<AnomaliGabunganItem> _filterItems(List<AnomaliGabunganItem> source) {
     final query = _query.trim().toLowerCase();
-    final result = _items.where((item) {
+    final result = source.where((item) {
       if (_selectedSumber == _sumberWilayah && !item.isWilayah) return false;
       if (_selectedSumber == _sumberPusat && !item.isPusatBaru) return false;
       if (_selectedStatus != _allStatus &&
@@ -201,6 +260,9 @@ class _AnomaliPageState extends State<AnomaliPage> {
       }
       if (_selectedPmlNames.isNotEmpty &&
           !_selectedPmlNames.contains(item.namaPml)) {
+        return false;
+      }
+      if (_filterKonfirmasi && !item.adaKonfirmasi) {
         return false;
       }
       if (query.isEmpty) return true;
@@ -247,6 +309,9 @@ class _AnomaliPageState extends State<AnomaliPage> {
   int get _progresSudah => _progressForDisplay.fold(0, (s, e) => s + e.sudah);
   String get _progresDimensi =>
       _progress.isEmpty ? 'self' : _progress.first.dimensi;
+
+  /// Admin dikenali dari breakdown progres per-PML.
+  bool get _isAdmin => _progresDimensi == 'pml';
   bool get _progresBisaDrill =>
       _progresDimensi != 'self' && _progressForDisplay.isNotEmpty;
 
@@ -402,6 +467,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
                           icon: Icons.task_alt_rounded,
                           label: '$_sudahDitindakCount ditindak',
                         ),
+                        if (_konfirmasiCount > 0) _buildHeroNotif(),
                       ],
                     ),
                   ],
@@ -412,6 +478,40 @@ class _AnomaliPageState extends State<AnomaliPage> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildHeroNotif() {
+    final active = _filterKonfirmasi;
+    return InkWell(
+      borderRadius: BorderRadius.circular(30),
+      onTap: () => setState(() => _filterKonfirmasi = !_filterKonfirmasi),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? Colors.white : const Color(0xFFF59E0B),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: const Color(0xFFF59E0B)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.notifications_active_rounded,
+              size: 16,
+              color: active ? const Color(0xFFB45309) : Colors.white,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '$_konfirmasiCount konfirmasi',
+              style: TextStyle(
+                color: active ? const Color(0xFFB45309) : Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -714,17 +814,19 @@ class _AnomaliPageState extends State<AnomaliPage> {
                   onSelected: (v) =>
                       setState(() => _selectedKategoriRincian = v),
                 ),
-                const SizedBox(width: 8),
-                _buildFilterDropdown(
-                  icon: Icons.verified_user_outlined,
-                  label: _selectedVerifikasi,
-                  options: const [
-                    _allVerifikasi,
-                    _sudahVerifikasi,
-                    _belumVerifikasi,
-                  ],
-                  onSelected: (v) => setState(() => _selectedVerifikasi = v),
-                ),
+                if (_isAdmin) ...[
+                  const SizedBox(width: 8),
+                  _buildFilterDropdown(
+                    icon: Icons.verified_user_outlined,
+                    label: _selectedVerifikasi,
+                    options: const [
+                      _allVerifikasi,
+                      _sudahVerifikasi,
+                      _belumVerifikasi,
+                    ],
+                    onSelected: (v) => setState(() => _selectedVerifikasi = v),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1035,6 +1137,27 @@ class _AnomaliPageState extends State<AnomaliPage> {
               ],
             ),
           ),
+          if (_isAdmin)
+            OutlinedButton.icon(
+              onPressed: _isExporting ? null : _exportExcel,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF1D8F5A),
+                side: const BorderSide(color: Color(0xFF1D8F5A)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              icon: _isExporting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.file_download_outlined, size: 18),
+              label: Text(_isExporting ? 'Menyiapkan...' : 'Export'),
+            ),
         ],
       ),
     );
@@ -1142,6 +1265,10 @@ class _AnomaliPageState extends State<AnomaliPage> {
                           ),
                           const SizedBox(width: 8),
                           _buildStatusChip(item.statusEfektif),
+                          if (item.adaKonfirmasi) ...[
+                            const SizedBox(width: 6),
+                            _buildKonfirmasiBadge(),
+                          ],
                           if (item.isVerified) ...[
                             const SizedBox(width: 6),
                             _buildVerifiedBadge(),
@@ -1231,6 +1358,31 @@ class _AnomaliPageState extends State<AnomaliPage> {
     }
   }
 
+  Widget _buildKonfirmasiBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF59E0B).withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          Icon(Icons.campaign_rounded, size: 13, color: Color(0xFFB45309)),
+          SizedBox(width: 5),
+          Text(
+            'Konfirmasi',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFFB45309),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildVerifiedBadge() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1291,6 +1443,8 @@ class _AnomaliPageState extends State<AnomaliPage> {
         return Icons.verified_rounded;
       case 'sudah_diperiksa':
         return Icons.check_circle_rounded;
+      case 'konfirmasi':
+        return Icons.campaign_outlined;
       case 'dikonfirmasi_salah_entri':
       case 'perbaikan':
       case 'sudah_diperbaiki':
@@ -1370,6 +1524,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
                   _selectedKategoriRincian = _allKategoriRincian;
                   _selectedVerifikasi = _allVerifikasi;
                   _selectedPmlNames.clear();
+                  _filterKonfirmasi = false;
                 });
               },
               child: const Text('Reset Filter'),
@@ -1433,6 +1588,8 @@ class _AnomaliPageState extends State<AnomaliPage> {
       case 'dikonfirmasi_salah_entri':
       case 'perbaikan':
         return const Color(0xFFD97706);
+      case 'konfirmasi':
+        return const Color(0xFFFB923C);
       case 'sudah_diperbaiki':
         return const Color(0xFF1F6FEB);
       case 'belum_diperiksa':
@@ -1443,6 +1600,8 @@ class _AnomaliPageState extends State<AnomaliPage> {
 
   String _prettyOption(String value) {
     if (value.isEmpty) return '-';
+    if (value == 'perbaikan') return 'Salah Input';
+    if (value == 'konfirmasi') return 'Konfirmasi';
     if (value == _allStatus ||
         value == _allKategoriBesar ||
         value == _allKategoriRincian ||
@@ -1651,8 +1810,27 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
     );
   }
 
+  Widget _buildResponsChoice(
+      String value, String label, Color color, IconData icon) {
+    final selected = _jenisRespons == value;
+    return OutlinedButton.icon(
+      onPressed: _isSaving ? null : () => setState(() => _jenisRespons = value),
+      style: OutlinedButton.styleFrom(
+        backgroundColor: selected ? color.withValues(alpha: 0.12) : null,
+        foregroundColor: selected ? color : const Color(0xFF526070),
+        side: BorderSide(
+          color: selected ? color : Colors.grey.withValues(alpha: 0.4),
+        ),
+      ),
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+    );
+  }
+
   String _pretty(String value) {
     if (value.isEmpty) return '-';
+    if (value == 'perbaikan') return 'Salah Input';
+    if (value == 'konfirmasi') return 'Konfirmasi';
     return value
         .split('_')
         .map((w) {
@@ -1892,58 +2070,29 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                             ),
                           ),
                           const SizedBox(height: 14),
-                          Row(
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
                             children: [
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: _isSaving
-                                      ? null
-                                      : () => setState(
-                                          () => _jenisRespons = 'perbaikan',
-                                        ),
-                                  style: OutlinedButton.styleFrom(
-                                    backgroundColor:
-                                        _jenisRespons == 'perbaikan'
-                                        ? const Color(
-                                            0xFFD97706,
-                                          ).withValues(alpha: 0.12)
-                                        : null,
-                                    side: BorderSide(
-                                      color: _jenisRespons == 'perbaikan'
-                                          ? const Color(0xFFD97706)
-                                          : Colors.grey.withValues(alpha: 0.4),
-                                    ),
-                                  ),
-                                  icon: const Icon(Icons.build_outlined),
-                                  label: const Text('Perbaikan'),
-                                ),
+                              _buildResponsChoice(
+                                'perbaikan',
+                                'Salah Input',
+                                const Color(0xFFD97706),
+                                Icons.build_outlined,
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: _isSaving
-                                      ? null
-                                      : () => setState(
-                                          () => _jenisRespons =
-                                              'konfirmasi_valid',
-                                        ),
-                                  style: OutlinedButton.styleFrom(
-                                    backgroundColor:
-                                        _jenisRespons == 'konfirmasi_valid'
-                                        ? const Color(
-                                            0xFF0F9D58,
-                                          ).withValues(alpha: 0.12)
-                                        : null,
-                                    side: BorderSide(
-                                      color: _jenisRespons == 'konfirmasi_valid'
-                                          ? const Color(0xFF0F9D58)
-                                          : Colors.grey.withValues(alpha: 0.4),
-                                    ),
-                                  ),
-                                  icon: const Icon(Icons.verified_outlined),
-                                  label: const Text('Data Benar'),
-                                ),
+                              _buildResponsChoice(
+                                'konfirmasi_valid',
+                                'Data Benar',
+                                const Color(0xFF0F9D58),
+                                Icons.verified_outlined,
                               ),
+                              if (widget.item.bolehVerifikasi)
+                                _buildResponsChoice(
+                                  'konfirmasi',
+                                  'Konfirmasi',
+                                  const Color(0xFFFB923C),
+                                  Icons.campaign_outlined,
+                                ),
                             ],
                           ),
                           const SizedBox(height: 14),
@@ -2019,7 +2168,7 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
               ),
               const SizedBox(width: 8),
               const Text(
-                'Verifikasi PML',
+                'Verifikasi Admin',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w800,

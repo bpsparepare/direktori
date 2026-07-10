@@ -21,6 +21,27 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
   List<AnomaliPusatImportResult>? _results;
   final List<String> _uploadErrors = [];
 
+  bool _isComparing = false;
+  String? _compareError;
+  Map<String, AnomaliPusatCompareResult>? _comparison;
+
+  static const Map<String, String> _fieldLabels = {
+    'status_aktif': 'Status',
+    'nama_provinsi': 'Nama provinsi',
+    'nama_kab': 'Nama kab/kota',
+    'kode_kec': 'Kode kecamatan',
+    'nama_kec': 'Nama kecamatan',
+    'kode_desa': 'Kode desa',
+    'nama_desa': 'Nama desa/kel',
+    'kode_sls': 'Kode SLS',
+    'sub_sls': 'Sub SLS',
+    'kategori_nama': 'Nama kategori',
+    'status_asal': 'Tindak lanjut',
+    'id_petugas': 'ID petugas',
+    'email_petugas': 'Email petugas',
+    'link_fasih': 'Link Fasih',
+  };
+
   Future<void> _pickFiles() async {
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -36,6 +57,8 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
       _parseErrors.clear();
       _results = null;
       _uploadErrors.clear();
+      _comparison = null;
+      _compareError = null;
     });
 
     for (final f in picked.files) {
@@ -55,6 +78,43 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
     setState(() => _isParsing = false);
   }
 
+  /// Label 1 scope untuk hasil/error: "Usaha (fileA.xlsx, fileB.xlsx)".
+  String _scopeUploadLabel(String scope) {
+    final names =
+        _files.where((f) => f.scope == scope).map((f) => f.fileName).join(', ');
+    return '${_scopeLabel(scope)} ($names)';
+  }
+
+  Future<void> _compare() async {
+    if (_files.isEmpty) return;
+
+    setState(() {
+      _isComparing = true;
+      _compareError = null;
+      _comparison = null;
+    });
+
+    final comparison = <String, AnomaliPusatCompareResult>{};
+    String? error;
+    final grouped = AnomaliPusatImportService.gabungkanRowsPerScope(_files);
+    for (final entry in grouped.entries) {
+      try {
+        comparison[entry.key] =
+            await _service.compareRows(scope: entry.key, rows: entry.value);
+      } catch (e) {
+        error = '${_scopeUploadLabel(entry.key)}: gagal membandingkan -- $e';
+        break;
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isComparing = false;
+      _compareError = error;
+      _comparison = error == null ? comparison : null;
+    });
+  }
+
   Future<void> _upload() async {
     if (_files.isEmpty) return;
 
@@ -65,12 +125,22 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
     });
 
     final results = <AnomaliPusatImportResult>[];
-    for (final file in _files) {
+    // Semua file dengan scope sama digabung jadi 1 batch. Kalau dikirim per
+    // file, mode refresh/replace akan menonaktifkan/menghapus baris dari file
+    // sebelumnya karena server menganggapnya "tidak ada di file".
+    final grouped = AnomaliPusatImportService.gabungkanRowsPerScope(_files);
+    for (final entry in grouped.entries) {
+      final label = _scopeUploadLabel(entry.key);
       try {
-        final result = await _service.importFile(file: file, mode: _mode);
+        final result = await _service.importRows(
+          scope: entry.key,
+          label: label,
+          rows: entry.value,
+          mode: _mode,
+        );
         results.add(result);
       } catch (e) {
-        _uploadErrors.add('${file.fileName}: gagal diunggah -- $e');
+        _uploadErrors.add('$label: gagal diunggah -- $e');
       }
     }
 
@@ -78,6 +148,8 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
     setState(() {
       _results = results;
       _isUploading = false;
+      // Database sudah berubah -- hasil perbandingan lama tidak berlaku lagi.
+      _comparison = null;
     });
   }
 
@@ -104,8 +176,9 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
             const Text(
               'Pilih satu atau beberapa file export "Data Mikro Kasus '
               'Anomali" dari Fasih (usaha maupun keluarga boleh sekaligus '
-              '-- jenisnya dideteksi otomatis). Cek pratinjaunya, pilih '
-              'cara memperlakukan data lama, lalu unggah.',
+              '-- jenisnya dideteksi otomatis). Cek pratinjaunya, '
+              'bandingkan dengan database untuk melihat apa saja yang '
+              'berubah, pilih cara memperlakukan data lama, lalu unggah.',
               style: TextStyle(color: Colors.blueGrey, height: 1.5),
             ),
             const SizedBox(height: 20),
@@ -157,6 +230,54 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
               ),
               const SizedBox(height: 10),
               ..._files.map(_buildFilePreviewCard),
+              const SizedBox(height: 24),
+              const Text(
+                'Perubahan dibanding database',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Opsional: cek dulu apa saja yang baru, berubah, atau hilang '
+                'dari file ini sebelum mengunggah. Tidak mengubah data.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.blueGrey[600],
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed:
+                    _isComparing || _isUploading || _isParsing ? null : _compare,
+                icon: const Icon(Icons.compare_arrows_rounded),
+                label: Text(
+                  _comparison == null
+                      ? 'Bandingkan dengan database'
+                      : 'Bandingkan ulang',
+                ),
+              ),
+              if (_isComparing) ...[
+                const SizedBox(height: 12),
+                const LinearProgressIndicator(),
+              ],
+              if (_compareError != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFDECEC),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    _compareError!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
+              ],
+              if (_comparison != null) ...[
+                const SizedBox(height: 12),
+                ..._comparison!.values.map(_buildCompareScopeCard),
+              ],
               const SizedBox(height: 24),
               const Text(
                 'Data lama yang tidak ada di file ini',
@@ -230,24 +351,36 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
   }
 
   Widget _buildModeSelector() {
-    const options = [
+    int? hilangAktif;
+    int? hilangTotal;
+    if (_comparison != null) {
+      hilangAktif =
+          _comparison!.values.fold(0, (sum, c) => sum! + c.hilangAktif);
+      hilangTotal =
+          _comparison!.values.fold(0, (sum, c) => sum! + c.countOf('hilang'));
+    }
+
+    final options = [
       (
         AnomaliPusatImportMode.refresh,
         'Segarkan',
         'Nonaktifkan sementara kasus lama yang tidak ada di file ini. '
-            'Aktif lagi otomatis kalau muncul lagi nanti. Paling aman.',
+            'Aktif lagi otomatis kalau muncul lagi nanti. Paling aman.'
+            '${hilangAktif != null ? '\nBerdasarkan perbandingan: $hilangAktif kasus akan dinonaktifkan.' : ''}',
       ),
       (
         AnomaliPusatImportMode.tambahkan,
         'Tambahkan saja',
         'Jangan ubah data lama sama sekali, cuma tambah/perbarui yang ada '
-            'di file ini.',
+            'di file ini.'
+            '${hilangTotal != null ? '\nBerdasarkan perbandingan: $hilangTotal kasus lama dibiarkan apa adanya.' : ''}',
       ),
       (
         AnomaliPusatImportMode.replace,
         'Ganti total',
         'Hapus permanen kasus lama yang tidak ada di file ini. Keterangan '
-            'petugas yang sudah ditulis tetap tersimpan.',
+            'petugas yang sudah ditulis tetap tersimpan.'
+            '${hilangTotal != null ? '\nBerdasarkan perbandingan: $hilangTotal kasus akan dihapus permanen.' : ''}',
       ),
     ];
 
@@ -414,6 +547,184 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
     );
   }
 
+  static const _statusMeta = {
+    'baru': ('Baru', 'Belum ada di database', Color(0xFF2E7D32)),
+    'berubah': ('Berubah', 'Ada di database, isinya beda', Color(0xFFEF6C00)),
+    'hilang': (
+      'Tidak ada di file',
+      'Ada di database tapi tidak muncul di file ini',
+      Color(0xFFC62828),
+    ),
+    'sama': ('Sama persis', 'Tidak ada perubahan', Color(0xFF546E7A)),
+  };
+
+  Widget _buildCompareScopeCard(AnomaliPusatCompareResult comparison) {
+    final color = _scopeColor(comparison.scope);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: Text(
+                  _scopeLabel(comparison.scope),
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${comparison.rows.length} kasus dibandingkan',
+                style: TextStyle(color: Colors.blueGrey[500], fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _statusMeta.entries
+                .map(
+                  (e) => _buildCountChip(
+                    e.value.$1,
+                    comparison.countOf(e.key),
+                    e.value.$3,
+                  ),
+                )
+                .toList(),
+          ),
+          ..._statusMeta.entries
+              .where((e) => e.key != 'sama')
+              .map((e) => _buildCompareStatusTile(comparison, e.key)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCountChip(String label, int count, Color color) {
+    final active = count > 0;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: (active ? color : Colors.blueGrey).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Text(
+        '$count $label',
+        style: TextStyle(
+          color: active ? color : Colors.blueGrey,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompareStatusTile(
+    AnomaliPusatCompareResult comparison,
+    String status,
+  ) {
+    const maxDitampilkan = 100;
+    final rows = comparison.byStatus(status);
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    final (label, desc, color) = _statusMeta[status]!;
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        title: Text(
+          '$label (${rows.length})',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+        subtitle: Text(
+          desc,
+          style: TextStyle(fontSize: 11, color: Colors.blueGrey[500]),
+        ),
+        children: [
+          ...rows.take(maxDitampilkan).map(_buildCompareRowTile),
+          if (rows.length > maxDitampilkan)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                '... dan ${rows.length - maxDitampilkan} kasus lainnya',
+                style: TextStyle(fontSize: 12, color: Colors.blueGrey[500]),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompareRowTile(AnomaliPusatCompareRow row) {
+    final wilayah = [row.namaKec, row.namaDesa]
+        .where((v) => v != null && v.isNotEmpty)
+        .join(' / ');
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Colors.grey.withValues(alpha: 0.15)),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            row.namaSubjek +
+                (row.status == 'hilang' && !row.isAktif
+                    ? ' (sudah nonaktif)'
+                    : ''),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            wilayah.isEmpty ? '-' : wilayah,
+            style: TextStyle(fontSize: 12, color: Colors.blueGrey[600]),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Kategori ${row.kategoriKode}: ${row.kategoriNama}',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          ...row.perubahan.map(
+            (p) => Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '- ${_fieldLabels[p.field] ?? p.field}: '
+                '"${p.lama ?? '-'}" menjadi "${p.baru ?? '-'}"',
+                style: const TextStyle(fontSize: 12, color: Color(0xFFEF6C00)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildResultCard(AnomaliPusatImportResult result) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -426,7 +737,7 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            result.fileName,
+            result.label,
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),

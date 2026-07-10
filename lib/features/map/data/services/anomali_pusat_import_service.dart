@@ -44,19 +44,105 @@ class ParsedAnomaliPusatFile {
 }
 
 class AnomaliPusatImportResult {
-  final String fileName;
+  final String label;
   final int totalBaris;
   final int diperbarui;
   final int dinonaktifkan;
   final int dihapus;
 
   const AnomaliPusatImportResult({
-    required this.fileName,
+    required this.label,
     required this.totalBaris,
     required this.diperbarui,
     required this.dinonaktifkan,
     required this.dihapus,
   });
+}
+
+/// Satu perubahan kolom pada kasus yang sudah ada di database.
+class AnomaliPusatPerubahanKolom {
+  final String field;
+  final String? lama;
+  final String? baru;
+
+  const AnomaliPusatPerubahanKolom({
+    required this.field,
+    this.lama,
+    this.baru,
+  });
+
+  factory AnomaliPusatPerubahanKolom.fromMap(Map<String, dynamic> map) {
+    return AnomaliPusatPerubahanKolom(
+      field: map['field'] as String? ?? '-',
+      lama: map['lama'] as String?,
+      baru: map['baru'] as String?,
+    );
+  }
+}
+
+/// Satu baris hasil perbandingan file vs database.
+/// status: 'baru' | 'berubah' | 'sama' | 'hilang' (ada di database,
+/// tidak ada di file).
+class AnomaliPusatCompareRow {
+  final String status;
+  final String assignmentId;
+  final String namaSubjek;
+  final String kategoriKode;
+  final String kategoriNama;
+  final String? namaKec;
+  final String? namaDesa;
+  final bool isAktif;
+  final List<AnomaliPusatPerubahanKolom> perubahan;
+
+  const AnomaliPusatCompareRow({
+    required this.status,
+    required this.assignmentId,
+    required this.namaSubjek,
+    required this.kategoriKode,
+    required this.kategoriNama,
+    this.namaKec,
+    this.namaDesa,
+    required this.isAktif,
+    required this.perubahan,
+  });
+
+  factory AnomaliPusatCompareRow.fromMap(Map<String, dynamic> map) {
+    final rawPerubahan = map['perubahan'];
+    return AnomaliPusatCompareRow(
+      status: map['status'] as String? ?? '-',
+      assignmentId: map['assignment_id'] as String? ?? '-',
+      namaSubjek: map['nama_subjek'] as String? ?? '-',
+      kategoriKode: map['kategori_kode'] as String? ?? '-',
+      kategoriNama: map['kategori_nama'] as String? ?? '-',
+      namaKec: map['nama_kec'] as String?,
+      namaDesa: map['nama_desa'] as String?,
+      isAktif: map['is_aktif'] as bool? ?? true,
+      perubahan: rawPerubahan is List
+          ? rawPerubahan
+              .map((e) => AnomaliPusatPerubahanKolom.fromMap(
+                  Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+    );
+  }
+}
+
+/// Hasil perbandingan seluruh baris 1 scope terhadap database.
+class AnomaliPusatCompareResult {
+  final String scope;
+  final List<AnomaliPusatCompareRow> rows;
+
+  const AnomaliPusatCompareResult({required this.scope, required this.rows});
+
+  List<AnomaliPusatCompareRow> byStatus(String status) =>
+      rows.where((r) => r.status == status).toList();
+
+  int countOf(String status) => rows.where((r) => r.status == status).length;
+
+  /// Kasus 'hilang' yang saat ini masih aktif -- kandidat dinonaktifkan
+  /// pada mode refresh.
+  int get hilangAktif =>
+      rows.where((r) => r.status == 'hilang' && r.isAktif).length;
 }
 
 /// Import file export Fasih ("Data Mikro Kasus Anomali Usaha/Keluarga")
@@ -193,19 +279,66 @@ class AnomaliPusatImportService {
     return nonEmpty.every((c) => RegExp(r'^\(\d+\)$').hasMatch(c.trim()));
   }
 
-  Future<AnomaliPusatImportResult> importFile({
-    required ParsedAnomaliPusatFile file,
+  /// Gabungkan baris semua file per scope dalam 1 daftar. Duplikat kunci
+  /// kasus (assignment_id + nama_subjek + kategori_kode): baris terakhir
+  /// menang, sama seperti perilaku upsert berurutan di server.
+  ///
+  /// Penting untuk mode refresh/replace: server memperlakukan baris yang
+  /// tidak ada di batch sebagai "kasus lama", jadi semua file dengan scope
+  /// sama HARUS dikirim sebagai 1 batch -- kalau dikirim per file, file
+  /// kedua akan menonaktifkan/menghapus baris dari file pertama.
+  static Map<String, List<Map<String, dynamic>>> gabungkanRowsPerScope(
+    List<ParsedAnomaliPusatFile> files,
+  ) {
+    final byScope = <String, Map<String, Map<String, dynamic>>>{};
+    for (final file in files) {
+      final rows = byScope.putIfAbsent(file.scope, () => {});
+      for (final row in file.rows) {
+        final key = '${row['assignment_id']}||${row['nama_subjek']}||'
+            '${row['kategori_kode']}';
+        rows[key] = row;
+      }
+    }
+    return {
+      for (final entry in byScope.entries) entry.key: entry.value.values.toList(),
+    };
+  }
+
+  /// Bandingkan baris 1 scope dengan isi database tanpa mengubah apa pun.
+  /// Lihat compare_anomali_pusat_batch di
+  /// supabase/migrations/20260708140000_anomali_pusat_compare.sql.
+  Future<AnomaliPusatCompareResult> compareRows({
+    required String scope,
+    required List<Map<String, dynamic>> rows,
+  }) async {
+    final response = await _client.rpc(
+      'compare_anomali_pusat_batch',
+      params: {'p_scope': scope, 'p_rows': rows},
+    );
+
+    final parsed = (response as List)
+        .map((e) =>
+            AnomaliPusatCompareRow.fromMap(Map<String, dynamic>.from(e as Map)))
+        .toList();
+
+    return AnomaliPusatCompareResult(scope: scope, rows: parsed);
+  }
+
+  Future<AnomaliPusatImportResult> importRows({
+    required String scope,
+    required String label,
+    required List<Map<String, dynamic>> rows,
     required AnomaliPusatImportMode mode,
   }) async {
-    if (file.rows.isEmpty) {
-      throw Exception('Tidak ada baris data pada file "${file.fileName}".');
+    if (rows.isEmpty) {
+      throw Exception('Tidak ada baris data untuk "$label".');
     }
 
     final response = await _client.rpc(
       'import_anomali_pusat_batch',
       params: {
-        'p_scope': file.scope,
-        'p_rows': file.rows,
+        'p_scope': scope,
+        'p_rows': rows,
         'p_mode': mode.rpcValue,
       },
     );
@@ -215,8 +348,8 @@ class AnomaliPusatImportService {
         : <String, dynamic>{};
 
     return AnomaliPusatImportResult(
-      fileName: file.fileName,
-      totalBaris: file.rows.length,
+      label: label,
+      totalBaris: rows.length,
       diperbarui: (result['diperbarui'] as int?) ?? 0,
       dinonaktifkan: (result['dinonaktifkan'] as int?) ?? 0,
       dihapus: (result['dihapus'] as int?) ?? 0,

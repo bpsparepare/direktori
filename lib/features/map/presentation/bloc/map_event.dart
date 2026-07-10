@@ -97,3 +97,32 @@ class TemporaryMarkerRemoved extends MapEvent {
 class AssignmentPolygonsToggleRequested extends MapEvent {
   const AssignmentPolygonsToggleRequested();
 }
+
+/// Aktifkan/nonaktifkan mode edit posisi marker (drag). Menonaktifkan =
+/// membatalkan seluruh perpindahan yang belum disimpan.
+class MarkerEditModeToggled extends MapEvent {
+  final bool enabled;
+  const MarkerEditModeToggled(this.enabled);
+  @override
+  List<Object?> get props => [enabled];
+}
+
+/// Marker digeser (drag end) — disimpan sementara di state (belum ke server).
+class MarkerMovedLocally extends MapEvent {
+  final String placeId; // = assignment_id
+  final LatLng position;
+  const MarkerMovedLocally(this.placeId, this.position);
+  @override
+  List<Object?> get props => [placeId, position];
+}
+
+/// Finalisasi setelah perpindahan disimpan ke server: bersihkan staging &
+/// keluar dari mode edit (posisi optimistik dipertahankan).
+class MarkerMovesSaved extends MapEvent {
+  const MarkerMovesSaved();
+}
+
+/// Batalkan seluruh perpindahan yang belum disimpan → kembalikan posisi semula.
+class MarkerMovesDiscarded extends MapEvent {
+  const MarkerMovesDiscarded();
+}
