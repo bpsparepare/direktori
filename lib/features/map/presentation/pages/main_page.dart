@@ -377,18 +377,19 @@ class _MainPageState extends State<MainPage> {
                   title: 'NIK Tidak Valid',
                   index: 6,
                 ),
-                ListTile(
-                  leading: const Icon(Icons.fact_check_outlined),
-                  title: const Text('Lembar Kerja'),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const LembarKerjaPage(),
-                      ),
-                    );
-                  },
-                ),
+                if (_se2026Role == 'admin')
+                  ListTile(
+                    leading: const Icon(Icons.fact_check_outlined),
+                    title: const Text('Lembar Kerja'),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const LembarKerjaPage(),
+                        ),
+                      );
+                    },
+                  ),
                 ListTile(
                   leading: const Icon(Icons.person_search_rounded),
                   title: const Text('Responden Sulit'),
