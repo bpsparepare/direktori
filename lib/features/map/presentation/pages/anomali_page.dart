@@ -56,8 +56,8 @@ class _AnomaliPageState extends State<AnomaliPage> {
   List<AnomaliProgressItem> _progress = [];
   List<AnomaliProgressItem> _pmlOptions = [];
   final Set<String> _selectedPmlNames = {};
-  int _konfirmasiCount = 0;
-  bool _filterKonfirmasi = false;
+  int _notifCount = 0;
+  bool _filterPerluTindak = false;
 
   @override
   void initState() {
@@ -97,15 +97,12 @@ class _AnomaliPageState extends State<AnomaliPage> {
         offset: 0,
       );
       final progress = await _service.fetchAnomaliProgress();
-      int konfirmasi = 0;
-      try {
-        konfirmasi = await _service.fetchKonfirmasiCount();
-      } catch (_) {}
+      final notif = await _service.fetchNotifCount();
       if (!mounted) return;
       setState(() {
         _items = items;
         _progress = progress;
-        _konfirmasiCount = konfirmasi;
+        _notifCount = notif;
         // Daftar PML untuk filter (hanya admin -> dimensi 'pml').
         if (progress.isNotEmpty && progress.first.dimensi == 'pml') {
           _pmlOptions = progress;
@@ -262,7 +259,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
           !_selectedPmlNames.contains(item.namaPml)) {
         return false;
       }
-      if (_filterKonfirmasi && !item.adaKonfirmasi) {
+      if (_filterPerluTindak && !item.perluTindakLanjut) {
         return false;
       }
       if (query.isEmpty) return true;
@@ -467,7 +464,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
                           icon: Icons.task_alt_rounded,
                           label: '$_sudahDitindakCount ditindak',
                         ),
-                        if (_konfirmasiCount > 0) _buildHeroNotif(),
+                        if (_notifCount > 0) _buildHeroNotif(),
                       ],
                     ),
                   ],
@@ -483,10 +480,10 @@ class _AnomaliPageState extends State<AnomaliPage> {
   }
 
   Widget _buildHeroNotif() {
-    final active = _filterKonfirmasi;
+    final active = _filterPerluTindak;
     return InkWell(
       borderRadius: BorderRadius.circular(30),
-      onTap: () => setState(() => _filterKonfirmasi = !_filterKonfirmasi),
+      onTap: () => setState(() => _filterPerluTindak = !_filterPerluTindak),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
@@ -504,7 +501,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
             ),
             const SizedBox(width: 6),
             Text(
-              '$_konfirmasiCount konfirmasi',
+              '$_notifCount perlu ditindak',
               style: TextStyle(
                 color: active ? const Color(0xFFB45309) : Colors.white,
                 fontWeight: FontWeight.w800,
@@ -1253,6 +1250,18 @@ class _AnomaliPageState extends State<AnomaliPage> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Tanda kecil: kasus ini perlu saya tindaklanjuti.
+                          if (item.perluTindakLanjut) ...[
+                            Container(
+                              margin: const EdgeInsets.only(top: 6, right: 6),
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFF59E0B),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ],
                           Expanded(
                             child: Text(
                               item.subjekLabel,
@@ -1272,6 +1281,9 @@ class _AnomaliPageState extends State<AnomaliPage> {
                           if (item.isVerified) ...[
                             const SizedBox(width: 6),
                             _buildVerifiedBadge(),
+                          ] else if (item.isRejected) ...[
+                            const SizedBox(width: 6),
+                            _buildRejectedBadge(),
                           ],
                         ],
                       ),
@@ -1408,6 +1420,31 @@ class _AnomaliPageState extends State<AnomaliPage> {
     );
   }
 
+  Widget _buildRejectedBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFD1435B).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          Icon(Icons.gpp_bad_rounded, size: 13, color: Color(0xFFD1435B)),
+          SizedBox(width: 5),
+          Text(
+            'Ditolak',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFFD1435B),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMiniBadge({required IconData icon, required String label}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1524,7 +1561,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
                   _selectedKategoriRincian = _allKategoriRincian;
                   _selectedVerifikasi = _allVerifikasi;
                   _selectedPmlNames.clear();
-                  _filterKonfirmasi = false;
+                  _filterPerluTindak = false;
                 });
               },
               child: const Text('Reset Filter'),
@@ -1567,10 +1604,15 @@ class _AnomaliPageState extends State<AnomaliPage> {
   }
 
   Future<void> _showAnomaliDetail(AnomaliGabunganItem item) async {
+    // Bottom sheet Material dibatasi maksimal ~640px di layar lebar (desktop),
+    // jadi terlihat sempit. Lebarkan ke 80% lebar layar.
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width * 0.8,
+      ),
       builder: (_) => _AnomaliDetailSheet(
         item: item,
         service: _service,
@@ -1644,10 +1686,14 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
   bool _loadingThread = true;
   List<KeteranganPusatItem> _thread = [];
 
-  late bool _verified;
+  /// Keputusan admin saat ini: 'verified', 'rejected', atau null.
+  String? _verifStatus;
   DateTime? _verifiedAt;
   String? _verifiedOleh;
   bool _savingVerif = false;
+
+  bool get _verified => _verifStatus == 'verified';
+  bool get _rejected => _verifStatus == 'rejected';
 
   @override
   void initState() {
@@ -1656,16 +1702,18 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
       text: widget.item.keterangan ?? '',
     );
     _jenisRespons = widget.item.jenisRespons;
-    _verified = widget.item.isVerified;
+    _verifStatus = widget.item.verifikasiStatus;
     _verifiedAt = widget.item.verifiedAt;
     _verifiedOleh = widget.item.verifiedOleh;
     _fetchThread();
   }
 
-  Future<void> _toggleVerifikasi() async {
+  /// Set keputusan admin. Menekan tombol status yang sedang aktif akan
+  /// membatalkannya (target null).
+  Future<void> _setVerifikasi(String status) async {
     final item = widget.item;
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final target = !_verified;
+    final target = _verifStatus == status ? null : status;
     setState(() => _savingVerif = true);
     try {
       await widget.service.setVerifikasi(
@@ -1673,12 +1721,12 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
         assignmentId: item.assignmentId,
         namaSubjek: item.responsNamaSubjek,
         kategoriKode: item.kategoriKode,
-        verified: target,
+        status: target,
       );
       if (!mounted) return;
       setState(() {
-        _verified = target;
-        _verifiedAt = target ? DateTime.now() : null;
+        _verifStatus = target;
+        _verifiedAt = target != null ? DateTime.now() : null;
         _verifiedOleh = null;
         _savingVerif = false;
       });
@@ -1686,7 +1734,11 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
       scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text(
-            target ? 'Anomali diverifikasi' : 'Verifikasi dibatalkan',
+            target == 'verified'
+                ? 'Anomali diverifikasi'
+                : target == 'rejected'
+                    ? 'Anomali ditolak'
+                    : 'Keputusan verifikasi dibatalkan',
           ),
         ),
       );
@@ -2039,11 +2091,6 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                       _buildThreadSection(),
                       const SizedBox(height: 18),
                     ],
-                    if (widget.item.bolehVerifikasi &&
-                        widget.item.sudahDitindaklanjuti) ...[
-                      _buildVerifikasiSection(),
-                      const SizedBox(height: 18),
-                    ],
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -2074,25 +2121,30 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                             spacing: 10,
                             runSpacing: 10,
                             children: [
-                              _buildResponsChoice(
-                                'perbaikan',
-                                'Salah Input',
-                                const Color(0xFFD97706),
-                                Icons.build_outlined,
-                              ),
-                              _buildResponsChoice(
-                                'konfirmasi_valid',
-                                'Data Benar',
-                                const Color(0xFF0F9D58),
-                                Icons.verified_outlined,
-                              ),
+                              // Admin (bolehVerifikasi) hanya boleh
+                              // "Konfirmasi"; petugas lain memilih antara
+                              // "Salah Input" / "Data Benar".
                               if (widget.item.bolehVerifikasi)
                                 _buildResponsChoice(
                                   'konfirmasi',
                                   'Konfirmasi',
                                   const Color(0xFFFB923C),
                                   Icons.campaign_outlined,
+                                )
+                              else ...[
+                                _buildResponsChoice(
+                                  'perbaikan',
+                                  'Salah Input',
+                                  const Color(0xFFD97706),
+                                  Icons.build_outlined,
                                 ),
+                                _buildResponsChoice(
+                                  'konfirmasi_valid',
+                                  'Data Benar',
+                                  const Color(0xFF0F9D58),
+                                  Icons.verified_outlined,
+                                ),
+                              ],
                             ],
                           ),
                           const SizedBox(height: 14),
@@ -2133,6 +2185,11 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                         ],
                       ),
                     ),
+                    if (widget.item.bolehVerifikasi &&
+                        widget.item.sudahDitindaklanjuti) ...[
+                      const SizedBox(height: 18),
+                      _buildVerifikasiSection(),
+                    ],
                   ],
                 ),
               ),
@@ -2145,14 +2202,20 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
 
   Widget _buildVerifikasiSection() {
     const green = Color(0xFF0F9D58);
+    const red = Color(0xFFD1435B);
+    final accent = _verified
+        ? green
+        : _rejected
+            ? red
+            : const Color(0xFF6B7A8D);
+    final active = _verified || _rejected;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _verified ? green.withValues(alpha: 0.08) : Colors.white,
+        color: active ? accent.withValues(alpha: 0.08) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: _verified
-            ? Border.all(color: green.withValues(alpha: 0.4))
-            : null,
+        border: active ? Border.all(color: accent.withValues(alpha: 0.4)) : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2162,9 +2225,11 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
               Icon(
                 _verified
                     ? Icons.verified_user_rounded
-                    : Icons.verified_user_outlined,
+                    : _rejected
+                        ? Icons.gpp_bad_rounded
+                        : Icons.verified_user_outlined,
                 size: 20,
-                color: _verified ? green : const Color(0xFF6B7A8D),
+                color: accent,
               ),
               const SizedBox(width: 8),
               const Text(
@@ -2183,39 +2248,80 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                 ? 'Sudah diverifikasi'
                       '${_verifiedOleh != null ? ' oleh $_verifiedOleh' : ''}'
                       '${_verifiedAt != null ? ' · ${_formatDate(_verifiedAt!)}' : ''}'
-                : 'Belum diverifikasi. Tandai jika kasus ini sudah Anda '
-                      'periksa dan setujui.',
+                : _rejected
+                    ? 'Ditolak admin'
+                          '${_verifiedOleh != null ? ' oleh $_verifiedOleh' : ''}'
+                          '${_verifiedAt != null ? ' · ${_formatDate(_verifiedAt!)}' : ''}'
+                    : 'Belum ada keputusan. Setujui bila kasus valid, atau '
+                          'tolak bila tidak sesuai.',
             style: TextStyle(fontSize: 12, color: Colors.blueGrey[600]),
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _savingVerif ? null : _toggleVerifikasi,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _verified ? Colors.white : green,
-                foregroundColor: _verified ? green : Colors.white,
-                side: _verified ? const BorderSide(color: green) : null,
-                elevation: 0,
+          // Sudah ada keputusan -> cuma tombol Batalkan.
+          // Belum ada keputusan -> pilih Verifikasi atau Tolak.
+          if (active)
+            SizedBox(
+              width: double.infinity,
+              child: _buildVerifButton(
+                status: _verifStatus!,
+                warna: accent,
+                ikon: Icons.undo_rounded,
+                label: 'Batalkan',
               ),
-              icon: _savingVerif
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      _verified ? Icons.undo_rounded : Icons.verified_rounded,
-                    ),
-              label: Text(
-                _savingVerif
-                    ? 'Menyimpan...'
-                    : (_verified ? 'Batalkan verifikasi' : 'Verifikasi'),
-              ),
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: _buildVerifButton(
+                    status: 'verified',
+                    warna: green,
+                    ikon: Icons.verified_rounded,
+                    label: 'Verifikasi',
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildVerifButton(
+                    status: 'rejected',
+                    warna: red,
+                    ikon: Icons.gpp_bad_rounded,
+                    label: 'Tolak',
+                  ),
+                ),
+              ],
             ),
-          ),
         ],
       ),
+    );
+  }
+
+  /// Tombol keputusan verifikasi. Untuk "Batalkan", [status] adalah keputusan
+  /// yang sedang aktif -- menekannya membatalkan (target jadi null).
+  Widget _buildVerifButton({
+    required String status,
+    required Color warna,
+    required IconData ikon,
+    required String label,
+  }) {
+    final batalkan = label == 'Batalkan';
+    return ElevatedButton.icon(
+      onPressed: _savingVerif ? null : () => _setVerifikasi(status),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: batalkan ? Colors.white : warna,
+        foregroundColor: batalkan ? warna : Colors.white,
+        side: batalkan ? BorderSide(color: warna) : null,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+      ),
+      icon: _savingVerif
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(ikon, size: 18),
+      label: Text(label),
     );
   }
 

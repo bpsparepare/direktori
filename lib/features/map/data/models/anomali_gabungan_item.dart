@@ -27,9 +27,18 @@ class AnomaliGabunganItem {
   final DateTime? verifiedAt;
   final String? verifiedOleh;
   final bool bolehVerifikasi;
+
+  /// Status verifikasi admin: 'verified', 'rejected', atau null (belum ada
+  /// tindakan admin).
+  final String? verifikasiStatus;
   final bool adaKonfirmasi;
   final String jenisSemua;
   final String keteranganSemua;
+
+  /// True bila kasus ini perlu ditindaklanjuti oleh user yang login (definisi
+  /// sama dengan badge tab): petugas belum merespons, atau -- untuk admin --
+  /// sudah dijawab petugas tapi belum diverifikasi/ditolak.
+  final bool perluTindakLanjut;
 
   const AnomaliGabunganItem({
     required this.sumber,
@@ -57,9 +66,11 @@ class AnomaliGabunganItem {
     this.verifiedAt,
     this.verifiedOleh,
     this.bolehVerifikasi = false,
+    this.verifikasiStatus,
     this.adaKonfirmasi = false,
     this.jenisSemua = '',
     this.keteranganSemua = '',
+    this.perluTindakLanjut = false,
   });
 
   factory AnomaliGabunganItem.fromJson(Map<String, dynamic> json) {
@@ -104,9 +115,11 @@ class AnomaliGabunganItem {
       verifiedAt: parseDate(json['verified_at']),
       verifiedOleh: nullableString(json['verified_oleh']),
       bolehVerifikasi: json['boleh_verifikasi'] == true,
+      verifikasiStatus: nullableString(json['verifikasi_status']),
       adaKonfirmasi: json['ada_konfirmasi'] == true,
       jenisSemua: (json['jenis_semua'] ?? '').toString(),
       keteranganSemua: (json['keterangan_semua'] ?? '').toString(),
+      perluTindakLanjut: json['perlu_tindak_lanjut'] == true,
     );
   }
 
@@ -128,7 +141,8 @@ class AnomaliGabunganItem {
   /// petugas yang login (dipakai form edit di detail sheet).
   bool get sudahDitindaklanjuti => jumlahRespons > 0;
 
-  bool get isVerified => verifiedAt != null;
+  bool get isVerified => verifikasiStatus == 'verified';
+  bool get isRejected => verifikasiStatus == 'rejected';
 
   /// Status yang ditampilkan di kartu (satu chip). Diselaraskan dengan
   /// [sudahDitindaklanjuti] supaya tidak kontradiktif (mis. latar hijau tapi

@@ -97,22 +97,31 @@ class AnomalyService {
         .toList();
   }
 
-  /// Jumlah notifikasi konfirmasi (kasus di wilayah petugas/PML yang ada
-  /// 'konfirmasi' dari admin dan belum ditanggapi). 0 untuk admin.
-  Future<int> fetchKonfirmasiCount() async {
-    final response = await _client.rpc('get_anomali_konfirmasi_count');
-    if (response is int) return response;
-    return int.tryParse(response?.toString() ?? '') ?? 0;
+  /// Jumlah anomali pusat yang perlu ditanggapi oleh user yang login
+  /// (untuk badge tab Anomali). Maknanya menyesuaikan role -- lihat
+  /// get_anomali_pusat_notif_count() di
+  /// supabase/migrations/20260708180000_anomali_pusat_notif_count.sql.
+  Future<int> fetchNotifCount() async {
+    try {
+      final response = await _client.rpc('get_anomali_pusat_notif_count');
+      if (response is int) return response;
+      return int.tryParse(response?.toString() ?? '') ?? 0;
+    } catch (e) {
+      debugPrint('[AnomalyService] fetchNotifCount ERROR: $e');
+      return 0;
+    }
   }
 
-  /// Set / batalkan verifikasi PML atas satu kasus anomali pusat.
-  /// Hanya berhasil untuk role pengawas/admin (divalidasi di server).
+  /// Set keputusan verifikasi admin atas satu kasus anomali pusat.
+  /// [status]: 'verified' (setujui), 'rejected' (tolak), atau null untuk
+  /// membatalkan keputusan. Hanya berhasil untuk role pengawas/admin
+  /// (divalidasi di server).
   Future<void> setVerifikasi({
     required String scope,
     required String assignmentId,
     required String namaSubjek,
     required String kategoriKode,
-    required bool verified,
+    required String? status,
     String? catatan,
   }) async {
     await _client.rpc('set_anomali_pusat_verifikasi', params: {
@@ -120,7 +129,7 @@ class AnomalyService {
       'p_assignment_id': assignmentId,
       'p_nama_subjek': namaSubjek,
       'p_kategori_kode': kategoriKode,
-      'p_verified': verified,
+      'p_status': status,
       'p_catatan': catatan,
     });
   }

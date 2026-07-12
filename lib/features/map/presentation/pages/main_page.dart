@@ -17,6 +17,7 @@ import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
 import '../bloc/map_state.dart';
 import '../../data/repositories/map_repository_impl.dart';
+import '../../data/services/anomali_service.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
 import '../../domain/entities/place.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
@@ -41,6 +42,9 @@ class _MainPageState extends State<MainPage> {
   List<Place> _allPlaces = [];
   String? _se2026Role;
 
+  final AnomalyService _anomaliService = AnomalyService();
+  int _anomaliNotif = 0;
+
   @override
   void initState() {
     super.initState();
@@ -49,6 +53,13 @@ class _MainPageState extends State<MainPage> {
     _bottomNavIndex = _selectedIndex <= 2 ? _selectedIndex : 0;
     _loadPlaces();
     _checkUserRole();
+    _loadAnomaliNotif();
+  }
+
+  /// Muat ulang jumlah anomali yang perlu ditanggapi (badge tab Anomali).
+  Future<void> _loadAnomaliNotif() async {
+    final count = await _anomaliService.fetchNotifCount();
+    if (mounted) setState(() => _anomaliNotif = count);
   }
 
   Future<void> _checkUserRole() async {
@@ -276,6 +287,9 @@ class _MainPageState extends State<MainPage> {
         _bottomNavIndex = index;
       }
     });
+    // Segarkan badge tiap kali berpindah tab -- menangkap perubahan setelah
+    // user menanggapi anomali lalu keluar dari tab Anomali.
+    _loadAnomaliNotif();
   }
 
   Future<void> _openDocumentationUploadFromExplore() async {
@@ -575,8 +589,12 @@ class _MainPageState extends State<MainPage> {
               icon: Icon(Icons.dashboard),
               label: 'Dashboard',
             ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.report_problem_outlined),
+            BottomNavigationBarItem(
+              icon: Badge(
+                isLabelVisible: _anomaliNotif > 0,
+                label: Text(_anomaliNotif > 99 ? '99+' : '$_anomaliNotif'),
+                child: const Icon(Icons.report_problem_outlined),
+              ),
               label: 'Anomali',
             ),
           ],

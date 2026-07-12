@@ -21,6 +21,24 @@
 -- kec/desa/sls, kategori_nama, status_asal, petugas, link_fasih).
 -- null dan string kosong dianggap sama supaya tidak jadi noise.
 
+-- Helper: jsonb array 1 elemen {field, lama, baru} kalau nilai berbeda,
+-- array kosong kalau sama (null == '' dianggap sama). Dipakai dengan
+-- operator || untuk menyusun daftar perubahan tanpa VALUES korelasi.
+create or replace function public._diff_anomali_pusat(
+  p_field text, p_lama text, p_baru text
+)
+returns jsonb
+language sql
+immutable
+as $diff$
+  select case
+    when coalesce(p_lama, '') <> coalesce(p_baru, '')
+      then jsonb_build_array(jsonb_build_object(
+             'field', p_field, 'lama', p_lama, 'baru', p_baru))
+    else '[]'::jsonb
+  end;
+$diff$;
+
 create or replace function public.compare_anomali_pusat_batch(
   p_scope text,
   p_rows jsonb
@@ -103,27 +121,19 @@ begin
                                'lama', 'nonaktif',
                                'baru', 'aktif'))
                  end)
-                ||
-                coalesce((
-                    select jsonb_agg(jsonb_build_object(
-                               'field', f.nama, 'lama', f.lama, 'baru', f.baru))
-                    from (values
-                        ('nama_provinsi', t.nama_provinsi, d.nama_provinsi),
-                        ('nama_kab',      t.nama_kab,      d.nama_kab),
-                        ('kode_kec',      t.kode_kec,      d.kode_kec),
-                        ('nama_kec',      t.nama_kec,      d.nama_kec),
-                        ('kode_desa',     t.kode_desa,     d.kode_desa),
-                        ('nama_desa',     t.nama_desa,     d.nama_desa),
-                        ('kode_sls',      t.kode_sls,      d.kode_sls),
-                        ('sub_sls',       t.sub_sls,       d.sub_sls),
-                        ('kategori_nama', t.kategori_nama, d.kategori_nama),
-                        ('status_asal',   t.status_asal,   d.status_asal),
-                        ('id_petugas',    t.id_petugas_asal,    d.id_petugas_asal),
-                        ('email_petugas', t.email_petugas_asal, d.email_petugas_asal),
-                        ('link_fasih',    t.link_fasih,    d.link_fasih)
-                    ) as f(nama, lama, baru)
-                    where coalesce(f.lama, '') <> coalesce(f.baru, '')
-                ), '[]'::jsonb)
+                || public._diff_anomali_pusat('nama_provinsi', t.nama_provinsi, d.nama_provinsi)
+                || public._diff_anomali_pusat('nama_kab',      t.nama_kab,      d.nama_kab)
+                || public._diff_anomali_pusat('kode_kec',      t.kode_kec,      d.kode_kec)
+                || public._diff_anomali_pusat('nama_kec',      t.nama_kec,      d.nama_kec)
+                || public._diff_anomali_pusat('kode_desa',     t.kode_desa,     d.kode_desa)
+                || public._diff_anomali_pusat('nama_desa',     t.nama_desa,     d.nama_desa)
+                || public._diff_anomali_pusat('kode_sls',      t.kode_sls,      d.kode_sls)
+                || public._diff_anomali_pusat('sub_sls',       t.sub_sls,       d.sub_sls)
+                || public._diff_anomali_pusat('kategori_nama', t.kategori_nama, d.kategori_nama)
+                || public._diff_anomali_pusat('status_asal',   t.status_asal,   d.status_asal)
+                || public._diff_anomali_pusat('id_petugas',    t.id_petugas_asal,    d.id_petugas_asal)
+                || public._diff_anomali_pusat('email_petugas', t.email_petugas_asal, d.email_petugas_asal)
+                || public._diff_anomali_pusat('link_fasih',    t.link_fasih,    d.link_fasih)
             end as diffs
         from dedup d
         left join public.anomali_pusat_temuan t
