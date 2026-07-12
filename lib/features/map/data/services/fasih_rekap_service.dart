@@ -207,8 +207,66 @@ class FasihRekapPayload {
   }
 }
 
+/// Target prelist per wilayah tugas (SLS/sub-SLS) dari se2026_wilayah_tugas.
+class PrelistTargetRecord {
+  final String id;
+  final String pplId;
+  final int prelist;
+
+  const PrelistTargetRecord({
+    required this.id,
+    required this.pplId,
+    required this.prelist,
+  });
+
+  factory PrelistTargetRecord.fromJson(Map<String, dynamic> json) {
+    return PrelistTargetRecord(
+      id: (json['id'] ?? '').toString(),
+      pplId: (json['ppl_id'] ?? '').toString(),
+      prelist: _toInt(json['prelist']),
+    );
+  }
+}
+
 class FasihRekapService {
   final SupabaseClient _client = SupabaseConfig.client;
+
+  /// Ambil target prelist dari se2026_wilayah_tugas.
+  /// [pmlId] membatasi ke wilayah binaan seorang pengawas,
+  /// [pplId] membatasi ke wilayah tugas seorang pendata.
+  Future<List<PrelistTargetRecord>> fetchPrelistTargets({
+    String? pmlId,
+    String? pplId,
+  }) async {
+    const int batchSize = 1000;
+    int start = 0;
+    final all = <PrelistTargetRecord>[];
+
+    while (true) {
+      dynamic query = _client
+          .from('se2026_wilayah_tugas')
+          .select('id, ppl_id, prelist');
+      if (pmlId != null && pmlId.isNotEmpty) {
+        query = query.eq('pml_id', pmlId);
+      }
+      if (pplId != null && pplId.isNotEmpty) {
+        query = query.eq('ppl_id', pplId);
+      }
+      final response = await query.range(start, start + batchSize - 1);
+      if (response is! List) break;
+
+      all.addAll(
+        response.whereType<Map>().map(
+          (item) =>
+              PrelistTargetRecord.fromJson(Map<String, dynamic>.from(item)),
+        ),
+      );
+      if (response.length < batchSize) break;
+      start += batchSize;
+    }
+
+    return all;
+  }
 
   Future<FasihRekapPayload> fetchPendataWilayah({
     String? surveyPeriodId,

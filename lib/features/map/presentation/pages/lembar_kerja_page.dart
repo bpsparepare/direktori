@@ -5,9 +5,9 @@ import '../../data/services/groundcheck_supabase_service.dart';
 
 /// Lembar Kerja: progres pendataan per petugas dengan detail per SLS/sub-SLS.
 ///
-/// - admin    : daftar semua petugas -> detail wilayah (SLS/sub-SLS) petugas
-/// - pengawas : daftar petugas binaan -> detail wilayah petugas
-/// - pendata  : langsung melihat lembar kerja wilayah tugasnya sendiri
+/// - admin    : tabel semua petugas -> tabel wilayah (SLS/sub-SLS) petugas
+/// - pengawas : tabel petugas binaan -> tabel wilayah petugas
+/// - pendata  : langsung melihat tabel wilayah tugasnya sendiri
 class LembarKerjaPage extends StatefulWidget {
   const LembarKerjaPage({super.key});
 
@@ -26,6 +26,16 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
   Se2026UserProfile? _profile;
   FasihRekapPayload _payload = FasihRekapPayload.empty();
   FasihRekapRow? _selectedPetugas;
+
+  /// Target prelist per wilayah (key: id wilayah 16 digit) dan
+  /// agregatnya per petugas (key: id petugas/ppl_id).
+  Map<String, int> _prelistByWilayah = {};
+  Map<String, int> _prelistByPetugas = {};
+  bool _prelistLoaded = false;
+
+  /// State sort tabel. null = urutan default (per kode wilayah / dari server).
+  int? _sortColumnIndex;
+  bool _sortAscending = true;
 
   @override
   void initState() {
@@ -57,7 +67,11 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
         throw Exception('Profil petugas SE2026 tidak ditemukan.');
       }
 
-      final payload = await _fetchPayload(profile);
+      final payloadFuture = _fetchPayload(profile);
+      if (!_prelistLoaded) {
+        await _loadPrelistTargets(profile);
+      }
+      final payload = await payloadFuture;
       if (!mounted) return;
       setState(() {
         _profile = profile;
@@ -111,10 +125,76 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
     }
   }
 
+  Future<void> _loadPrelistTargets(Se2026UserProfile profile) async {
+    final records = await _rekapService.fetchPrelistTargets(
+      pmlId: profile.role == 'pengawas' ? profile.petugasId : null,
+      pplId: profile.role == 'pendata' ? profile.petugasId : null,
+    );
+    final byWilayah = <String, int>{};
+    final byPetugas = <String, int>{};
+    for (final record in records) {
+      if (record.id.isNotEmpty) {
+        byWilayah[record.id] = (byWilayah[record.id] ?? 0) + record.prelist;
+      }
+      if (record.pplId.isNotEmpty) {
+        byPetugas[record.pplId] =
+            (byPetugas[record.pplId] ?? 0) + record.prelist;
+      }
+    }
+    _prelistByWilayah = byWilayah;
+    _prelistByPetugas = byPetugas;
+    _prelistLoaded = true;
+  }
+
+  /// Target prelist untuk satu baris tabel sesuai level yang sedang tampil.
+  int _targetOf(FasihRekapRow row) {
+    return _isPetugasLevel
+        ? (_prelistByPetugas[row.unitId] ?? 0)
+        : (_prelistByWilayah[row.unitId] ?? 0);
+  }
+
+  /// Total target seluruh baris yang sedang tampil.
+  int get _summaryTarget =>
+      _payload.rows.fold(0, (sum, row) => sum + _targetOf(row));
+
+  /// Ambang capaian rendah (di bawah 40%).
+  static const double _lowThreshold = 0.40;
+
+  /// Distribusi baris berdasarkan capaian submitted terhadap target.
+  _AchievementDistribution get _distribution {
+    int below = 0;
+    int atLeast = 0;
+    int noTarget = 0;
+    for (final row in _payload.rows) {
+      final target = _targetOf(row);
+      if (target <= 0) {
+        noTarget++;
+        continue;
+      }
+      final breakdown = _breakdownOf(
+        row.statusCounts,
+        row.totalAssignment,
+        row.totalTerkirim,
+      );
+      final percent = breakdown.submitted / target;
+      if (percent < _lowThreshold) {
+        below++;
+      } else {
+        atLeast++;
+      }
+    }
+    return _AchievementDistribution(
+      below: below,
+      atLeast: atLeast,
+      noTarget: noTarget,
+    );
+  }
+
   void _openPetugas(FasihRekapRow petugas) {
     setState(() {
       _selectedPetugas = petugas;
       _searchController.clear();
+      _resetSort();
     });
     _loadData();
   }
@@ -123,16 +203,21 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
     setState(() {
       _selectedPetugas = null;
       _searchController.clear();
+      _resetSort();
     });
     _loadData();
   }
 
-  Future<bool> _handlePop() async {
-    if (_selectedPetugas != null && _role != 'pendata') {
-      _backToPetugasList();
-      return false;
-    }
-    return true;
+  void _resetSort() {
+    _sortColumnIndex = null;
+    _sortAscending = true;
+  }
+
+  void _onSort(int columnIndex, bool ascending) {
+    setState(() {
+      _sortColumnIndex = columnIndex;
+      _sortAscending = ascending;
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -200,7 +285,9 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
     return PopScope(
       canPop: _selectedPetugas == null || _role == 'pendata',
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) _handlePop();
+        if (!didPop && _selectedPetugas != null && _role != 'pendata') {
+          _backToPetugasList();
+        }
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF3F6FB),
@@ -228,12 +315,11 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
                     children: [
                       _buildSummaryCard(),
                       const SizedBox(height: 12),
+                      _buildDistributionCard(),
+                      const SizedBox(height: 12),
                       _buildSearchField(),
                       const SizedBox(height: 12),
-                      if (_isPetugasLevel)
-                        ..._buildPetugasList()
-                      else
-                        ..._buildWilayahList(),
+                      _buildTableCard(),
                     ],
                   ),
                 ),
@@ -271,9 +357,14 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
   Widget _buildSummaryCard() {
     final summary = _payload.summary;
     final breakdown = _summaryBreakdown;
-    final percent = summary.totalAssignments == 0
-        ? 0.0
-        : breakdown.submitted / summary.totalAssignments;
+    final target = _summaryTarget;
+    // Capaian dibandingkan terhadap target prelist; jika target belum diisi,
+    // pakai total assignment sebagai pembanding.
+    final percent = target > 0
+        ? breakdown.submitted / target
+        : (summary.totalAssignments == 0
+              ? 0.0
+              : breakdown.submitted / summary.totalAssignments);
     final unitLabel = _isPetugasLevel ? 'Petugas' : 'SLS/Sub-SLS';
 
     return Container(
@@ -328,8 +419,11 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${summary.totalUnits} $unitLabel • '
-                      '${breakdown.submitted}/${summary.totalAssignments} submitted',
+                      target > 0
+                          ? '${summary.totalUnits} $unitLabel • '
+                                '${breakdown.submitted} submitted dari target $target'
+                          : '${summary.totalUnits} $unitLabel • '
+                                '${breakdown.submitted}/${summary.totalAssignments} submitted',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.92),
                         fontSize: 13,
@@ -363,6 +457,8 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
           const SizedBox(height: 14),
           Row(
             children: [
+              Expanded(child: _buildSummaryStat('Target', target)),
+              const SizedBox(width: 8),
               Expanded(
                 child: _buildSummaryStat('Submitted', breakdown.submitted),
               ),
@@ -407,6 +503,108 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
     );
   }
 
+  Widget _buildDistributionCard() {
+    final dist = _distribution;
+    final unitLabel = _isPetugasLevel ? 'petugas' : 'SLS/sub-SLS';
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Sebaran Capaian $unitLabel',
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Capaian = submitted dibanding target prelist.',
+            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildDistributionTile(
+                  label: 'Di bawah 40%',
+                  value: dist.below,
+                  color: Colors.red[400]!,
+                  icon: Icons.trending_down_rounded,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildDistributionTile(
+                  label: '40% ke atas',
+                  value: dist.atLeast,
+                  color: const Color(0xFF1D8F5A),
+                  icon: Icons.trending_up_rounded,
+                ),
+              ),
+            ],
+          ),
+          if (dist.noTarget > 0) ...[
+            const SizedBox(height: 10),
+            Text(
+              '${dist.noTarget} $unitLabel belum punya target prelist '
+              '(tidak dihitung).',
+              style: TextStyle(color: Colors.blueGrey[400], fontSize: 12),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDistributionTile({
+    required String label,
+    required int value,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 26),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$value',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.blueGrey[600],
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSearchField() {
     return TextField(
       controller: _searchController,
@@ -438,467 +636,436 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
   }
 
   // ---------------------------------------------------------------------
-  // Level 1: daftar petugas
+  // Tabel
   // ---------------------------------------------------------------------
 
-  List<Widget> _buildPetugasList() {
-    if (_payload.rows.isEmpty) {
-      return [_buildEmptyState('Belum ada data petugas.')];
-    }
-    return [
-      for (final row in _payload.rows) ...[
-        _buildPetugasCard(row),
-        const SizedBox(height: 10),
-      ],
-    ];
-  }
-
-  Widget _buildPetugasCard(FasihRekapRow row) {
-    final breakdown = _breakdownOf(
-      row.statusCounts,
-      row.totalAssignment,
-      row.totalTerkirim,
-    );
-    final percent = row.totalAssignment == 0
-        ? 0.0
-        : breakdown.submitted / row.totalAssignment;
-    final initial = row.title.isEmpty ? '?' : row.title[0].toUpperCase();
-
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: () => _openPetugas(row),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 21,
-                    backgroundColor: _progressColor(
-                      percent,
-                    ).withValues(alpha: 0.15),
-                    child: Text(
-                      initial,
-                      style: TextStyle(
-                        color: _progressColor(percent),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          row.title,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        if (row.subtitle.isNotEmpty && row.subtitle != '-')
-                          Text(
-                            row.subtitle,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.blueGrey[400],
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '${(percent * 100).toStringAsFixed(0)}%',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: _progressColor(percent),
-                        ),
-                      ),
-                      Text(
-                        '${breakdown.submitted}/${row.totalAssignment}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blueGrey[400],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: Colors.blueGrey[300],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: percent.clamp(0.0, 1.0),
-                  minHeight: 6,
-                  backgroundColor: const Color(0xFFE8EEF6),
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    _progressColor(percent),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: _buildBreakdownChips(breakdown),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBreakdownChips(_StatusBreakdown breakdown) {
-    Widget chip(String label, int value, Color color) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          '$label: $value',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: color,
-          ),
-        ),
-      );
-    }
-
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
-        chip('Submitted', breakdown.submitted, const Color(0xFF1D8F5A)),
-        chip('Draft', breakdown.draft, Colors.orange[800]!),
-        chip('Open', breakdown.open, Colors.blueGrey[500]!),
-      ],
-    );
-  }
-
-  // ---------------------------------------------------------------------
-  // Level 2: detail per SLS / sub-SLS
-  // ---------------------------------------------------------------------
-
-  List<Widget> _buildWilayahList() {
-    if (_payload.rows.isEmpty) {
-      return [_buildEmptyState('Belum ada wilayah tugas untuk ditampilkan.')];
-    }
-
-    final groups = _groupBySls(_payload.rows);
-    return [
-      for (final group in groups) ...[
-        _buildSlsCard(group),
-        const SizedBox(height: 10),
-      ],
-    ];
-  }
-
-  /// Kelompokkan baris wilayah (id 16 digit) per SLS (14 digit pertama).
-  List<_SlsGroup> _groupBySls(List<FasihRekapRow> rows) {
-    final map = <String, _SlsGroup>{};
-    for (final row in rows) {
-      final unitId = row.unitId;
-      final slsKey = unitId.length >= 16 ? unitId.substring(0, 14) : unitId;
-      map
-          .putIfAbsent(
-            slsKey,
-            () => _SlsGroup(idSls: slsKey, title: row.title, subtitle: row.subtitle),
-          )
-          .rows
-          .add(row);
-    }
-    return map.values.toList();
-  }
-
-  Widget _buildSlsCard(_SlsGroup group) {
-    final breakdown = _breakdownOf(
-      group.mergedStatusCounts,
-      group.totalAssignment,
-      group.totalTerkirim,
-    );
-    final percent = group.totalAssignment == 0
-        ? 0.0
-        : breakdown.submitted / group.totalAssignment;
-    final kodeSls = group.idSls.length >= 14
-        ? group.idSls.substring(10, 14)
-        : group.idSls;
-    final hasMultipleSub = group.rows.length > 1;
-
-    final header = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F4C81).withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'SLS $kodeSls',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF0F4C81),
-                ),
-              ),
-            ),
-            if (hasMultipleSub) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '${group.rows.length} Sub-SLS',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.orange[800],
-                  ),
-                ),
-              ),
-            ],
-            const Spacer(),
-            Text(
-              '${(percent * 100).toStringAsFixed(0)}%',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                color: _progressColor(percent),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          group.title,
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-        ),
-        if (group.subtitle.isNotEmpty && group.subtitle != '-')
-          Text(
-            group.subtitle,
-            style: TextStyle(fontSize: 12, color: Colors.blueGrey[400]),
-          ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: percent.clamp(0.0, 1.0),
-                  minHeight: 6,
-                  backgroundColor: const Color(0xFFE8EEF6),
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    _progressColor(percent),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              '${breakdown.submitted}/${group.totalAssignment}',
-              style: TextStyle(fontSize: 12, color: Colors.blueGrey[500]),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        _buildBreakdownChips(breakdown),
-      ],
-    );
-
-    if (!hasMultipleSub) {
-      final row = group.rows.first;
-      return Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            header,
-            if (row.statusCounts.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              _buildStatusChips(row.statusCounts),
-            ],
-          ],
-        ),
-      );
-    }
-
+  Widget _buildTableCard() {
     return Container(
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
-          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          title: header,
-          children: [
-            for (final row in group.rows) _buildSubSlsRow(row),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSubSlsRow(FasihRekapRow row) {
-    final breakdown = _breakdownOf(
-      row.statusCounts,
-      row.totalAssignment,
-      row.totalTerkirim,
-    );
-    final percent = row.totalAssignment == 0
-        ? 0.0
-        : breakdown.submitted / row.totalAssignment;
-    final kodeSubsls = row.unitId.length >= 16
-        ? row.unitId.substring(14, 16)
-        : '-';
-
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF6F9FD),
-        borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 3,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Sub-SLS $kodeSubsls',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.orange[800],
-                  ),
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '${breakdown.submitted}/${row.totalAssignment}',
-                style: TextStyle(fontSize: 12, color: Colors.blueGrey[500]),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${(percent * 100).toStringAsFixed(0)}%',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: _progressColor(percent),
-                ),
-              ),
-            ],
+          Text(
+            _isPetugasLevel ? 'Tabel Per Petugas' : 'Tabel Per SLS/Sub-SLS',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: percent.clamp(0.0, 1.0),
-              minHeight: 5,
-              backgroundColor: const Color(0xFFE8EEF6),
-              valueColor: AlwaysStoppedAnimation<Color>(
-                _progressColor(percent),
-              ),
-            ),
+          const SizedBox(height: 4),
+          Text(
+            _isPetugasLevel
+                ? 'Ketuk baris petugas untuk detail per SLS/sub-SLS. '
+                      '% = submitted dibanding target prelist.'
+                : 'Target = prelist wilayah. % = submitted dibanding target. '
+                      'Submitted = semua status selain OPEN dan DRAFT.',
+            style: TextStyle(color: Colors.grey[600], fontSize: 12),
           ),
-          if (row.statusCounts.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _buildStatusChips(row.statusCounts),
-          ],
+          const SizedBox(height: 12),
+          if (_payload.rows.isEmpty)
+            _buildEmptyState(
+              _isPetugasLevel
+                  ? 'Belum ada data petugas.'
+                  : 'Belum ada wilayah tugas untuk ditampilkan.',
+            )
+          else if (_isPetugasLevel)
+            _buildPetugasTable()
+          else
+            _buildWilayahTable(),
         ],
       ),
     );
   }
 
-  Widget _buildStatusChips(Map<String, int> statusCounts) {
-    final entries = statusCounts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
-        for (final entry in entries)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: _statusColor(entry.key).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              '${entry.key}: ${entry.value}',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: _statusColor(entry.key),
+  /// Jumlahkan seluruh baris yang tampil untuk baris "Total" di bawah tabel.
+  _TableTotals _totalsOf(List<FasihRekapRow> rows) {
+    int target = 0;
+    int assignment = 0;
+    int submitted = 0;
+    int draft = 0;
+    int open = 0;
+    for (final row in rows) {
+      final breakdown = _breakdownOf(
+        row.statusCounts,
+        row.totalAssignment,
+        row.totalTerkirim,
+      );
+      target += _targetOf(row);
+      assignment += row.totalAssignment;
+      submitted += breakdown.submitted;
+      draft += breakdown.draft;
+      open += breakdown.open;
+    }
+    return _TableTotals(
+      target: target,
+      assignment: assignment,
+      submitted: submitted,
+      draft: draft,
+      open: open,
+    );
+  }
+
+  DataCell _totalLabelCell(String label) {
+    return DataCell(
+      Text(
+        label,
+        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+      ),
+    );
+  }
+
+  List<DataCell> _totalNumberCells(_TableTotals totals) {
+    return [
+      _numCell(totals.target, color: const Color(0xFF0F4C81)),
+      _numCell(totals.assignment),
+      _numCell(totals.submitted, color: const Color(0xFF1D8F5A)),
+      _numCell(totals.draft, color: Colors.orange[800]),
+      _numCell(totals.open, color: Colors.blueGrey[500]),
+      _percentCell(totals.submitted, totals.target),
+    ];
+  }
+
+  Widget _buildPetugasTable() {
+    final totals = _totalsOf(_payload.rows);
+    final rows = [..._payload.rows];
+    if (_sortColumnIndex != null) {
+      _sortRows(rows, (row) => _petugasSortValue(row, _sortColumnIndex!));
+    }
+    return _fullWidthScroll(
+      DataTable(
+        showCheckboxColumn: false,
+        horizontalMargin: 12,
+        columnSpacing: 18,
+        headingRowHeight: 48,
+        dataRowMinHeight: 46,
+        dataRowMaxHeight: 60,
+        sortColumnIndex: _sortColumnIndex,
+        sortAscending: _sortAscending,
+        headingRowColor: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
+        columns: [
+          DataColumn(onSort: _onSort, label: const Text('Petugas')),
+          _numColumn('Target'),
+          _numColumn('Total'),
+          _numColumn('Submitted'),
+          _numColumn('Draft'),
+          _numColumn('Open'),
+          _numColumn('%'),
+        ],
+        rows: rows.map((row) {
+          final breakdown = _breakdownOf(
+            row.statusCounts,
+            row.totalAssignment,
+            row.totalTerkirim,
+          );
+          final target = _targetOf(row);
+          return DataRow(
+            onSelectChanged: (_) => _openPetugas(row),
+            cells: [
+              DataCell(
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 190),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            row.title,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (row.subtitle.isNotEmpty && row.subtitle != '-')
+                            Text(
+                              row.subtitle,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.blueGrey[400],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.chevron_right_rounded, size: 18),
+                  ],
+                ),
               ),
-            ),
+              _numCell(target, color: const Color(0xFF0F4C81)),
+              _numCell(row.totalAssignment),
+              _numCell(breakdown.submitted, color: const Color(0xFF1D8F5A)),
+              _numCell(breakdown.draft, color: Colors.orange[800]),
+              _numCell(breakdown.open, color: Colors.blueGrey[500]),
+              _percentCell(breakdown.submitted, target),
+            ],
+          );
+        }).toList()..add(
+          DataRow(
+            color: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
+            cells: [
+              _totalLabelCell('Total (${_payload.rows.length} petugas)'),
+              ..._totalNumberCells(totals),
+            ],
           ),
-      ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWilayahTable() {
+    final rows = [..._payload.rows];
+    if (_sortColumnIndex != null) {
+      _sortRows(rows, (row) => _wilayahSortValue(row, _sortColumnIndex!));
+    } else {
+      // Default: urutkan per kode wilayah agar sub-SLS dalam SLS yang sama
+      // berdekatan.
+      rows.sort((a, b) => a.unitId.compareTo(b.unitId));
+    }
+    final totals = _totalsOf(rows);
+
+    return _fullWidthScroll(
+      DataTable(
+        showCheckboxColumn: false,
+        horizontalMargin: 12,
+        columnSpacing: 18,
+        headingRowHeight: 48,
+        dataRowMinHeight: 46,
+        dataRowMaxHeight: 60,
+        sortColumnIndex: _sortColumnIndex,
+        sortAscending: _sortAscending,
+        headingRowColor: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
+        columns: [
+          DataColumn(onSort: _onSort, label: const Text('SLS')),
+          DataColumn(onSort: _onSort, label: const Text('Sub')),
+          DataColumn(onSort: _onSort, label: const Text('Nama SLS')),
+          _numColumn('Target'),
+          _numColumn('Total'),
+          _numColumn('Submitted'),
+          _numColumn('Draft'),
+          _numColumn('Open'),
+          _numColumn('%'),
+        ],
+        rows: rows.map((row) {
+          final breakdown = _breakdownOf(
+            row.statusCounts,
+            row.totalAssignment,
+            row.totalTerkirim,
+          );
+          final target = _targetOf(row);
+          final kodeSls = row.unitId.length >= 14
+              ? row.unitId.substring(10, 14)
+              : row.unitId;
+          final kodeSubsls = row.unitId.length >= 16
+              ? row.unitId.substring(14, 16)
+              : '-';
+          return DataRow(
+            cells: [
+              DataCell(
+                Text(
+                  kodeSls,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0F4C81),
+                  ),
+                ),
+              ),
+              DataCell(Text(kodeSubsls)),
+              DataCell(
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 200),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        row.title,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      if (row.subtitle.isNotEmpty && row.subtitle != '-')
+                        Text(
+                          row.subtitle,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.blueGrey[400],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              _numCell(target, color: const Color(0xFF0F4C81)),
+              _numCell(row.totalAssignment),
+              _numCell(breakdown.submitted, color: const Color(0xFF1D8F5A)),
+              _numCell(breakdown.draft, color: Colors.orange[800]),
+              _numCell(breakdown.open, color: Colors.blueGrey[500]),
+              _percentCell(breakdown.submitted, target),
+            ],
+          );
+        }).toList()..add(
+          DataRow(
+            color: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
+            cells: [
+              _totalLabelCell('Total'),
+              const DataCell(Text('')),
+              DataCell(
+                Text(
+                  '${rows.length} SLS/Sub-SLS',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              ..._totalNumberCells(totals),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Persentase capaian submitted terhadap target prelist.
+  /// Jika target belum diisi (0), tampilkan '-'.
+  DataCell _percentCell(int submitted, int target) {
+    if (target <= 0) {
+      return DataCell(
+        Text('-', style: TextStyle(color: Colors.blueGrey[300])),
+      );
+    }
+    final percent = submitted / target;
+    return DataCell(
+      Text(
+        '${(percent * 100).toStringAsFixed(0)}%',
+        style: TextStyle(
+          fontWeight: FontWeight.w800,
+          color: _progressColor(percent),
+        ),
+      ),
+    );
+  }
+
+  /// Bungkus tabel agar minimal selebar layar (mengisi seluruh lebar),
+  /// namun tetap bisa digeser horizontal jika isinya lebih lebar.
+  Widget _fullWidthScroll(Widget table) {
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: constraints.maxWidth),
+          child: table,
+        ),
+      ),
+    );
+  }
+
+  DataColumn _numColumn(String label) {
+    return DataColumn(
+      numeric: true,
+      onSort: _onSort,
+      label: Text(
+        label,
+        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+      ),
+    );
+  }
+
+  /// Urutkan salinan baris sesuai arah sort aktif.
+  void _sortRows(
+    List<FasihRekapRow> rows,
+    Comparable<dynamic> Function(FasihRekapRow) selector,
+  ) {
+    rows.sort((a, b) {
+      final cmp = Comparable.compare(selector(a), selector(b));
+      return _sortAscending ? cmp : -cmp;
+    });
+  }
+
+  /// Nilai sortir kolom tabel petugas (indeks kolom sesuai urutan header).
+  Comparable<dynamic> _petugasSortValue(FasihRekapRow row, int index) {
+    final breakdown = _breakdownOf(
+      row.statusCounts,
+      row.totalAssignment,
+      row.totalTerkirim,
+    );
+    final target = _targetOf(row);
+    switch (index) {
+      case 1:
+        return target;
+      case 2:
+        return row.totalAssignment;
+      case 3:
+        return breakdown.submitted;
+      case 4:
+        return breakdown.draft;
+      case 5:
+        return breakdown.open;
+      case 6:
+        // Target 0 tak punya persentase; taruh paling bawah saat menaik.
+        return target > 0 ? breakdown.submitted / target : -1.0;
+      default:
+        return row.title.toLowerCase();
+    }
+  }
+
+  /// Nilai sortir kolom tabel wilayah (indeks kolom sesuai urutan header).
+  Comparable<dynamic> _wilayahSortValue(FasihRekapRow row, int index) {
+    final breakdown = _breakdownOf(
+      row.statusCounts,
+      row.totalAssignment,
+      row.totalTerkirim,
+    );
+    final target = _targetOf(row);
+    switch (index) {
+      case 1:
+        return row.unitId.length >= 16 ? row.unitId.substring(14, 16) : '';
+      case 2:
+        return row.title.toLowerCase();
+      case 3:
+        return target;
+      case 4:
+        return row.totalAssignment;
+      case 5:
+        return breakdown.submitted;
+      case 6:
+        return breakdown.draft;
+      case 7:
+        return breakdown.open;
+      case 8:
+        return target > 0 ? breakdown.submitted / target : -1.0;
+      default:
+        // Kolom SLS: pakai unitId penuh agar sub-SLS tetap berkelompok.
+        return row.unitId;
+    }
+  }
+
+  DataCell _numCell(int value, {Color? color}) {
+    return DataCell(
+      Text(
+        value.toString(),
+        style: TextStyle(fontWeight: FontWeight.w600, color: color),
+      ),
     );
   }
 
   Widget _buildEmptyState(String message) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        children: [
-          Icon(Icons.inbox_rounded, size: 48, color: Colors.blueGrey[200]),
-          const SizedBox(height: 12),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.blueGrey[500]),
-          ),
-        ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(Icons.inbox_rounded, size: 48, color: Colors.blueGrey[200]),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.blueGrey[500]),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -909,45 +1076,34 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
     if (percent >= 0.3) return Colors.orange[700]!;
     return Colors.red[400]!;
   }
-
-  Color _statusColor(String status) {
-    final upper = status.toUpperCase();
-    if (upper.contains('APPROV') || upper.contains('TERKIRIM')) {
-      return const Color(0xFF1D8F5A);
-    }
-    if (upper.contains('SUBMIT')) return const Color(0xFF2D77D0);
-    if (upper.contains('REJECT') || upper.contains('TOLAK')) {
-      return Colors.red[600]!;
-    }
-    if (upper.contains('DRAFT')) return Colors.orange[800]!;
-    if (upper.contains('OPEN')) return Colors.blueGrey[500]!;
-    return const Color(0xFF6B4FBB);
-  }
 }
 
-class _SlsGroup {
-  final String idSls;
-  final String title;
-  final String subtitle;
-  final List<FasihRekapRow> rows = [];
+class _AchievementDistribution {
+  final int below;
+  final int atLeast;
+  final int noTarget;
 
-  _SlsGroup({required this.idSls, required this.title, required this.subtitle});
+  const _AchievementDistribution({
+    required this.below,
+    required this.atLeast,
+    required this.noTarget,
+  });
+}
 
-  int get totalAssignment =>
-      rows.fold(0, (sum, row) => sum + row.totalAssignment);
+class _TableTotals {
+  final int target;
+  final int assignment;
+  final int submitted;
+  final int draft;
+  final int open;
 
-  int get totalTerkirim => rows.fold(0, (sum, row) => sum + row.totalTerkirim);
-
-  /// Gabungan rincian status seluruh sub-SLS dalam SLS ini.
-  Map<String, int> get mergedStatusCounts {
-    final merged = <String, int>{};
-    for (final row in rows) {
-      row.statusCounts.forEach((status, count) {
-        merged[status] = (merged[status] ?? 0) + count;
-      });
-    }
-    return merged;
-  }
+  const _TableTotals({
+    required this.target,
+    required this.assignment,
+    required this.submitted,
+    required this.draft,
+    required this.open,
+  });
 }
 
 class _StatusBreakdown {

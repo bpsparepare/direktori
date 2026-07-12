@@ -1196,6 +1196,18 @@ class _AnomaliPageState extends State<AnomaliPage> {
   Widget _buildAnomaliTile(AnomaliGabunganItem item, int index) {
     final sudahDiperiksa = item.sudahDitindaklanjuti;
     final accentColor = _sumberColor(item.sumber);
+    // Mode compact untuk layar sempit (mobile): nama dapat baris penuh, chip
+    // status pindah ke baris bawah agar tidak menjepit nama.
+    final compact = MediaQuery.of(context).size.width < 600;
+    // Di mobile chip status cukup ikon saja supaya ringkas.
+    final statusChips = <Widget>[
+      _buildStatusChip(item.statusEfektif, iconOnly: compact),
+      if (item.adaKonfirmasi) _buildKonfirmasiBadge(iconOnly: compact),
+      if (item.isVerified)
+        _buildVerifiedBadge(iconOnly: compact)
+      else if (item.isRejected)
+        _buildRejectedBadge(iconOnly: compact),
+    ];
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1219,15 +1231,15 @@ class _AnomaliPageState extends State<AnomaliPage> {
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.all(13),
+            padding: EdgeInsets.all(compact ? 11 : 13),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  width: 38,
-                  height: 38,
+                  width: compact ? 30 : 38,
+                  height: compact ? 30 : 38,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(compact ? 10 : 12),
                     gradient: LinearGradient(
                       colors: [accentColor, accentColor.withValues(alpha: 0.6)],
                     ),
@@ -1235,14 +1247,14 @@ class _AnomaliPageState extends State<AnomaliPage> {
                   alignment: Alignment.center,
                   child: Text(
                     '${index + 1}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white,
-                      fontSize: 13,
+                      fontSize: compact ? 12 : 13,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
-                const SizedBox(width: 11),
+                SizedBox(width: compact ? 9 : 11),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1265,29 +1277,22 @@ class _AnomaliPageState extends State<AnomaliPage> {
                           Expanded(
                             child: Text(
                               item.subjekLabel,
-                              style: const TextStyle(
-                                fontSize: 15,
+                              style: TextStyle(
+                                fontSize: compact ? 14 : 15,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF10243E),
+                                color: const Color(0xFF10243E),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          _buildStatusChip(item.statusEfektif),
-                          if (item.adaKonfirmasi) ...[
+                          // Chip status di kanan atas, sebaris nama. Di mobile
+                          // chip berupa ikon-saja jadi tidak menjepit nama.
+                          for (final chip in statusChips) ...[
                             const SizedBox(width: 6),
-                            _buildKonfirmasiBadge(),
-                          ],
-                          if (item.isVerified) ...[
-                            const SizedBox(width: 6),
-                            _buildVerifiedBadge(),
-                          ] else if (item.isRejected) ...[
-                            const SizedBox(width: 6),
-                            _buildRejectedBadge(),
+                            chip,
                           ],
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: compact ? 5 : 4),
                       Text(
                         item.wilayahLengkapLabel,
                         style: TextStyle(
@@ -1308,7 +1313,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
                           color: Colors.blueGrey[600],
                         ),
                       ),
-                      const SizedBox(height: 9),
+                      SizedBox(height: compact ? 8 : 9),
                       Wrap(
                         spacing: 6,
                         runSpacing: 6,
@@ -1370,24 +1375,39 @@ class _AnomaliPageState extends State<AnomaliPage> {
     }
   }
 
-  Widget _buildKonfirmasiBadge() {
+  /// Chip label+ikon berwarna. [iconOnly] -> tampilkan ikon saja (mobile).
+  Widget _buildChip({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required Color bg,
+    double iconSize = 13,
+    bool iconOnly = false,
+  }) {
+    if (iconOnly) {
+      return Container(
+        padding: const EdgeInsets.all(5),
+        decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+        child: Icon(icon, size: iconSize, color: color),
+      );
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFF59E0B).withValues(alpha: 0.16),
+        color: bg,
         borderRadius: BorderRadius.circular(30),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: const [
-          Icon(Icons.campaign_rounded, size: 13, color: Color(0xFFB45309)),
-          SizedBox(width: 5),
+        children: [
+          Icon(icon, size: iconSize, color: color),
+          const SizedBox(width: 5),
           Text(
-            'Konfirmasi',
+            label,
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: Color(0xFFB45309),
+              color: color,
             ),
           ),
         ],
@@ -1395,53 +1415,33 @@ class _AnomaliPageState extends State<AnomaliPage> {
     );
   }
 
-  Widget _buildVerifiedBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F9D58).withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(30),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: const [
-          Icon(Icons.verified_user_rounded, size: 13, color: Color(0xFF0F9D58)),
-          SizedBox(width: 5),
-          Text(
-            'Terverifikasi',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF0F9D58),
-            ),
-          ),
-        ],
-      ),
+  Widget _buildKonfirmasiBadge({bool iconOnly = false}) {
+    return _buildChip(
+      icon: Icons.campaign_rounded,
+      label: 'Konfirmasi',
+      color: const Color(0xFFB45309),
+      bg: const Color(0xFFF59E0B).withValues(alpha: 0.16),
+      iconOnly: iconOnly,
     );
   }
 
-  Widget _buildRejectedBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFD1435B).withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(30),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: const [
-          Icon(Icons.gpp_bad_rounded, size: 13, color: Color(0xFFD1435B)),
-          SizedBox(width: 5),
-          Text(
-            'Ditolak',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFFD1435B),
-            ),
-          ),
-        ],
-      ),
+  Widget _buildVerifiedBadge({bool iconOnly = false}) {
+    return _buildChip(
+      icon: Icons.verified_user_rounded,
+      label: 'Terverifikasi',
+      color: const Color(0xFF0F9D58),
+      bg: const Color(0xFF0F9D58).withValues(alpha: 0.12),
+      iconOnly: iconOnly,
+    );
+  }
+
+  Widget _buildRejectedBadge({bool iconOnly = false}) {
+    return _buildChip(
+      icon: Icons.gpp_bad_rounded,
+      label: 'Ditolak',
+      color: const Color(0xFFD1435B),
+      bg: const Color(0xFFD1435B).withValues(alpha: 0.12),
+      iconOnly: iconOnly,
     );
   }
 
@@ -1492,29 +1492,15 @@ class _AnomaliPageState extends State<AnomaliPage> {
     }
   }
 
-  Widget _buildStatusChip(String status) {
+  Widget _buildStatusChip(String status, {bool iconOnly = false}) {
     final color = _statusColor(status);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(30),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(_statusIcon(status), size: 12, color: color),
-          const SizedBox(width: 4),
-          Text(
-            _prettyOption(status),
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
+    return _buildChip(
+      icon: _statusIcon(status),
+      label: _prettyOption(status),
+      color: color,
+      bg: color.withValues(alpha: 0.12),
+      iconSize: 12,
+      iconOnly: iconOnly,
     );
   }
 

@@ -108,29 +108,32 @@ class _AnomaliPusatPageState extends State<AnomaliPusatPage> {
   }
 
   List<String> get _kategoriOptions {
-    final vals = _items
-        .map((e) => e.kategori)
-        .where((v) => v.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final vals =
+        _items
+            .map((e) => e.kategori)
+            .where((v) => v.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
     return [_allKategori, ...vals];
   }
 
   List<String> get _statusOptions {
-    final vals = _items
-        .map((e) => e.statusText)
-        .where((v) => v.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final vals =
+        _items
+            .map((e) => e.statusText)
+            .where((v) => v.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
     return [_allStatus, ...vals];
   }
 
   List<AnomaliPusatItem> get _filtered {
     final q = _query.trim().toLowerCase();
     final result = _items.where((item) {
-      if (_selectedKategori != _allKategori && item.kategori != _selectedKategori) {
+      if (_selectedKategori != _allKategori &&
+          item.kategori != _selectedKategori) {
         return false;
       }
       if (_selectedStatus != _allStatus && item.statusText != _selectedStatus) {
@@ -171,37 +174,37 @@ class _AnomaliPusatPageState extends State<AnomaliPusatPage> {
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : _error != null
-                  ? _buildErrorState()
-                  : RefreshIndicator(
-                      onRefresh: _loadData,
-                      child: CustomScrollView(
-                        controller: _scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        slivers: [
-                          SliverToBoxAdapter(child: _buildHero()),
-                          SliverToBoxAdapter(child: _buildSearch()),
-                          SliverToBoxAdapter(
-                            child: _buildSectionHeader(items.length),
-                          ),
-                          if (items.isEmpty)
-                            SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: _buildEmpty(),
-                            )
-                          else
-                            SliverPadding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                              sliver: SliverList.separated(
-                                itemCount: items.length,
-                                itemBuilder: (_, i) => _buildTile(items[i], i),
-                                separatorBuilder: (_, __) =>
-                                    const SizedBox(height: 12),
-                              ),
-                            ),
-                          SliverToBoxAdapter(child: _buildFooter()),
-                        ],
+              ? _buildErrorState()
+              : RefreshIndicator(
+                  onRefresh: _loadData,
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverToBoxAdapter(child: _buildHero()),
+                      SliverToBoxAdapter(child: _buildSearch()),
+                      SliverToBoxAdapter(
+                        child: _buildSectionHeader(items.length),
                       ),
-                    ),
+                      if (items.isEmpty)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _buildEmpty(),
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          sliver: SliverList.separated(
+                            itemCount: items.length,
+                            itemBuilder: (_, i) => _buildTile(items[i], i),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 12),
+                          ),
+                        ),
+                      SliverToBoxAdapter(child: _buildFooter()),
+                    ],
+                  ),
+                ),
         ),
       ),
     );
@@ -263,18 +266,18 @@ class _AnomaliPusatPageState extends State<AnomaliPusatPage> {
             style: TextStyle(color: Colors.white, height: 1.45),
           ),
           const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _badge(
-                Icons.warning_amber_rounded,
-                '${_items.length}${_hasMore ? '+' : ''} anomali',
-              ),
-              _badge(Icons.map_outlined, '${_wilayahSet.length} wilayah'),
-              _badge(Icons.task_alt_rounded, '$_sudahDitindakCount ditindak'),
-            ],
-          ),
+          // Wrap(
+          //   spacing: 8,
+          //   runSpacing: 8,
+          //   children: [
+          //     _badge(
+          //       Icons.warning_amber_rounded,
+          //       '${_items.length}${_hasMore ? '+' : ''} anomali',
+          //     ),
+          //     _badge(Icons.map_outlined, '${_wilayahSet.length} wilayah'),
+          //     _badge(Icons.task_alt_rounded, '$_sudahDitindakCount ditindak'),
+          //   ],
+          // ),
         ],
       ),
     );
@@ -409,8 +412,7 @@ class _AnomaliPusatPageState extends State<AnomaliPusatPage> {
                   color: isSelected
                       ? const Color(0xFF1A3A6B)
                       : const Color(0xFF526070),
-                  fontWeight:
-                      isSelected ? FontWeight.w700 : FontWeight.w500,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 8),
               );
@@ -432,10 +434,7 @@ class _AnomaliPusatPageState extends State<AnomaliPusatPage> {
               children: [
                 const Text(
                   'Daftar Anomali Pusat',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -452,8 +451,9 @@ class _AnomaliPusatPageState extends State<AnomaliPusatPage> {
 
   Widget _buildTile(AnomaliPusatItem item, int index) {
     final statusColor = _statusColor(item.statusText);
-    final hasKeterangan = _myKeteranganKeys
-        .contains('${item.assignmentId}|${item.namaAnomali}');
+    final hasKeterangan = _myKeteranganKeys.contains(
+      '${item.assignmentId}|${item.namaAnomali}',
+    );
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -461,9 +461,7 @@ class _AnomaliPusatPageState extends State<AnomaliPusatPage> {
         onTap: () => _showDetail(item),
         child: Ink(
           decoration: BoxDecoration(
-            color: hasKeterangan
-                ? const Color(0xFFFFF3E0)
-                : Colors.white,
+            color: hasKeterangan ? const Color(0xFFFFF3E0) : Colors.white,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
               color: hasKeterangan
@@ -523,7 +521,9 @@ class _AnomaliPusatPageState extends State<AnomaliPusatPage> {
                                     ),
                                   ),
                                 Text(
-                                  item.namaAnomali.isEmpty ? '-' : item.namaAnomali,
+                                  item.namaAnomali.isEmpty
+                                      ? '-'
+                                      : item.namaAnomali,
                                   style: TextStyle(
                                     fontSize: item.nama.isNotEmpty ? 13 : 15,
                                     fontWeight: item.nama.isNotEmpty
@@ -566,7 +566,9 @@ class _AnomaliPusatPageState extends State<AnomaliPusatPage> {
                             _miniBadge(Icons.person_outline, item.namaPpl),
                           if (item.namaPml.isNotEmpty)
                             _miniBadge(
-                                Icons.supervisor_account_outlined, item.namaPml),
+                              Icons.supervisor_account_outlined,
+                              item.namaPml,
+                            ),
                         ],
                       ),
                       if (item.tindakLanjut.isNotEmpty)
@@ -796,10 +798,13 @@ class _AnomaliPusatPageState extends State<AnomaliPusatPage> {
   String _pretty(String value) {
     if (value.isEmpty) return '-';
     if (value == _allKategori || value == _allStatus) return value;
-    return value.split('_').map((w) {
-      if (w.isEmpty) return w;
-      return '${w[0].toUpperCase()}${w.substring(1)}';
-    }).join(' ');
+    return value
+        .split('_')
+        .map((w) {
+          if (w.isEmpty) return w;
+          return '${w[0].toUpperCase()}${w.substring(1)}';
+        })
+        .join(' ');
   }
 }
 
@@ -894,7 +899,9 @@ class _AnomaliPusatDetailSheetState extends State<_AnomaliPusatDetailSheet> {
   Widget build(BuildContext context) {
     final item = widget.item;
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: DraggableScrollableSheet(
         initialChildSize: 0.88,
         minChildSize: 0.55,
@@ -1013,11 +1020,10 @@ class _AnomaliPusatDetailSheetState extends State<_AnomaliPusatDetailSheet> {
                         padding: EdgeInsets.symmetric(vertical: 12),
                         child: Center(child: CircularProgressIndicator()),
                       )
-                    else if (_keteranganList.length > 1)
-                      ...[
-                        _keteranganListSection(_keteranganList),
-                        const SizedBox(height: 20),
-                      ],
+                    else if (_keteranganList.length > 1) ...[
+                      _keteranganListSection(_keteranganList),
+                      const SizedBox(height: 20),
+                    ],
 
                     // ── Form input keterangan ────────────────────────────────
                     Container(
@@ -1074,8 +1080,9 @@ class _AnomaliPusatDetailSheetState extends State<_AnomaliPusatDetailSheet> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF1F6FEB),
                                 foregroundColor: Colors.white,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),
@@ -1091,7 +1098,10 @@ class _AnomaliPusatDetailSheetState extends State<_AnomaliPusatDetailSheet> {
                                     )
                                   : const Icon(Icons.save_outlined),
                               label: Text(
-                                  _isSaving ? 'Menyimpan...' : 'Simpan Keterangan'),
+                                _isSaving
+                                    ? 'Menyimpan...'
+                                    : 'Simpan Keterangan',
+                              ),
                             ),
                           ),
                         ],
@@ -1152,8 +1162,7 @@ class _AnomaliPusatDetailSheetState extends State<_AnomaliPusatDetailSheet> {
           Row(
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1F6FEB).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
@@ -1319,10 +1328,13 @@ class _AnomaliPusatDetailSheetState extends State<_AnomaliPusatDetailSheet> {
 
   String _pretty(String value) {
     if (value.isEmpty) return '-';
-    return value.split('_').map((w) {
-      if (w.isEmpty) return w;
-      return '${w[0].toUpperCase()}${w.substring(1)}';
-    }).join(' ');
+    return value
+        .split('_')
+        .map((w) {
+          if (w.isEmpty) return w;
+          return '${w[0].toUpperCase()}${w.substring(1)}';
+        })
+        .join(' ');
   }
 
   String _formatDate(DateTime dt) {
