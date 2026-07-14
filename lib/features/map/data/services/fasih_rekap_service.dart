@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/config/supabase_config.dart';
@@ -228,6 +229,29 @@ class PrelistTargetRecord {
   }
 }
 
+/// Satu baris distribusi kode_bang per wilayah dari RPC
+/// get_se2026_kode_bang_by_wilayah. [counts] = {kode_bang: jumlah}, kode ''
+/// berarti Tidak Diketahui.
+class KodeBangWilayahRow {
+  final String kodeWilayah;
+  final String pplId;
+  final Map<String, int> counts;
+
+  const KodeBangWilayahRow({
+    required this.kodeWilayah,
+    required this.pplId,
+    required this.counts,
+  });
+
+  factory KodeBangWilayahRow.fromJson(Map<dynamic, dynamic> json) {
+    return KodeBangWilayahRow(
+      kodeWilayah: (json['kode_wilayah'] ?? '').toString(),
+      pplId: (json['ppl_id'] ?? '').toString(),
+      counts: _intMapFromDynamic(json['kode_bang_counts']),
+    );
+  }
+}
+
 class FasihRekapService {
   final SupabaseClient _client = SupabaseConfig.client;
 
@@ -266,6 +290,28 @@ class FasihRekapService {
     }
 
     return all;
+  }
+
+  /// Distribusi kode_bang (submitted) per wilayah 16 digit + ppl_id petugas,
+  /// dari se2026_keterangan_umum. kode_bang kosong/NULL menjadi '' (Tidak
+  /// Diketahui). Baris mentah agar pemanggil bisa agregasi per wilayah maupun
+  /// per petugas. RPC gagal / belum ada -> daftar kosong.
+  Future<List<KodeBangWilayahRow>> fetchKodeBangByWilayah() async {
+    try {
+      final response = await _client.rpc('get_se2026_kode_bang_by_wilayah');
+      if (response is! List) {
+        debugPrint('fetchKodeBangByWilayah: unexpected response $response');
+        return const [];
+      }
+      debugPrint('fetchKodeBangByWilayah: ${response.length} baris wilayah');
+      return response
+          .whereType<Map>()
+          .map((item) => KodeBangWilayahRow.fromJson(item))
+          .toList();
+    } catch (e) {
+      debugPrint('fetchKodeBangByWilayah error: $e');
+      return const [];
+    }
   }
 
   Future<FasihRekapPayload> fetchPendataWilayah({

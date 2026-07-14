@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:open_file/open_file.dart';
 
 import '../../data/services/fasih_rekap_service.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
+import '../../data/services/lembar_kerja_export_service.dart';
 
 /// Lembar Kerja: progres pendataan per petugas dengan detail per SLS/sub-SLS.
 ///
@@ -19,9 +22,11 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
   final GroundcheckSupabaseService _profileService =
       GroundcheckSupabaseService();
   final FasihRekapService _rekapService = FasihRekapService();
+  final LembarKerjaExportService _exportService = LembarKerjaExportService();
   final TextEditingController _searchController = TextEditingController();
 
   bool _isLoading = true;
+  bool _isExporting = false;
   String? _error;
   Se2026UserProfile? _profile;
   FasihRekapPayload _payload = FasihRekapPayload.empty();
@@ -32,6 +37,18 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
   Map<String, int> _prelistByWilayah = {};
   Map<String, int> _prelistByPetugas = {};
   bool _prelistLoaded = false;
+
+  /// Distribusi kode_bang (submitted) per wilayah 16 digit dan per petugas
+  /// (ppl_id), dibangun langsung dari RPC.
+  Map<String, Map<String, int>> _kodeBangByWilayah = {};
+  Map<String, Map<String, int>> _kodeBangByPetugas = {};
+  bool _kodeBangLoaded = false;
+
+  /// Tab tabel: 0 = Progres, 1 = Jenis Bangunan (kode_bang).
+  int _tableTab = 0;
+
+  /// Filter tabel berdasarkan kategori sebaran (indeks _tiers). null = semua.
+  int? _selectedTier;
 
   /// State sort tabel. null = urutan default (per kode wilayah / dari server).
   int? _sortColumnIndex;
@@ -68,9 +85,10 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
       }
 
       final payloadFuture = _fetchPayload(profile);
-      if (!_prelistLoaded) {
-        await _loadPrelistTargets(profile);
-      }
+      final preFutures = <Future<void>>[];
+      if (!_prelistLoaded) preFutures.add(_loadPrelistTargets(profile));
+      if (!_kodeBangLoaded) preFutures.add(_loadKodeBang());
+      if (preFutures.isNotEmpty) await Future.wait(preFutures);
       final payload = await payloadFuture;
       if (!mounted) return;
       setState(() {
@@ -146,6 +164,35 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
     _prelistLoaded = true;
   }
 
+  /// Muat distribusi kode_bang dari RPC lalu bangun agregat per wilayah dan
+  /// per petugas langsung dari baris RPC (lengkap, tidak bergantung prelist).
+  Future<void> _loadKodeBang() async {
+    final rows = await _rekapService.fetchKodeBangByWilayah();
+    final byWilayah = <String, Map<String, int>>{};
+    final byPetugas = <String, Map<String, int>>{};
+    for (final r in rows) {
+      if (r.counts.isEmpty) continue;
+      if (r.kodeWilayah.isNotEmpty) {
+        final m = byWilayah.putIfAbsent(r.kodeWilayah, () => <String, int>{});
+        r.counts.forEach((code, n) => m[code] = (m[code] ?? 0) + n);
+      }
+      if (r.pplId.isNotEmpty) {
+        final m = byPetugas.putIfAbsent(r.pplId, () => <String, int>{});
+        r.counts.forEach((code, n) => m[code] = (m[code] ?? 0) + n);
+      }
+    }
+    _kodeBangByWilayah = byWilayah;
+    _kodeBangByPetugas = byPetugas;
+    _kodeBangLoaded = true;
+  }
+
+  /// Distribusi kode_bang untuk satu baris tabel sesuai level tampil.
+  Map<String, int> _kodeBangForRow(FasihRekapRow row) {
+    return _isPetugasLevel
+        ? (_kodeBangByPetugas[row.unitId] ?? const {})
+        : (_kodeBangByWilayah[row.unitId] ?? const {});
+  }
+
   /// Target prelist untuk satu baris tabel sesuai level yang sedang tampil.
   int _targetOf(FasihRekapRow row) {
     return _isPetugasLevel
@@ -157,37 +204,62 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
   int get _summaryTarget =>
       _payload.rows.fold(0, (sum, row) => sum + _targetOf(row));
 
-  /// Ambang capaian rendah (di bawah 40%).
-  static const double _lowThreshold = 0.40;
+  /// Kategori sebaran bertingkat (dievaluasi berurutan, ambil yang pertama
+  /// terpenuhi). "Potensi" = submitted + draft.
+  static const List<_Tier> _tiers = [
+    _Tier(label: '> 300', sub: 'Submitted', color: Color(0xFF1B7A43)),
+    _Tier(label: '> 270', sub: 'Submitted', color: Color(0xFF1D8F5A)),
+    _Tier(
+      label: '> 270 Potensi',
+      sub: 'Submitted + Draft',
+      color: Color(0xFF2D77D0),
+    ),
+    _Tier(
+      label: '> 250 Potensi',
+      sub: 'Submitted + Draft',
+      color: Color(0xFFF59E0B),
+    ),
+    _Tier(label: 'Lainnya', sub: 'Di bawah ambang', color: Color(0xFF8895A7)),
+  ];
 
-  /// Distribusi baris berdasarkan capaian submitted terhadap target.
-  _AchievementDistribution get _distribution {
-    int below = 0;
-    int atLeast = 0;
-    int noTarget = 0;
-    for (final row in _payload.rows) {
-      final target = _targetOf(row);
-      if (target <= 0) {
-        noTarget++;
-        continue;
-      }
-      final breakdown = _breakdownOf(
-        row.statusCounts,
-        row.totalAssignment,
-        row.totalTerkirim,
-      );
-      final percent = breakdown.submitted / target;
-      if (percent < _lowThreshold) {
-        below++;
-      } else {
-        atLeast++;
-      }
-    }
-    return _AchievementDistribution(
-      below: below,
-      atLeast: atLeast,
-      noTarget: noTarget,
+  /// Tentukan indeks tier untuk satu baris.
+  int _tierIndexOf(FasihRekapRow row) {
+    final breakdown = _breakdownOf(
+      row.statusCounts,
+      row.totalAssignment,
+      row.totalTerkirim,
     );
+    final submitted = breakdown.submitted;
+    final potensi = submitted + breakdown.draft;
+    if (submitted > 300) return 0;
+    if (submitted > 270) return 1;
+    if (potensi > 270) return 2;
+    if (potensi > 250) return 3;
+    return 4;
+  }
+
+  /// Hitung jumlah baris per tier untuk baris yang sedang tampil.
+  List<int> get _tierCounts {
+    final counts = List<int>.filled(_tiers.length, 0);
+    for (final row in _payload.rows) {
+      counts[_tierIndexOf(row)]++;
+    }
+    return counts;
+  }
+
+  /// Baris yang ditampilkan tabel, sudah menerapkan filter kategori (bila ada).
+  List<FasihRekapRow> get _filteredRows {
+    if (_selectedTier == null) return _payload.rows;
+    return _payload.rows
+        .where((row) => _tierIndexOf(row) == _selectedTier)
+        .toList();
+  }
+
+  void _toggleTierFilter(int index) {
+    setState(() {
+      _selectedTier = _selectedTier == index ? null : index;
+      _resetSort();
+    });
   }
 
   void _openPetugas(FasihRekapRow petugas) {
@@ -195,6 +267,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
       _selectedPetugas = petugas;
       _searchController.clear();
       _resetSort();
+      _selectedTier = null;
     });
     _loadData();
   }
@@ -204,6 +277,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
       _selectedPetugas = null;
       _searchController.clear();
       _resetSort();
+      _selectedTier = null;
     });
     _loadData();
   }
@@ -218,6 +292,122 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
       _sortColumnIndex = columnIndex;
       _sortAscending = ascending;
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // Export Excel: SEMUA wilayah (SLS/sub-SLS) untuk seluruh petugas dalam
+  // scope pengguna, apa pun level yang sedang tampil.
+  // ---------------------------------------------------------------------
+
+  Future<void> _exportAllWilayah() async {
+    if (_isExporting) return;
+    final profile = _profile;
+    if (profile == null) return;
+
+    setState(() => _isExporting = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final rows = await _collectAllWilayahRows(profile);
+      if (rows.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Tidak ada wilayah untuk diekspor.')),
+        );
+        return;
+      }
+      final path = await _exportService.exportToFile(rows);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Berhasil mengekspor ${rows.length} wilayah.')),
+      );
+      await OpenFile.open(path);
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Gagal mengekspor: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  /// Kumpulkan seluruh baris wilayah untuk semua petugas dalam scope pengguna.
+  Future<List<LembarKerjaExportRow>> _collectAllWilayahRows(
+    Se2026UserProfile profile,
+  ) async {
+    // Pastikan target prelist & distribusi kode_bang tersedia.
+    if (!_prelistLoaded) {
+      await _loadPrelistTargets(profile);
+    }
+    if (!_kodeBangLoaded) {
+      await _loadKodeBang();
+    }
+
+    // Pendata: cukup wilayah tugasnya sendiri.
+    if (profile.role == 'pendata') {
+      final payload = await _rekapService.fetchPendataWilayah(limit: 500);
+      return payload.rows
+          .map((row) => _toExportRow(row, petugas: '(Saya)', email: ''))
+          .toList();
+    }
+
+    // Admin & pengawas: ambil daftar petugas, lalu wilayah tiap petugas.
+    final petugasPayload = profile.role == 'admin'
+        ? await _rekapService.fetchAdminPetugas(limit: 500, sortBy: 'title')
+        : await _rekapService.fetchPengawasPetugas(limit: 500, sortBy: 'title');
+
+    final result = <LembarKerjaExportRow>[];
+    for (final petugas in petugasPayload.rows) {
+      // Lewati baris "tanpa petugas" (ppl_id null → unitId kosong); tidak bisa
+      // di-drill per petugas dan string kosong tak valid sebagai UUID.
+      if (petugas.unitId.trim().isEmpty) continue;
+      final wilayahPayload = profile.role == 'admin'
+          ? await _rekapService.fetchAdminWilayahByPetugas(
+              petugasId: petugas.unitId,
+              limit: 500,
+            )
+          : await _rekapService.fetchPengawasWilayahPetugas(
+              petugasId: petugas.unitId,
+              limit: 500,
+            );
+      for (final row in wilayahPayload.rows) {
+        result.add(
+          _toExportRow(
+            row,
+            petugas: petugas.title,
+            email: petugas.subtitle == '-' ? '' : petugas.subtitle,
+          ),
+        );
+      }
+    }
+    return result;
+  }
+
+  LembarKerjaExportRow _toExportRow(
+    FasihRekapRow row, {
+    required String petugas,
+    required String email,
+  }) {
+    final breakdown = _breakdownOf(
+      row.statusCounts,
+      row.totalAssignment,
+      row.totalTerkirim,
+    );
+    return LembarKerjaExportRow(
+      petugas: petugas,
+      petugasEmail: email,
+      kodeWilayah: row.unitId,
+      namaSls: row.title,
+      kecDesa: row.subtitle == '-' ? '' : row.subtitle,
+      target: _prelistByWilayah[row.unitId] ?? 0,
+      total: row.totalAssignment,
+      submitted: breakdown.submitted,
+      draft: breakdown.draft,
+      open: breakdown.open,
+      kodeBang: _kodeBangByWilayah[row.unitId] ?? const {},
+    );
   }
 
   // ---------------------------------------------------------------------
@@ -301,6 +491,22 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
                   onPressed: _backToPetugasList,
                 )
               : null,
+          actions: [
+            IconButton(
+              tooltip: 'Export Excel (semua wilayah)',
+              onPressed: _isExporting || _isLoading ? null : _exportAllWilayah,
+              icon: _isExporting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Icon(Icons.file_download_outlined),
+            ),
+          ],
         ),
         body: SafeArea(
           child: _isLoading
@@ -504,7 +710,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
   }
 
   Widget _buildDistributionCard() {
-    final dist = _distribution;
+    final counts = _tierCounts;
     final unitLabel = _isPetugasLevel ? 'petugas' : 'SLS/sub-SLS';
 
     return Container(
@@ -522,87 +728,101 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Capaian = submitted dibanding target prelist.',
+            _selectedTier == null
+                ? 'Ketuk kategori untuk memfilter tabel.'
+                : 'Filter aktif: ${_tiers[_selectedTier!].label}. '
+                      'Ketuk lagi untuk hapus.',
             style: TextStyle(color: Colors.grey[600], fontSize: 12),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildDistributionTile(
-                  label: 'Di bawah 40%',
-                  value: dist.below,
-                  color: Colors.red[400]!,
-                  icon: Icons.trending_down_rounded,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildDistributionTile(
-                  label: '40% ke atas',
-                  value: dist.atLeast,
-                  color: const Color(0xFF1D8F5A),
-                  icon: Icons.trending_up_rounded,
-                ),
-              ),
-            ],
-          ),
-          if (dist.noTarget > 0) ...[
-            const SizedBox(height: 10),
-            Text(
-              '${dist.noTarget} $unitLabel belum punya target prelist '
-              '(tidak dihitung).',
-              style: TextStyle(color: Colors.blueGrey[400], fontSize: 12),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDistributionTile({
-    required String label,
-    required int value,
-    required Color color,
-    required IconData icon,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 26),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  '$value',
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: Colors.blueGrey[600],
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                for (int i = 0; i < _tiers.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  Expanded(child: _buildTierTile(i, _tiers[i], counts[i])),
+                ],
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildTierTile(int index, _Tier tier, int value) {
+    final selected = _selectedTier == index;
+    return Material(
+      color: selected
+          ? tier.color.withValues(alpha: 0.18)
+          : tier.color.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _toggleTierFilter(index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: tier.color.withValues(alpha: selected ? 0.9 : 0.22),
+              width: selected ? 1.6 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Text(
+                '$value',
+                style: TextStyle(
+                  color: tier.color,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                tier.label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: tier.color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  height: 1.1,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Urutan kolom kode_bang. Bucket "tidak ditemukan" (kode_bang kosong) sudah
+  /// dipecah RPC menjadi TD_USAHA & TD_KELUARGA berdasarkan jenis_prelist.
+  static const List<String> _kodeBangOrder = [
+    '1', '2', '3', '4', '5', '6', '7', '8', '9', 'TD_USAHA', 'TD_KELUARGA',
+  ];
+
+  /// Label singkat kode_bang untuk header kolom tabel.
+  static const Map<String, String> _kodeBangShort = {
+    '1': 'Khusus Usaha',
+    '2': 'Campuran',
+    '3': 'Tempat Tinggal',
+    '4': 'Ibadah/Ormas',
+    '5': 'Pemerintah',
+    '6': 'Lainnya',
+    '7': 'Virtual Office',
+    '8': 'Panti/Lapas',
+    '9': 'Non Respon',
+    'TD_USAHA': 'Usaha Tdk Ditemukan',
+    'TD_KELUARGA': 'Keluarga Tdk Ditemukan',
+  };
+
+  String _kodeBangColLabel(String code) {
+    final short = _kodeBangShort[code] ?? (code.isEmpty ? 'Tdk Diketahui' : code);
+    if (code.startsWith('TD')) return short;
+    return '$code. $short';
   }
 
   Widget _buildSearchField() {
@@ -649,19 +869,34 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            _isPetugasLevel ? 'Tabel Per Petugas' : 'Tabel Per SLS/Sub-SLS',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _isPetugasLevel
+                      ? 'Tabel Per Petugas'
+                      : 'Tabel Per SLS/Sub-SLS',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _payload.rows.isEmpty ? null : _copyCurrentTable,
+                icon: const Icon(Icons.copy_rounded, size: 18),
+                label: const Text('Salin'),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF0F4C81),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
-          Text(
-            _isPetugasLevel
-                ? 'Ketuk baris petugas untuk detail per SLS/sub-SLS. '
-                      '% = submitted dibanding target prelist.'
-                : 'Target = prelist wilayah. % = submitted dibanding target. '
-                      'Submitted = semua status selain OPEN dan DRAFT.',
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
-          ),
+          Text(_tableSubtitle(), style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+          const SizedBox(height: 12),
+          _buildTableTabs(),
           const SizedBox(height: 12),
           if (_payload.rows.isEmpty)
             _buildEmptyState(
@@ -669,10 +904,215 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
                   ? 'Belum ada data petugas.'
                   : 'Belum ada wilayah tugas untuk ditampilkan.',
             )
-          else if (_isPetugasLevel)
-            _buildPetugasTable()
+          else if (_filteredRows.isEmpty)
+            _buildEmptyState('Tidak ada baris pada kategori ini.')
+          else if (_tableTab == 0)
+            (_isPetugasLevel ? _buildPetugasTable() : _buildWilayahTable())
+          else if (_tableTab == 1)
+            _buildKodeBangTable()
           else
-            _buildWilayahTable(),
+            _buildRekapTable(),
+        ],
+      ),
+    );
+  }
+
+  /// Baris yang ditampilkan tabel aktif: terfilter + terurut sesuai sort.
+  List<FasihRekapRow> _displayRows() {
+    final rows = [..._filteredRows];
+    if (_sortColumnIndex != null) {
+      switch (_tableTab) {
+        case 1:
+          _sortRows(rows, (r) => _bangunanSortValue(r, _sortColumnIndex!));
+          break;
+        case 2:
+          _sortRows(rows, (r) => _rekapSortValue(r, _sortColumnIndex!));
+          break;
+        default:
+          _sortRows(
+            rows,
+            (r) => _isPetugasLevel
+                ? _petugasSortValue(r, _sortColumnIndex!)
+                : _wilayahSortValue(r, _sortColumnIndex!),
+          );
+      }
+    } else if (!_isPetugasLevel) {
+      rows.sort((a, b) => a.unitId.compareTo(b.unitId));
+    }
+    return rows;
+  }
+
+  /// Salin tabel yang sedang tampil ke clipboard sebagai TSV (siap tempel ke
+  /// Excel/Sheets), mengikuti tab, level, filter, dan sort aktif.
+  Future<void> _copyCurrentTable() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final rows = _displayRows();
+    final lines = <List<String>>[];
+
+    String pct(int submitted, int target) =>
+        target > 0 ? '${(submitted / target * 100).round()}%' : '';
+    List<String> identityHeaders() =>
+        _isPetugasLevel ? ['Petugas'] : ['SLS', 'Sub', 'Nama SLS'];
+    List<String> identityValues(FasihRekapRow row) {
+      if (_isPetugasLevel) return [row.title];
+      final kodeSls = row.unitId.length >= 14
+          ? row.unitId.substring(10, 14)
+          : row.unitId;
+      final kodeSubsls = row.unitId.length >= 16
+          ? row.unitId.substring(14, 16)
+          : '-';
+      return [kodeSls, kodeSubsls, row.title];
+    }
+
+    if (_tableTab == 0) {
+      // Progres.
+      lines.add(
+        _isPetugasLevel
+            ? ['No', 'Petugas', 'Email', 'Target', 'Total', 'Submitted',
+                'Draft', 'Open', '%']
+            : ['No', 'SLS', 'Sub', 'Nama SLS', 'Kec/Desa', 'Target', 'Total',
+                'Submitted', 'Draft', 'Open', '%'],
+      );
+      for (var i = 0; i < rows.length; i++) {
+        final row = rows[i];
+        final b = _breakdownOf(
+          row.statusCounts,
+          row.totalAssignment,
+          row.totalTerkirim,
+        );
+        final target = _targetOf(row);
+        final sub = row.subtitle == '-' ? '' : row.subtitle;
+        if (_isPetugasLevel) {
+          lines.add([
+            '${i + 1}', row.title, sub, '$target', '${row.totalAssignment}',
+            '${b.submitted}', '${b.draft}', '${b.open}',
+            pct(b.submitted, target),
+          ]);
+        } else {
+          final ids = identityValues(row);
+          lines.add([
+            '${i + 1}', ids[0], ids[1], ids[2], sub, '$target',
+            '${row.totalAssignment}', '${b.submitted}', '${b.draft}',
+            '${b.open}', pct(b.submitted, target),
+          ]);
+        }
+      }
+    } else if (_tableTab == 1) {
+      // Jenis Bangunan.
+      lines.add([
+        'No',
+        ...identityHeaders(),
+        for (final c in _kodeBangOrder) _kodeBangColLabel(c),
+        'Total',
+      ]);
+      for (var i = 0; i < rows.length; i++) {
+        final kb = _kodeBangForRow(rows[i]);
+        final total = kb.values.fold<int>(0, (s, v) => s + v);
+        lines.add([
+          '${i + 1}',
+          ...identityValues(rows[i]),
+          for (final c in _kodeBangOrder) '${kb[c] ?? 0}',
+          '$total',
+        ]);
+      }
+    } else {
+      // Rekap.
+      lines.add(['No', ...identityHeaders(), ..._rekapGroupLabels, 'Total']);
+      for (var i = 0; i < rows.length; i++) {
+        final g = _rekapGroupsOf(_kodeBangForRow(rows[i]));
+        final total = g.fold<int>(0, (s, v) => s + v);
+        lines.add([
+          '${i + 1}',
+          ...identityValues(rows[i]),
+          for (final v in g) '$v',
+          '$total',
+        ]);
+      }
+    }
+
+    final text = lines.map((r) => r.join('\t')).join('\n');
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(content: Text('Tersalin ${rows.length} baris ke clipboard.')),
+    );
+  }
+
+  String _tableSubtitle() {
+    switch (_tableTab) {
+      case 1:
+        return 'Rincian record submitted per jenis bangunan (kode_bang).';
+      case 2:
+        return 'Rekap submitted: Usaha (BKU), Keluarga (campuran + tempat '
+            'tinggal), Lainnya (4–9), Tidak ditemukan (kosong).';
+      default:
+        return _isPetugasLevel
+            ? 'Ketuk baris petugas untuk detail per SLS/sub-SLS. '
+                  '% = submitted dibanding target prelist.'
+            : 'Target = prelist wilayah. % = submitted dibanding target.';
+    }
+  }
+
+  Widget _buildTableTabs() {
+    Widget seg(int idx, IconData icon, String label) {
+      final active = _tableTab == idx;
+      return Expanded(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () {
+            if (_tableTab == idx) return;
+            setState(() {
+              _tableTab = idx;
+              _resetSort();
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
+            decoration: BoxDecoration(
+              color: active ? const Color(0xFF0F4C81) : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 15,
+                  color: active ? Colors.white : Colors.blueGrey,
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: active ? Colors.white : Colors.blueGrey[700],
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5FB),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          seg(0, Icons.insights_rounded, 'Progres'),
+          const SizedBox(width: 4),
+          seg(1, Icons.home_work_outlined, 'Bangunan'),
+          const SizedBox(width: 4),
+          seg(2, Icons.summarize_outlined, 'Rekap'),
         ],
       ),
     );
@@ -727,8 +1167,8 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
   }
 
   Widget _buildPetugasTable() {
-    final totals = _totalsOf(_payload.rows);
-    final rows = [..._payload.rows];
+    final totals = _totalsOf(_filteredRows);
+    final rows = [..._filteredRows];
     if (_sortColumnIndex != null) {
       _sortRows(rows, (row) => _petugasSortValue(row, _sortColumnIndex!));
     }
@@ -744,6 +1184,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
         sortAscending: _sortAscending,
         headingRowColor: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
         columns: [
+          _noColumn(),
           DataColumn(onSort: _onSort, label: const Text('Petugas')),
           _numColumn('Target'),
           _numColumn('Total'),
@@ -752,7 +1193,8 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
           _numColumn('Open'),
           _numColumn('%'),
         ],
-        rows: rows.map((row) {
+        rows: rows.asMap().entries.map((entry) {
+          final row = entry.value;
           final breakdown = _breakdownOf(
             row.statusCounts,
             row.totalAssignment,
@@ -762,6 +1204,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
           return DataRow(
             onSelectChanged: (_) => _openPetugas(row),
             cells: [
+              _noCell(entry.key + 1),
               DataCell(
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -808,7 +1251,8 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
           DataRow(
             color: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
             cells: [
-              _totalLabelCell('Total (${_payload.rows.length} petugas)'),
+              const DataCell(Text('')),
+              _totalLabelCell('Total (${rows.length} petugas)'),
               ..._totalNumberCells(totals),
             ],
           ),
@@ -818,7 +1262,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
   }
 
   Widget _buildWilayahTable() {
-    final rows = [..._payload.rows];
+    final rows = [..._filteredRows];
     if (_sortColumnIndex != null) {
       _sortRows(rows, (row) => _wilayahSortValue(row, _sortColumnIndex!));
     } else {
@@ -840,6 +1284,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
         sortAscending: _sortAscending,
         headingRowColor: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
         columns: [
+          _noColumn(),
           DataColumn(onSort: _onSort, label: const Text('SLS')),
           DataColumn(onSort: _onSort, label: const Text('Sub')),
           DataColumn(onSort: _onSort, label: const Text('Nama SLS')),
@@ -850,7 +1295,8 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
           _numColumn('Open'),
           _numColumn('%'),
         ],
-        rows: rows.map((row) {
+        rows: rows.asMap().entries.map((entry) {
+          final row = entry.value;
           final breakdown = _breakdownOf(
             row.statusCounts,
             row.totalAssignment,
@@ -865,6 +1311,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
               : '-';
           return DataRow(
             cells: [
+              _noCell(entry.key + 1),
               DataCell(
                 Text(
                   kodeSls,
@@ -912,6 +1359,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
           DataRow(
             color: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
             cells: [
+              const DataCell(Text('')),
               _totalLabelCell('Total'),
               const DataCell(Text('')),
               DataCell(
@@ -921,6 +1369,287 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
                 ),
               ),
               ..._totalNumberCells(totals),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Tabel tab "Jenis Bangunan": rincian kode_bang (submitted) per baris.
+  Widget _buildKodeBangTable() {
+    if (!_kodeBangLoaded) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final rows = [..._filteredRows];
+    if (_sortColumnIndex != null) {
+      _sortRows(rows, (r) => _bangunanSortValue(r, _sortColumnIndex!));
+    } else if (!_isPetugasLevel) {
+      rows.sort((a, b) => a.unitId.compareTo(b.unitId));
+    }
+
+    // Total per kode_bang untuk baris Total.
+    final totals = <String, int>{};
+    for (final row in rows) {
+      _kodeBangForRow(row).forEach((code, n) {
+        totals[code] = (totals[code] ?? 0) + n;
+      });
+    }
+    final grandTotal = totals.values.fold<int>(0, (s, v) => s + v);
+
+    return _fullWidthScroll(
+      DataTable(
+        showCheckboxColumn: false,
+        horizontalMargin: 12,
+        columnSpacing: 16,
+        headingRowHeight: 48,
+        dataRowMinHeight: 46,
+        dataRowMaxHeight: 60,
+        sortColumnIndex: _sortColumnIndex,
+        sortAscending: _sortAscending,
+        headingRowColor: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
+        columns: [
+          _noColumn(),
+          ..._identityColumns(),
+          for (final code in _kodeBangOrder) _numColumn(_kodeBangColLabel(code)),
+          _numColumn('Total'),
+        ],
+        rows: rows.asMap().entries.map((entry) {
+          final row = entry.value;
+          final kb = _kodeBangForRow(row);
+          final rowTotal = kb.values.fold<int>(0, (s, v) => s + v);
+          return DataRow(
+            cells: [
+              _noCell(entry.key + 1),
+              ..._kodeBangIdentityCells(row),
+              for (final code in _kodeBangOrder) _numCell(kb[code] ?? 0),
+              _numCell(rowTotal, color: const Color(0xFF0F4C81)),
+            ],
+          );
+        }).toList()..add(
+          DataRow(
+            color: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
+            cells: [
+              const DataCell(Text('')),
+              _totalLabelCell('Total'),
+              if (!_isPetugasLevel) ...[
+                const DataCell(Text('')),
+                const DataCell(Text('')),
+              ],
+              for (final code in _kodeBangOrder) _numCell(totals[code] ?? 0),
+              _numCell(grandTotal, color: const Color(0xFF0F4C81)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Jumlah kolom identitas (setelah kolom No) untuk tab Bangunan/Rekap.
+  int get _idCount => _isPetugasLevel ? 1 : 3;
+
+  /// Kolom identitas (sortable) untuk tab Bangunan/Rekap.
+  List<DataColumn> _identityColumns() {
+    if (_isPetugasLevel) {
+      return [DataColumn(onSort: _onSort, label: const Text('Petugas'))];
+    }
+    return [
+      DataColumn(onSort: _onSort, label: const Text('SLS')),
+      DataColumn(onSort: _onSort, label: const Text('Sub')),
+      DataColumn(onSort: _onSort, label: const Text('Nama SLS')),
+    ];
+  }
+
+  /// Nilai sortir kolom identitas (indeks 1..idCount).
+  Comparable<dynamic> _identitySortValue(FasihRekapRow row, int index) {
+    if (_isPetugasLevel) return row.title.toLowerCase();
+    switch (index) {
+      case 1:
+        return row.unitId; // SLS: unitId penuh agar sub tetap berkelompok.
+      case 2:
+        return row.unitId.length >= 16 ? row.unitId.substring(14, 16) : '';
+      default:
+        return row.title.toLowerCase(); // Nama SLS.
+    }
+  }
+
+  /// Nilai sortir tab Bangunan: identitas, kolom kode_bang, lalu Total.
+  Comparable<dynamic> _bangunanSortValue(FasihRekapRow row, int index) {
+    final idc = _idCount;
+    if (index <= idc) return _identitySortValue(row, index);
+    final kb = _kodeBangForRow(row);
+    final k = index - idc - 1;
+    if (k >= 0 && k < _kodeBangOrder.length) return kb[_kodeBangOrder[k]] ?? 0;
+    return kb.values.fold<int>(0, (s, v) => s + v); // Total.
+  }
+
+  /// Nilai sortir tab Rekap: identitas, 4 kategori, lalu Total.
+  Comparable<dynamic> _rekapSortValue(FasihRekapRow row, int index) {
+    final idc = _idCount;
+    if (index <= idc) return _identitySortValue(row, index);
+    final g = _rekapGroupsOf(_kodeBangForRow(row));
+    final gi = index - idc - 1;
+    if (gi >= 0 && gi < g.length) return g[gi];
+    return g.fold<int>(0, (s, v) => s + v); // Total.
+  }
+
+  /// Sel identitas untuk tabel kode_bang sesuai level.
+  List<DataCell> _kodeBangIdentityCells(FasihRekapRow row) {
+    if (_isPetugasLevel) {
+      return [
+        DataCell(
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 190),
+            child: Text(
+              row.title,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      ];
+    }
+    final kodeSls = row.unitId.length >= 14
+        ? row.unitId.substring(10, 14)
+        : row.unitId;
+    final kodeSubsls = row.unitId.length >= 16
+        ? row.unitId.substring(14, 16)
+        : '-';
+    return [
+      DataCell(
+        Text(
+          kodeSls,
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF0F4C81),
+          ),
+        ),
+      ),
+      DataCell(Text(kodeSubsls)),
+      DataCell(
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 190),
+          child: Text(
+            row.title,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  /// Kelompokkan distribusi kode_bang menjadi 5 kategori rekap:
+  ///   Usaha = 1 (BKU); Keluarga = 2+3; Lainnya = 4..9;
+  ///   Usaha TD = TD_USAHA; Keluarga TD = TD_KELUARGA.
+  /// Urutan hasil: [usaha, keluarga, lainnya, usahaTd, keluargaTd].
+  List<int> _rekapGroupsOf(Map<String, int> kb) {
+    final usaha = kb['1'] ?? 0;
+    final keluarga = (kb['2'] ?? 0) + (kb['3'] ?? 0);
+    var lainnya = 0;
+    for (final c in const ['4', '5', '6', '7', '8', '9']) {
+      lainnya += kb[c] ?? 0;
+    }
+    final usahaTd = kb['TD_USAHA'] ?? 0;
+    final keluargaTd = kb['TD_KELUARGA'] ?? 0;
+    return [usaha, keluarga, lainnya, usahaTd, keluargaTd];
+  }
+
+  static const List<String> _rekapGroupLabels = [
+    'Usaha',
+    'Keluarga',
+    'Lainnya',
+    'Usaha TD',
+    'Keluarga TD',
+  ];
+
+  Color _rekapGroupColor(int index) {
+    switch (index) {
+      case 0:
+        return const Color(0xFF1D8F5A); // Usaha
+      case 1:
+        return const Color(0xFF2D77D0); // Keluarga
+      case 2:
+        return Colors.blueGrey[500]!; // Lainnya
+      case 3:
+        return Colors.orange[800]!; // Usaha TD
+      default:
+        return Colors.red[400]!; // Keluarga TD
+    }
+  }
+
+  /// Tabel tab "Rekap": kode_bang dikelompokkan menjadi 4 kategori.
+  Widget _buildRekapTable() {
+    if (!_kodeBangLoaded) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final rows = [..._filteredRows];
+    if (_sortColumnIndex != null) {
+      _sortRows(rows, (r) => _rekapSortValue(r, _sortColumnIndex!));
+    } else if (!_isPetugasLevel) {
+      rows.sort((a, b) => a.unitId.compareTo(b.unitId));
+    }
+
+    final totals = List<int>.filled(_rekapGroupLabels.length, 0);
+    for (final row in rows) {
+      final g = _rekapGroupsOf(_kodeBangForRow(row));
+      for (var i = 0; i < g.length; i++) {
+        totals[i] += g[i];
+      }
+    }
+    final grandTotal = totals.fold<int>(0, (s, v) => s + v);
+
+    return _fullWidthScroll(
+      DataTable(
+        showCheckboxColumn: false,
+        horizontalMargin: 12,
+        columnSpacing: 18,
+        headingRowHeight: 48,
+        dataRowMinHeight: 46,
+        dataRowMaxHeight: 60,
+        sortColumnIndex: _sortColumnIndex,
+        sortAscending: _sortAscending,
+        headingRowColor: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
+        columns: [
+          _noColumn(),
+          ..._identityColumns(),
+          for (final label in _rekapGroupLabels) _numColumn(label),
+          _numColumn('Total'),
+        ],
+        rows: rows.asMap().entries.map((entry) {
+          final row = entry.value;
+          final g = _rekapGroupsOf(_kodeBangForRow(row));
+          final rowTotal = g.fold<int>(0, (s, v) => s + v);
+          return DataRow(
+            cells: [
+              _noCell(entry.key + 1),
+              ..._kodeBangIdentityCells(row),
+              for (var i = 0; i < g.length; i++)
+                _numCell(g[i], color: _rekapGroupColor(i)),
+              _numCell(rowTotal, color: const Color(0xFF0F4C81)),
+            ],
+          );
+        }).toList()..add(
+          DataRow(
+            color: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
+            cells: [
+              const DataCell(Text('')),
+              _totalLabelCell('Total'),
+              if (!_isPetugasLevel) ...[
+                const DataCell(Text('')),
+                const DataCell(Text('')),
+              ],
+              for (var i = 0; i < totals.length; i++)
+                _numCell(totals[i], color: _rekapGroupColor(i)),
+              _numCell(grandTotal, color: const Color(0xFF0F4C81)),
             ],
           ),
         ),
@@ -962,10 +1691,10 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
     );
   }
 
-  DataColumn _numColumn(String label) {
+  DataColumn _numColumn(String label, {bool sortable = true}) {
     return DataColumn(
       numeric: true,
-      onSort: _onSort,
+      onSort: sortable ? _onSort : null,
       label: Text(
         label,
         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
@@ -992,18 +1721,19 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
       row.totalTerkirim,
     );
     final target = _targetOf(row);
+    // Indeks kolom memperhitungkan kolom "No" di posisi 0.
     switch (index) {
-      case 1:
-        return target;
       case 2:
-        return row.totalAssignment;
+        return target;
       case 3:
-        return breakdown.submitted;
+        return row.totalAssignment;
       case 4:
-        return breakdown.draft;
+        return breakdown.submitted;
       case 5:
-        return breakdown.open;
+        return breakdown.draft;
       case 6:
+        return breakdown.open;
+      case 7:
         // Target 0 tak punya persentase; taruh paling bawah saat menaik.
         return target > 0 ? breakdown.submitted / target : -1.0;
       default:
@@ -1019,22 +1749,23 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
       row.totalTerkirim,
     );
     final target = _targetOf(row);
+    // Indeks kolom memperhitungkan kolom "No" di posisi 0.
     switch (index) {
-      case 1:
-        return row.unitId.length >= 16 ? row.unitId.substring(14, 16) : '';
       case 2:
-        return row.title.toLowerCase();
+        return row.unitId.length >= 16 ? row.unitId.substring(14, 16) : '';
       case 3:
-        return target;
+        return row.title.toLowerCase();
       case 4:
-        return row.totalAssignment;
+        return target;
       case 5:
-        return breakdown.submitted;
+        return row.totalAssignment;
       case 6:
-        return breakdown.draft;
+        return breakdown.submitted;
       case 7:
-        return breakdown.open;
+        return breakdown.draft;
       case 8:
+        return breakdown.open;
+      case 9:
         return target > 0 ? breakdown.submitted / target : -1.0;
       default:
         // Kolom SLS: pakai unitId penuh agar sub-SLS tetap berkelompok.
@@ -1047,6 +1778,26 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
       Text(
         value.toString(),
         style: TextStyle(fontWeight: FontWeight.w600, color: color),
+      ),
+    );
+  }
+
+  /// Kolom "No": nomor urut tampilan, tidak bisa di-sort agar selalu 1..N
+  /// dari atas ke bawah mengikuti urutan baris yang sedang tampil.
+  DataColumn _noColumn() {
+    return const DataColumn(
+      label: Text(
+        'No',
+        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+      ),
+    );
+  }
+
+  DataCell _noCell(int number) {
+    return DataCell(
+      Text(
+        '$number',
+        style: TextStyle(fontWeight: FontWeight.w600, color: Colors.blueGrey[400]),
       ),
     );
   }
@@ -1078,16 +1829,12 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
   }
 }
 
-class _AchievementDistribution {
-  final int below;
-  final int atLeast;
-  final int noTarget;
+class _Tier {
+  final String label;
+  final String sub;
+  final Color color;
 
-  const _AchievementDistribution({
-    required this.below,
-    required this.atLeast,
-    required this.noTarget,
-  });
+  const _Tier({required this.label, required this.sub, required this.color});
 }
 
 class _TableTotals {

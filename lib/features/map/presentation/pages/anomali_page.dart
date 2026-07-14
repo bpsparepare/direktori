@@ -282,15 +282,6 @@ class _AnomaliPageState extends State<AnomaliPage> {
     return result;
   }
 
-  int get _wilayahTerdampakCount => _items
-      .map((item) => item.kodeWilayah)
-      .where((v) => v.isNotEmpty)
-      .toSet()
-      .length;
-
-  int get _sudahDitindakCount =>
-      _items.where((item) => item.sudahDitindaklanjuti).length;
-
   /// Progres yang ditampilkan di donut/rincian, mengikuti filter PML (admin).
   List<AnomaliProgressItem> get _progressForDisplay {
     if (_selectedPmlNames.isEmpty) return _progress;
@@ -440,33 +431,13 @@ class _AnomaliPageState extends State<AnomaliPage> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Pantau dan tindak lanjuti anomali wilayah dan '
-                      'pusat dalam satu daftar.',
-                      style: TextStyle(color: Colors.white, height: 1.4),
-                    ),
-                    const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _buildHeroBadge(
-                          icon: Icons.warning_amber_rounded,
-                          label:
-                              '${_items.length}${_hasMore ? '+' : ''} anomali',
-                        ),
-                        _buildHeroBadge(
-                          icon: Icons.map_outlined,
-                          label: '$_wilayahTerdampakCount wilayah',
-                        ),
-                        _buildHeroBadge(
-                          icon: Icons.task_alt_rounded,
-                          label: '$_sudahDitindakCount ditindak',
-                        ),
-                        if (_notifCount > 0) _buildHeroNotif(),
-                      ],
-                    ),
+                    if (_notifCount > 0) ...[
+                      const SizedBox(height: 14),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: _buildHeroNotif(),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -509,30 +480,6 @@ class _AnomaliPageState extends State<AnomaliPage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildHeroBadge({required IconData icon, required String label}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(30),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: Colors.white),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1590,15 +1537,17 @@ class _AnomaliPageState extends State<AnomaliPage> {
   }
 
   Future<void> _showAnomaliDetail(AnomaliGabunganItem item) async {
-    // Bottom sheet Material dibatasi maksimal ~640px di layar lebar (desktop),
-    // jadi terlihat sempit. Lebarkan ke 80% lebar layar.
+    final width = MediaQuery.of(context).size.width;
+    // Di layar lebar (desktop/tablet) bottom sheet Material dibatasi ~640px
+    // sehingga terlihat sempit; lebarkan ke 80%. Di mobile biarkan full width.
+    final isWide = width >= 600;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      constraints: BoxConstraints(
-        maxWidth: MediaQuery.of(context).size.width * 0.8,
-      ),
+      constraints: isWide
+          ? BoxConstraints(maxWidth: width * 0.8)
+          : null,
       builder: (_) => _AnomaliDetailSheet(
         item: item,
         service: _service,
@@ -1890,19 +1839,24 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
+    // Di mobile sheet dibuat lebih penuh (tinggi) dan compact (padding rapat,
+    // sudut lebih kecil). Di layar lebar tetap seperti semula.
+    final isCompact = MediaQuery.of(context).size.width < 600;
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
       child: DraggableScrollableSheet(
-        initialChildSize: 0.88,
+        initialChildSize: isCompact ? 0.95 : 0.88,
         minChildSize: 0.5,
         maxChildSize: 0.95,
         expand: false,
         builder: (context, scrollController) => Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFFF7F9FC),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF7F9FC),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(isCompact ? 20 : 28),
+            ),
           ),
           child: Column(
             children: [
@@ -1918,7 +1872,9 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
               Expanded(
                 child: ListView(
                   controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+                  padding: isCompact
+                      ? const EdgeInsets.fromLTRB(14, 14, 14, 20)
+                      : const EdgeInsets.fromLTRB(18, 18, 18, 28),
                   children: [
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1929,13 +1885,13 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                             children: [
                               Text(
                                 item.subjekLabel,
-                                style: const TextStyle(
-                                  fontSize: 22,
+                                style: TextStyle(
+                                  fontSize: isCompact ? 18 : 22,
                                   fontWeight: FontWeight.w800,
-                                  color: Color(0xFF10243E),
+                                  color: const Color(0xFF10243E),
                                 ),
                               ),
-                              const SizedBox(height: 8),
+                              SizedBox(height: isCompact ? 6 : 8),
                               Text(
                                 item.wilayahLengkapLabel,
                                 style: TextStyle(
