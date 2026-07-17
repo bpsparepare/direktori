@@ -1,8 +1,8 @@
 class AppVersion {
   // Update nilai ini setiap kali melakukan build/deploy ke produksi
   // Pastikan nilai ini sama dengan yang ada di web/version.json di server
-  static const String version = '2.2.4';
-  static const String buildNumber = '20';
+  static const String version = '2.2.5';
+  static const String buildNumber = '21';
 
   static String get fullVersion => '$version+$buildNumber';
 }

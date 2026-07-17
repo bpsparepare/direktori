@@ -76,12 +76,59 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
     }
   }
 
-  Future<void> _deleteLocalEntry(DocumentationEntry entry) async {
-    await _service.deleteLocalEntry(entry);
-    if (!mounted) return;
-    setState(() {
-      _entries.removeWhere((item) => item.id == entry.id);
-    });
+  Future<void> _deleteEntry(DocumentationEntry entry) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Hapus dokumentasi?'),
+        content: Text(
+          'File "${entry.fileName}" akan dihapus dari Google Drive dan '
+          'daftar. Tindakan ini tidak bisa dibatalkan.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      await _service.deleteEntry(entry);
+      if (!mounted) return;
+      Navigator.of(context).pop(); // tutup loading
+      setState(() {
+        _entries.removeWhere((item) => item.id == entry.id);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Dokumentasi dihapus'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // tutup loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal menghapus: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _handleUploadPressed() async {
@@ -269,7 +316,7 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
               border: Border.all(color: Colors.grey.withValues(alpha: 0.18)),
             ),
             child: const Text(
-              'Lokal perangkat',
+              'Tersinkron',
               style: TextStyle(
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF144A8B),
@@ -378,13 +425,53 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
 
   Widget _buildEntryThumbnail(DocumentationEntry entry, int index) {
     final file = File(entry.localPath);
-    if (file.existsSync()) {
+    if (entry.localPath.isNotEmpty && file.existsSync()) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(18),
         child: Image.file(file, width: 72, height: 72, fit: BoxFit.cover),
       );
     }
 
+    // Perangkat lain: file lokal tidak ada, tampilkan gambar dari Drive.
+    final imageUrl = _driveImageUrl(entry);
+    if (imageUrl.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Image.network(
+          imageUrl,
+          width: 72,
+          height: 72,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) =>
+              _buildThumbnailPlaceholder(index),
+        ),
+      );
+    }
+
+    return _buildThumbnailPlaceholder(index);
+  }
+
+  /// URL gambar yang bisa dirender langsung (bukan halaman viewer Drive).
+  ///
+  /// Endpoint thumbnail Drive berfungsi untuk file yang di-share publik
+  /// ("anyone with link"). File ID diambil dari `driveFileId`, atau di-parse
+  /// dari `driveViewUrl` untuk data lama yang belum menyimpan `drive_file_id`.
+  String _driveImageUrl(DocumentationEntry entry) {
+    final id = _extractDriveFileId(entry);
+    if (id.isEmpty) return '';
+    return 'https://drive.google.com/thumbnail?id=$id&sz=w1000';
+  }
+
+  String _extractDriveFileId(DocumentationEntry entry) {
+    if (entry.driveFileId.isNotEmpty) return entry.driveFileId;
+    final url = entry.driveViewUrl;
+    if (url.isEmpty) return '';
+    final match = RegExp(r'/d/([a-zA-Z0-9_-]+)').firstMatch(url);
+    if (match != null) return match.group(1) ?? '';
+    return Uri.tryParse(url)?.queryParameters['id'] ?? '';
+  }
+
+  Widget _buildThumbnailPlaceholder(int index) {
     return Container(
       width: 72,
       height: 72,
@@ -573,10 +660,20 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
                   child: ListView(
                     padding: const EdgeInsets.all(18),
                     children: [
-                      if (file.existsSync())
+                      if (entry.localPath.isNotEmpty && file.existsSync())
                         ClipRRect(
                           borderRadius: BorderRadius.circular(22),
                           child: Image.file(file, fit: BoxFit.cover),
+                        )
+                      else if (_driveImageUrl(entry).isNotEmpty)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(22),
+                          child: Image.network(
+                            _driveImageUrl(entry),
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const SizedBox.shrink(),
+                          ),
                         ),
                       const SizedBox(height: 14),
                       _buildDetailPanel(
@@ -603,12 +700,15 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
                             label: const Text('Buka Drive'),
                           ),
                           OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red,
+                            ),
                             onPressed: () async {
                               Navigator.of(dialogContext).pop();
-                              await _deleteLocalEntry(entry);
+                              await _deleteEntry(entry);
                             },
                             icon: const Icon(Icons.delete_outline),
-                            label: const Text('Hapus Lokal'),
+                            label: const Text('Hapus'),
                           ),
                         ],
                       ),
@@ -705,6 +805,8 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
         return 'Pertemuan';
       case 'bukti paket data':
         return 'Bukti Paket Data';
+      case 'fasih':
+        return 'Fasih';
       case 'lainnya':
         return 'Lainnya';
       default:

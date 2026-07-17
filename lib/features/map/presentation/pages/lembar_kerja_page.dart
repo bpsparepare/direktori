@@ -50,6 +50,11 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
   /// Filter tabel berdasarkan kategori sebaran (indeks _tiers). null = semua.
   int? _selectedTier;
 
+  /// Data tab Pengawas (khusus admin, dimuat saat tab dibuka).
+  FasihRekapPayload? _pengawasPayload;
+  bool _pengawasLoading = false;
+  Map<String, int> _prelistByPengawas = {};
+
   /// State sort tabel. null = urutan default (per kode wilayah / dari server).
   int? _sortColumnIndex;
   bool _sortAscending = true;
@@ -150,6 +155,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
     );
     final byWilayah = <String, int>{};
     final byPetugas = <String, int>{};
+    final byPengawas = <String, int>{};
     for (final record in records) {
       if (record.id.isNotEmpty) {
         byWilayah[record.id] = (byWilayah[record.id] ?? 0) + record.prelist;
@@ -158,10 +164,60 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
         byPetugas[record.pplId] =
             (byPetugas[record.pplId] ?? 0) + record.prelist;
       }
+      if (record.pmlId.isNotEmpty) {
+        byPengawas[record.pmlId] =
+            (byPengawas[record.pmlId] ?? 0) + record.prelist;
+      }
     }
     _prelistByWilayah = byWilayah;
     _prelistByPetugas = byPetugas;
+    _prelistByPengawas = byPengawas;
     _prelistLoaded = true;
+  }
+
+  /// Muat rekap per pengawas (untuk tab Pengawas, khusus admin).
+  Future<void> _loadPengawas() async {
+    if (_pengawasLoading) return;
+    setState(() => _pengawasLoading = true);
+    try {
+      final payload = await _rekapService.fetchAdminPengawas(
+        limit: 200,
+        sortBy: 'title',
+        sortDir: 'asc',
+      );
+      if (!mounted) return;
+      setState(() {
+        _pengawasPayload = payload;
+        _pengawasLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _pengawasLoading = false);
+    }
+  }
+
+  /// Jumlah APPROVED dari rincian status (alias mengandung APPROV).
+  static int _approvedOf(Map<String, int> statusCounts) {
+    var approved = 0;
+    statusCounts.forEach((alias, count) {
+      if (alias.toUpperCase().contains('APPROV')) approved += count;
+    });
+    return approved;
+  }
+
+  /// Approved+: semua status dijumlah KECUALI OPEN, DRAFT, dan
+  /// SUBMITTED BY PENCACAH.
+  static int _approvedPlusOf(Map<String, int> statusCounts) {
+    var total = 0;
+    statusCounts.forEach((alias, count) {
+      final upper = alias.toUpperCase();
+      final isOpen = upper.startsWith('OPEN');
+      final isDraft = upper.startsWith('DRAFT');
+      final isSubmitPencacah =
+          upper.contains('SUBMIT') && upper.contains('PENCACAH');
+      if (!isOpen && !isDraft && !isSubmitPencacah) total += count;
+    });
+    return total;
   }
 
   /// Muat distribusi kode_bang dari RPC lalu bangun agregat per wilayah dan
@@ -268,6 +324,8 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
       _searchController.clear();
       _resetSort();
       _selectedTier = null;
+      // Tab Pengawas hanya ada di level atas.
+      if (_tableTab == 3) _tableTab = 0;
     });
     _loadData();
   }
@@ -873,7 +931,9 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
             children: [
               Expanded(
                 child: Text(
-                  _isPetugasLevel
+                  _tableTab == 3
+                      ? 'Tabel Per Pengawas'
+                      : _isPetugasLevel
                       ? 'Tabel Per Petugas'
                       : 'Tabel Per SLS/Sub-SLS',
                   style: const TextStyle(
@@ -898,7 +958,9 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
           const SizedBox(height: 12),
           _buildTableTabs(),
           const SizedBox(height: 12),
-          if (_payload.rows.isEmpty)
+          if (_tableTab == 3)
+            _buildPengawasTable()
+          else if (_payload.rows.isEmpty)
             _buildEmptyState(
               _isPetugasLevel
                   ? 'Belum ada data petugas.'
@@ -946,11 +1008,55 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
   /// Excel/Sheets), mengikuti tab, level, filter, dan sort aktif.
   Future<void> _copyCurrentTable() async {
     final messenger = ScaffoldMessenger.of(context);
-    final rows = _displayRows();
     final lines = <List<String>>[];
 
     String pct(int submitted, int target) =>
         target > 0 ? '${(submitted / target * 100).round()}%' : '';
+
+    // Tab Pengawas punya sumber baris sendiri.
+    if (_tableTab == 3) {
+      final pengawasRows = (_pengawasPayload?.rows ?? const <FasihRekapRow>[])
+          .where((row) => row.unitId.trim().isNotEmpty)
+          .toList();
+      if (_sortColumnIndex != null) {
+        _sortRows(
+          pengawasRows,
+          (row) => _pengawasSortValue(row, _sortColumnIndex!),
+        );
+      }
+      lines.add([
+        'No', 'Pengawas', 'Email', 'Target', 'Total', 'Submitted', 'Draft',
+        'Open', 'Approved', 'Approved+', '%',
+      ]);
+      for (var i = 0; i < pengawasRows.length; i++) {
+        final row = pengawasRows[i];
+        final b = _breakdownOf(
+          row.statusCounts,
+          row.totalAssignment,
+          row.totalTerkirim,
+        );
+        final target = _prelistByPengawas[row.unitId] ?? 0;
+        final approved = _approvedOf(row.statusCounts);
+        final approvedPlus = _approvedPlusOf(row.statusCounts);
+        lines.add([
+          '${i + 1}', row.title, row.subtitle == '-' ? '' : row.subtitle,
+          '$target', '${row.totalAssignment}', '${b.submitted}',
+          '${b.draft}', '${b.open}', '$approved', '$approvedPlus',
+          pct(approved, target),
+        ]);
+      }
+      final text = lines.map((r) => r.join('\t')).join('\n');
+      await Clipboard.setData(ClipboardData(text: text));
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Tersalin ${pengawasRows.length} baris ke clipboard.'),
+        ),
+      );
+      return;
+    }
+
+    final rows = _displayRows();
     List<String> identityHeaders() =>
         _isPetugasLevel ? ['Petugas'] : ['SLS', 'Sub', 'Nama SLS'];
     List<String> identityValues(FasihRekapRow row) {
@@ -1045,6 +1151,10 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
       case 2:
         return 'Rekap submitted: Usaha (BKU), Keluarga (campuran + tempat '
             'tinggal), Lainnya (4–9), Tidak ditemukan (kosong).';
+      case 3:
+        return 'Approved = disetujui pengawas. Approved+ = semua status selain '
+            'OPEN, DRAFT & SUBMITTED BY PENCACAH. % = Approved/target; '
+            'baris hijau = capaian 40% ke atas.';
       default:
         return _isPetugasLevel
             ? 'Ketuk baris petugas untuk detail per SLS/sub-SLS. '
@@ -1065,6 +1175,9 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
               _tableTab = idx;
               _resetSort();
             });
+            if (idx == 3 && _pengawasPayload == null) {
+              _loadPengawas();
+            }
           },
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
@@ -1113,6 +1226,10 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
           seg(1, Icons.home_work_outlined, 'Bangunan'),
           const SizedBox(width: 4),
           seg(2, Icons.summarize_outlined, 'Rekap'),
+          if (_role == 'admin' && _isPetugasLevel) ...[
+            const SizedBox(width: 4),
+            seg(3, Icons.supervisor_account_rounded, 'Pengawas'),
+          ],
         ],
       ),
     );
@@ -1254,6 +1371,177 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
               const DataCell(Text('')),
               _totalLabelCell('Total (${rows.length} petugas)'),
               ..._totalNumberCells(totals),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Nilai sortir kolom tabel pengawas (indeks sesuai urutan header).
+  Comparable<dynamic> _pengawasSortValue(FasihRekapRow row, int index) {
+    final breakdown = _breakdownOf(
+      row.statusCounts,
+      row.totalAssignment,
+      row.totalTerkirim,
+    );
+    final target = _prelistByPengawas[row.unitId] ?? 0;
+    final approved = _approvedOf(row.statusCounts);
+    switch (index) {
+      case 2:
+        return target;
+      case 3:
+        return row.totalAssignment;
+      case 4:
+        return breakdown.submitted;
+      case 5:
+        return breakdown.draft;
+      case 6:
+        return breakdown.open;
+      case 7:
+        return approved;
+      case 8:
+        return _approvedPlusOf(row.statusCounts);
+      case 9:
+        return target > 0 ? approved / target : -1.0;
+      default:
+        return row.title.toLowerCase();
+    }
+  }
+
+  /// Tabel tab "Pengawas": progres per pengawas + kolom Approved dan
+  /// persentase Approved terhadap target prelist binaannya.
+  Widget _buildPengawasTable() {
+    if (_pengawasLoading || _pengawasPayload == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final payload = _pengawasPayload!;
+    if (payload.rows.isEmpty) {
+      return _buildEmptyState('Belum ada data pengawas.');
+    }
+
+    final rows = payload.rows
+        .where((row) => row.unitId.trim().isNotEmpty)
+        .toList();
+    if (_sortColumnIndex != null) {
+      _sortRows(rows, (row) => _pengawasSortValue(row, _sortColumnIndex!));
+    }
+
+    // Baris total.
+    var totTarget = 0;
+    var totAssignment = 0;
+    var totSubmitted = 0;
+    var totDraft = 0;
+    var totOpen = 0;
+    var totApproved = 0;
+    var totApprovedPlus = 0;
+    for (final row in rows) {
+      final b = _breakdownOf(
+        row.statusCounts,
+        row.totalAssignment,
+        row.totalTerkirim,
+      );
+      totTarget += _prelistByPengawas[row.unitId] ?? 0;
+      totAssignment += row.totalAssignment;
+      totSubmitted += b.submitted;
+      totDraft += b.draft;
+      totOpen += b.open;
+      totApproved += _approvedOf(row.statusCounts);
+      totApprovedPlus += _approvedPlusOf(row.statusCounts);
+    }
+
+    return _fullWidthScroll(
+      DataTable(
+        showCheckboxColumn: false,
+        horizontalMargin: 12,
+        columnSpacing: 18,
+        headingRowHeight: 48,
+        dataRowMinHeight: 46,
+        dataRowMaxHeight: 60,
+        sortColumnIndex: _sortColumnIndex,
+        sortAscending: _sortAscending,
+        headingRowColor: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
+        columns: [
+          _noColumn(),
+          DataColumn(onSort: _onSort, label: const Text('Pengawas')),
+          _numColumn('Target'),
+          _numColumn('Total'),
+          _numColumn('Submitted'),
+          _numColumn('Draft'),
+          _numColumn('Open'),
+          _numColumn('Approved'),
+          _numColumn('Approved+'),
+          _numColumn('%'),
+        ],
+        rows: rows.asMap().entries.map((entry) {
+          final row = entry.value;
+          final b = _breakdownOf(
+            row.statusCounts,
+            row.totalAssignment,
+            row.totalTerkirim,
+          );
+          final target = _prelistByPengawas[row.unitId] ?? 0;
+          final approved = _approvedOf(row.statusCounts);
+          final approvedPlus = _approvedPlusOf(row.statusCounts);
+          final hijau = target > 0 && approved / target >= 0.4;
+          return DataRow(
+            color: hijau
+                ? WidgetStateProperty.all(const Color(0xFFE3F4EA))
+                : null,
+            cells: [
+              _noCell(entry.key + 1),
+              DataCell(
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 190),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        row.title,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      if (row.subtitle.isNotEmpty && row.subtitle != '-')
+                        Text(
+                          row.subtitle,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.blueGrey[400],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              _numCell(target, color: const Color(0xFF0F4C81)),
+              _numCell(row.totalAssignment),
+              _numCell(b.submitted, color: const Color(0xFF1D8F5A)),
+              _numCell(b.draft, color: Colors.orange[800]),
+              _numCell(b.open, color: Colors.blueGrey[500]),
+              _numCell(approved, color: const Color(0xFF6B4FBB)),
+              _numCell(approvedPlus, color: const Color(0xFF0F766E)),
+              _percentCell(approved, target),
+            ],
+          );
+        }).toList()..add(
+          DataRow(
+            color: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
+            cells: [
+              const DataCell(Text('')),
+              _totalLabelCell('Total (${rows.length} pengawas)'),
+              _numCell(totTarget, color: const Color(0xFF0F4C81)),
+              _numCell(totAssignment),
+              _numCell(totSubmitted, color: const Color(0xFF1D8F5A)),
+              _numCell(totDraft, color: Colors.orange[800]),
+              _numCell(totOpen, color: Colors.blueGrey[500]),
+              _numCell(totApproved, color: const Color(0xFF6B4FBB)),
+              _numCell(totApprovedPlus, color: const Color(0xFF0F766E)),
+              _percentCell(totApproved, totTarget),
             ],
           ),
         ),

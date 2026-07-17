@@ -76,7 +76,64 @@ class DocumentationUploadService {
   final StorageService _storage = StorageServiceFactory.create();
   final Uuid _uuid = const Uuid();
 
+  /// Sumber daftar dokumentasi.
+  ///
+  /// Online-first: ambil daftar dari Supabase (`documentation_uploads`) supaya
+  /// tersinkron di perangkat mana pun, lalu digabung dengan cache lokal untuk
+  /// mendapatkan thumbnail / ukuran file bila filenya ada di perangkat ini.
+  /// Kalau gagal (offline / tanpa sesi), fallback ke cache lokal.
   Future<List<DocumentationEntry>> loadEntries() async {
+    try {
+      final context = await _resolveContext();
+
+      final localEntries = await _loadLocalEntries();
+      final localByName = <String, DocumentationEntry>{
+        for (final entry in localEntries) entry.fileName: entry,
+      };
+
+      final rows = await _client
+          .from('documentation_uploads')
+          .select(
+            'id, kategori, keterangan, link_file, nama_file, '
+            'preview_url, drive_file_id, file_size, created_at',
+          )
+          .eq('user_id', context.userKey)
+          .order('created_at', ascending: false);
+
+      return (rows as List).whereType<Map<String, dynamic>>().map((row) {
+        final fileName = (row['nama_file'] ?? '').toString();
+        final local = localByName[fileName];
+        final driveViewUrl = (row['link_file'] ?? '').toString();
+        // Utamakan kolom dari Supabase; fallback ke cache lokal untuk data lama
+        // yang kolom media-nya masih null.
+        final previewUrl = (row['preview_url'] ?? '').toString();
+        final driveFileId = (row['drive_file_id'] ?? '').toString();
+        final fileSize = (row['file_size'] as num?)?.toInt();
+        return DocumentationEntry(
+          id: (row['id'] ?? '').toString(),
+          fileName: fileName,
+          localPath: local?.localPath ?? '',
+          driveFileId: driveFileId.isNotEmpty
+              ? driveFileId
+              : (local?.driveFileId ?? ''),
+          driveViewUrl: driveViewUrl,
+          previewUrl: previewUrl.isNotEmpty
+              ? previewUrl
+              : (local?.previewUrl ?? driveViewUrl),
+          category: (row['kategori'] ?? '').toString(),
+          description: (row['keterangan'] ?? '').toString(),
+          uploadedAt: (row['created_at'] ?? '').toString(),
+          fileSize: fileSize ?? local?.fileSize ?? 0,
+        );
+      }).toList();
+    } catch (_) {
+      // Offline / tanpa sesi: pakai cache lokal saja.
+      return _loadLocalEntries();
+    }
+  }
+
+  /// Daftar dari cache lokal perangkat (JSON di folder dokumen aplikasi).
+  Future<List<DocumentationEntry>> _loadLocalEntries() async {
     try {
       final key = await _storageKey();
       final raw = await _storage.read(key);
@@ -133,6 +190,9 @@ class DocumentationUploadService {
       category: category,
       description: description,
       driveViewUrl: driveViewUrl,
+      previewUrl: previewUrl,
+      driveFileId: driveFileId,
+      fileSize: fileBytes.length,
       uploadedAt: uploadedAt,
     );
 
@@ -155,21 +215,66 @@ class DocumentationUploadService {
       fileSize: await localFile.length(),
     );
 
-    final entries = await loadEntries();
+    final entries = await _loadLocalEntries();
     entries.insert(0, entry);
     await _saveEntries(entries);
     return entry;
   }
 
+  /// Hapus penuh: baris Supabase, file Google Drive, dan cache lokal.
+  Future<void> deleteEntry(DocumentationEntry entry) async {
+    // 1. Hapus baris di Supabase (butuh policy delete_own).
+    if (entry.id.isNotEmpty) {
+      try {
+        await _client
+            .from('documentation_uploads')
+            .delete()
+            .eq('id', entry.id);
+      } catch (_) {
+        // Abaikan; entry lokal-only (offline) tidak punya baris Supabase.
+      }
+    }
+
+    // 2. Hapus file di Google Drive.
+    final driveFileId = _resolveDriveFileId(entry);
+    if (driveFileId.isNotEmpty) {
+      try {
+        await _driveService.deleteFile(driveFileId);
+      } catch (_) {
+        // Abaikan; file mungkin sudah terhapus manual.
+      }
+    }
+
+    // 3. Hapus cache & file lokal.
+    await deleteLocalEntry(entry);
+  }
+
+  /// File ID Drive dari `driveFileId`, atau di-parse dari `driveViewUrl`
+  /// untuk data lama yang belum menyimpan `drive_file_id`.
+  String _resolveDriveFileId(DocumentationEntry entry) {
+    if (entry.driveFileId.isNotEmpty) return entry.driveFileId;
+    final url = entry.driveViewUrl;
+    if (url.isEmpty) return '';
+    final match = RegExp(r'/d/([a-zA-Z0-9_-]+)').firstMatch(url);
+    if (match != null) return match.group(1) ?? '';
+    return Uri.tryParse(url)?.queryParameters['id'] ?? '';
+  }
+
   Future<void> deleteLocalEntry(DocumentationEntry entry) async {
-    final entries = await loadEntries();
-    entries.removeWhere((item) => item.id == entry.id);
+    final entries = await _loadLocalEntries();
+    // Entry yang tampil bisa berasal dari Supabase (id berbeda dari cache
+    // lokal), jadi cocokkan berdasarkan id ATAU nama file.
+    entries.removeWhere(
+      (item) => item.id == entry.id || item.fileName == entry.fileName,
+    );
     await _saveEntries(entries);
 
     try {
-      final file = File(entry.localPath);
-      if (await file.exists()) {
-        await file.delete();
+      if (entry.localPath.isNotEmpty) {
+        final file = File(entry.localPath);
+        if (await file.exists()) {
+          await file.delete();
+        }
       }
     } catch (_) {}
   }
@@ -179,6 +284,9 @@ class DocumentationUploadService {
     required String fileName,
     required String category,
     required String driveViewUrl,
+    required String previewUrl,
+    required String driveFileId,
+    required int fileSize,
     required String uploadedAt,
     String? description,
   }) async {
@@ -188,6 +296,9 @@ class DocumentationUploadService {
       'keterangan': _normalizeDescription(description),
       'link_file': driveViewUrl,
       'nama_file': fileName,
+      'preview_url': previewUrl.isEmpty ? null : previewUrl,
+      'drive_file_id': driveFileId.isEmpty ? null : driveFileId,
+      'file_size': fileSize,
       'created_at': uploadedAt,
     });
   }
@@ -305,6 +416,8 @@ class DocumentationUploadService {
         return 'Pertemuan';
       case 'bukti paket data':
         return 'Bukti Paket Data';
+      case 'fasih':
+        return 'Fasih';
       case 'lainnya':
         return 'Lainnya';
     }

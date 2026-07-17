@@ -212,11 +212,13 @@ class FasihRekapPayload {
 class PrelistTargetRecord {
   final String id;
   final String pplId;
+  final String pmlId;
   final int prelist;
 
   const PrelistTargetRecord({
     required this.id,
     required this.pplId,
+    required this.pmlId,
     required this.prelist,
   });
 
@@ -224,6 +226,7 @@ class PrelistTargetRecord {
     return PrelistTargetRecord(
       id: (json['id'] ?? '').toString(),
       pplId: (json['ppl_id'] ?? '').toString(),
+      pmlId: (json['pml_id'] ?? '').toString(),
       prelist: _toInt(json['prelist']),
     );
   }
@@ -269,7 +272,7 @@ class FasihRekapService {
     while (true) {
       dynamic query = _client
           .from('se2026_wilayah_tugas')
-          .select('id, ppl_id, prelist');
+          .select('id, ppl_id, pml_id, prelist');
       if (pmlId != null && pmlId.isNotEmpty) {
         query = query.eq('pml_id', pmlId);
       }

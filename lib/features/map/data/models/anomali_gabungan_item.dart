@@ -85,6 +85,21 @@ class AnomaliGabunganItem {
       return (s == null || s.isEmpty) ? null : s;
     }
 
+    // "Nama Anomali" mentah dari Fasih menempelkan status di akhir kalimat
+    // (mis. "... sudah ditindaklanjuti" / "... belum ditindaklanjuti").
+    // Buang -- deskripsi cukup memuat penjelasan aturannya saja.
+    String bersihkanDeskripsi(String v) {
+      return v
+          .replaceAll(
+            RegExp(
+              r'\s*(sudah|belum)\s+ditindak\s*lanjuti\.?\s*$',
+              caseSensitive: false,
+            ),
+            '',
+          )
+          .trim();
+    }
+
     return AnomaliGabunganItem(
       sumber: (json['sumber'] ?? '').toString(),
       assignmentId: (json['assignment_id'] ?? '').toString(),
@@ -96,7 +111,7 @@ class AnomaliGabunganItem {
       subjek: (json['subjek'] ?? '').toString(),
       noAnomali:
           json['no_anomali'] is int ? json['no_anomali'] as int : null,
-      deskripsi: (json['deskripsi'] ?? '').toString(),
+      deskripsi: bersihkanDeskripsi((json['deskripsi'] ?? '').toString()),
       statusTindakLanjut:
           (json['status_tindak_lanjut'] ?? 'belum_diperiksa').toString(),
       jenisRespons: nullableString(json['jenis_respons']),

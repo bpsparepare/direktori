@@ -1952,7 +1952,11 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                             borderRadius: BorderRadius.circular(30),
                           ),
                           child: Text(
-                            item.kategoriRincianLabel,
+                            // Cukup kode kategori (mis. "KP2"); penjelasan
+                            // lengkap sudah ada di section "Keterangan Anomali".
+                            item.kategoriKode.isEmpty
+                                ? item.kategoriRincianLabel
+                                : item.kategoriKode,
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
