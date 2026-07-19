@@ -235,8 +235,10 @@ class _AnomaliPageState extends State<AnomaliPage> {
   List<AnomaliGabunganItem> _filterItems(List<AnomaliGabunganItem> source) {
     final query = _query.trim().toLowerCase();
     final result = source.where((item) {
-      if (_selectedSumber == _sumberWilayah && !item.isWilayah) return false;
-      if (_selectedSumber == _sumberPusat && !item.isPusatBaru) return false;
+      if (_selectedSumber == _sumberWilayah && !item.isSumberWilayah) {
+        return false;
+      }
+      if (_selectedSumber == _sumberPusat && item.isSumberWilayah) return false;
       if (_selectedStatus != _allStatus &&
           item.statusEfektif != _selectedStatus) {
         return false;
@@ -1107,11 +1109,12 @@ class _AnomaliPageState extends State<AnomaliPage> {
     );
   }
 
-  Color _sumberColor(String sumber) =>
-      sumber == 'kualitas' ? const Color(0xFF8B1D5E) : const Color(0xFF1F6FEB);
+  Color _itemSumberColor(AnomaliGabunganItem item) => item.isSumberWilayah
+      ? const Color(0xFF8B1D5E)
+      : const Color(0xFF1F6FEB);
 
   Widget _buildSumberBadge(AnomaliGabunganItem item) {
-    final color = _sumberColor(item.sumber);
+    final color = _itemSumberColor(item);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -1122,7 +1125,9 @@ class _AnomaliPageState extends State<AnomaliPage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            item.isWilayah ? Icons.map_outlined : Icons.assessment_outlined,
+            item.isSumberWilayah
+                ? Icons.map_outlined
+                : Icons.assessment_outlined,
             size: 13,
             color: color,
           ),
@@ -1142,7 +1147,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
 
   Widget _buildAnomaliTile(AnomaliGabunganItem item, int index) {
     final sudahDiperiksa = item.sudahDitindaklanjuti;
-    final accentColor = _sumberColor(item.sumber);
+    final accentColor = _itemSumberColor(item);
     // Mode compact untuk layar sempit (mobile): nama dapat baris penuh, chip
     // status pindah ke baris bawah agar tidak menjepit nama.
     final compact = MediaQuery.of(context).size.width < 600;
@@ -1925,7 +1930,7 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                           ),
                           decoration: BoxDecoration(
                             color:
-                                (item.isWilayah
+                                (item.isSumberWilayah
                                         ? const Color(0xFF8B1D5E)
                                         : const Color(0xFF1F6FEB))
                                     .withValues(alpha: 0.12),
@@ -1934,7 +1939,7 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                           child: Text(
                             item.sumberLabel,
                             style: TextStyle(
-                              color: item.isWilayah
+                              color: item.isSumberWilayah
                                   ? const Color(0xFF8B1D5E)
                                   : const Color(0xFF1F6FEB),
                               fontSize: 12,

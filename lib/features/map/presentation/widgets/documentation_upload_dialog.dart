@@ -85,12 +85,12 @@ class _DocumentationUploadDialogState
     return PopScope(
       canPop: !_isUploading,
       child: Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -115,9 +115,9 @@ class _DocumentationUploadDialogState
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 _buildSelectedPreview(),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
@@ -141,15 +141,15 @@ class _DocumentationUploadDialogState
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 14),
                 const Text(
                   'Pilih Kategori',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: _categoryOptions
                       .map(
                         (option) => _buildCategoryCard(
@@ -166,11 +166,11 @@ class _DocumentationUploadDialogState
                       )
                       .toList(),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 TextField(
                   controller: _descriptionController,
-                  minLines: 2,
-                  maxLines: 4,
+                  minLines: 1,
+                  maxLines: 3,
                   textInputAction: TextInputAction.done,
                   enabled: !_isUploading,
                   decoration: InputDecoration(
@@ -208,7 +208,7 @@ class _DocumentationUploadDialogState
                     ),
                   ),
                 ],
-                const SizedBox(height: 18),
+                const SizedBox(height: 14),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -244,11 +244,11 @@ class _DocumentationUploadDialogState
   Widget _buildSelectedPreview() {
     if (_selectedFile == null) {
       return Container(
-        height: 180,
+        height: 120,
         width: double.infinity,
         decoration: BoxDecoration(
           color: const Color(0xFFF7FAFF),
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: const Color(0xFF2D77D0).withValues(alpha: 0.1),
           ),
@@ -256,11 +256,11 @@ class _DocumentationUploadDialogState
         child: const Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.image_outlined, size: 44, color: Color(0xFF2D77D0)),
-            SizedBox(height: 10),
+            Icon(Icons.image_outlined, size: 34, color: Color(0xFF2D77D0)),
+            SizedBox(height: 8),
             Text(
               'Belum ada gambar dipilih',
-              style: TextStyle(fontWeight: FontWeight.w600),
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             ),
           ],
         ),
@@ -268,10 +268,10 @@ class _DocumentationUploadDialogState
     }
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: BorderRadius.circular(18),
       child: Image.file(
         _selectedFile!,
-        height: 220,
+        height: 150,
         width: double.infinity,
         fit: BoxFit.cover,
       ),
@@ -284,53 +284,42 @@ class _DocumentationUploadDialogState
     required VoidCallback? onTap,
   }) {
     return InkWell(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(14),
       onTap: onTap,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 66),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          decoration: BoxDecoration(
+      child: Ink(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFEAF3FF) : const Color(0xFFF7FAFF),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
             color: isSelected
-                ? const Color(0xFFEAF3FF)
-                : const Color(0xFFF7FAFF),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
+                ? const Color(0xFF2D77D0)
+                : const Color(0xFF2D77D0).withValues(alpha: 0.10),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              option.icon,
+              size: 17,
               color: isSelected
                   ? const Color(0xFF2D77D0)
-                  : const Color(0xFF2D77D0).withValues(alpha: 0.10),
-              width: isSelected ? 1.5 : 1,
+                  : const Color(0xFF3D6B9D),
             ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: isSelected ? const Color(0xFF2D77D0) : Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  option.icon,
-                  size: 20,
-                  color: isSelected ? Colors.white : const Color(0xFF2D77D0),
-                ),
+            const SizedBox(width: 6),
+            Text(
+              option.label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: isSelected
+                    ? const Color(0xFF143A70)
+                    : const Color(0xFF314760),
               ),
-              const SizedBox(width: 10),
-              Text(
-                option.label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: isSelected
-                      ? const Color(0xFF143A70)
-                      : const Color(0xFF314760),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

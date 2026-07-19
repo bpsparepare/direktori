@@ -1011,7 +1011,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
     final lines = <List<String>>[];
 
     String pct(int submitted, int target) =>
-        target > 0 ? '${(submitted / target * 100).round()}%' : '';
+        target > 0 ? '${(submitted / target * 100).toStringAsFixed(2)}%' : '';
 
     // Tab Pengawas punya sumber baris sendiri.
     if (_tableTab == 3) {
@@ -1042,7 +1042,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
           '${i + 1}', row.title, row.subtitle == '-' ? '' : row.subtitle,
           '$target', '${row.totalAssignment}', '${b.submitted}',
           '${b.draft}', '${b.open}', '$approved', '$approvedPlus',
-          pct(approved, target),
+          pct(approvedPlus, target),
         ]);
       }
       final text = lines.map((r) => r.join('\t')).join('\n');
@@ -1153,7 +1153,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
             'tinggal), Lainnya (4–9), Tidak ditemukan (kosong).';
       case 3:
         return 'Approved = disetujui pengawas. Approved+ = semua status selain '
-            'OPEN, DRAFT & SUBMITTED BY PENCACAH. % = Approved/target; '
+            'OPEN, DRAFT & SUBMITTED BY PENCACAH. % = Approved+/target; '
             'baris hijau = capaian 40% ke atas.';
       default:
         return _isPetugasLevel
@@ -1403,7 +1403,8 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
       case 8:
         return _approvedPlusOf(row.statusCounts);
       case 9:
-        return target > 0 ? approved / target : -1.0;
+        final approvedPlus = _approvedPlusOf(row.statusCounts);
+        return target > 0 ? approvedPlus / target : -1.0;
       default:
         return row.title.toLowerCase();
     }
@@ -1486,7 +1487,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
           final target = _prelistByPengawas[row.unitId] ?? 0;
           final approved = _approvedOf(row.statusCounts);
           final approvedPlus = _approvedPlusOf(row.statusCounts);
-          final hijau = target > 0 && approved / target >= 0.4;
+          final hijau = target > 0 && approvedPlus / target >= 0.4;
           return DataRow(
             color: hijau
                 ? WidgetStateProperty.all(const Color(0xFFE3F4EA))
@@ -1525,7 +1526,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
               _numCell(b.open, color: Colors.blueGrey[500]),
               _numCell(approved, color: const Color(0xFF6B4FBB)),
               _numCell(approvedPlus, color: const Color(0xFF0F766E)),
-              _percentCell(approved, target),
+              _percentCell(approvedPlus, target),
             ],
           );
         }).toList()..add(
@@ -1541,7 +1542,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
               _numCell(totOpen, color: Colors.blueGrey[500]),
               _numCell(totApproved, color: const Color(0xFF6B4FBB)),
               _numCell(totApprovedPlus, color: const Color(0xFF0F766E)),
-              _percentCell(totApproved, totTarget),
+              _percentCell(totApprovedPlus, totTarget),
             ],
           ),
         ),
@@ -1956,7 +1957,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
     final percent = submitted / target;
     return DataCell(
       Text(
-        '${(percent * 100).toStringAsFixed(0)}%',
+        '${(percent * 100).toStringAsFixed(2)}%',
         style: TextStyle(
           fontWeight: FontWeight.w800,
           color: _progressColor(percent),

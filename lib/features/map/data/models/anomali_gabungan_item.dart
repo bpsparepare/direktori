@@ -141,6 +141,13 @@ class AnomaliGabunganItem {
   bool get isWilayah => sumber == 'kualitas';
   bool get isPusatBaru => sumber == 'pusat_baru';
 
+  /// Sumber tampilan (Wilayah vs Pusat). Selain 'kualitas' (rule engine),
+  /// anomali hasil impor data wilayah memakai kode kategori berprefiks 'UW'
+  /// (mis. UW1/UW2) sehingga tetap dihitung sebagai sumber Wilayah, bukan
+  /// Pusat (yang berprefiks UP/KP dari export Fasih).
+  bool get isSumberWilayah =>
+      isWilayah || kategoriKode.toUpperCase().startsWith('UW');
+
   /// Scope pusat_baru ('usaha'/'keluarga') -- kategori_besar sudah berisi
   /// scope-nya langsung dari anomali_pusat_temuan.scope.
   String get scopePusatBaru => kategoriBesar;
@@ -197,7 +204,7 @@ class AnomaliGabunganItem {
     return parts.join(' / ');
   }
 
-  String get sumberLabel => isWilayah ? 'Wilayah' : 'Pusat';
+  String get sumberLabel => isSumberWilayah ? 'Wilayah' : 'Pusat';
 
   /// Label ramah untuk kategori_besar: 'keluarga' -> 'Keluarga',
   /// 'usaha' -> 'Usaha', 'anggota' -> 'Anggota Keluarga'.

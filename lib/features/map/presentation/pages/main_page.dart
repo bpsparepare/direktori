@@ -10,6 +10,7 @@ import 'nik_tidak_valid_page.dart';
 import 'anomali_page.dart';
 import 'analisis_page.dart';
 import 'import_anomali_pusat_page.dart';
+import 'import_anomali_wilayah_pendapatan_page.dart';
 import 'responden_sulit_page.dart';
 import 'lembar_kerja_page.dart';
 import '../widgets/documentation_upload_dialog.dart';
@@ -409,17 +410,42 @@ class _MainPageState extends State<MainPage> {
                     index: 7,
                   ),
                 if (_se2026Role == 'admin')
-                  ListTile(
-                    leading: const Icon(Icons.upload_file_rounded),
-                    title: const Text('Impor Anomali Pusat'),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ImportAnomaliPusatPage(),
+                  Theme(
+                    data: Theme.of(context)
+                        .copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      leading: const Icon(Icons.upload_file_rounded),
+                      title: const Text('Impor Anomali'),
+                      childrenPadding: const EdgeInsets.only(left: 24),
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.account_balance_rounded),
+                          title: const Text('Anomali Pusat'),
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const ImportAnomaliPusatPage(),
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
+                        ListTile(
+                          leading: const Icon(Icons.paid_outlined),
+                          title: const Text('Anomali Wilayah - Pendapatan'),
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const ImportAnomaliWilayahPendapatanPage(),
+                              ),
+                            );
+                          },
+                        ),
+                        // Tambahkan jenis impor anomali lain di sini.
+                      ],
+                    ),
                   ),
               ],
             ),
