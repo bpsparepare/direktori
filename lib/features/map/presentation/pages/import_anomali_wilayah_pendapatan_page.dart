@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/models/usaha_pendapatan_item.dart';
 import '../../data/services/anomali_wilayah_service.dart';
@@ -29,6 +30,20 @@ class _ImportAnomaliWilayahPendapatanPageState
   bool _hasSearched = false;
 
   static const Color _accent = Color(0xFF1D8F5A);
+  static const String _fasihSurveyId = 'fd68e454-ba45-4b85-8205-f3bf777ded24';
+
+  Future<void> _openFasih(String assignmentId) async {
+    if (assignmentId.isEmpty) return;
+    final uri = Uri.tryParse(
+        'https://fasih-sm.bps.go.id/app/assignment/$_fasihSurveyId/$assignmentId/edit');
+    if (uri == null) return;
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tidak bisa membuka Fasih')),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -338,6 +353,12 @@ class _ImportAnomaliWilayahPendapatanPageState
                     ),
                   ],
                 ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.open_in_new_rounded, size: 20),
+                color: const Color(0xFF1F6FEB),
+                tooltip: 'Buka di Fasih',
+                onPressed: () => _openFasih(item.assignmentId),
               ),
             ],
           ),

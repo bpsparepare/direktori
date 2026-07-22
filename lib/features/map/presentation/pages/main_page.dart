@@ -10,7 +10,10 @@ import 'nik_tidak_valid_page.dart';
 import 'anomali_page.dart';
 import 'analisis_page.dart';
 import 'import_anomali_pusat_page.dart';
+import 'import_anomali_wilayah_kbli_page.dart';
+import 'import_anomali_wilayah_aset_page.dart';
 import 'import_anomali_wilayah_pendapatan_page.dart';
+import 'import_anomali_wilayah_profesi_page.dart';
 import 'responden_sulit_page.dart';
 import 'lembar_kerja_page.dart';
 import '../widgets/documentation_upload_dialog.dart';
@@ -439,6 +442,45 @@ class _MainPageState extends State<MainPage> {
                               MaterialPageRoute(
                                 builder: (_) =>
                                     const ImportAnomaliWilayahPendapatanPage(),
+                              ),
+                            );
+                          },
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.category_outlined),
+                          title: const Text('Anomali Wilayah - KBLI'),
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const ImportAnomaliWilayahKbliPage(),
+                              ),
+                            );
+                          },
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.badge_outlined),
+                          title: const Text('Anomali Wilayah - Profesi'),
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const ImportAnomaliWilayahProfesiPage(),
+                              ),
+                            );
+                          },
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.diamond_outlined),
+                          title: const Text('Anomali Wilayah - Aset'),
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const ImportAnomaliWilayahAsetPage(),
                               ),
                             );
                           },

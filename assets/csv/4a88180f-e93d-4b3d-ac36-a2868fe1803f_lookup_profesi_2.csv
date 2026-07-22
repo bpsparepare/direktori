@@ -1,0 +1,188 @@
+﻿kode;nama@1
+000;000. Tidak Bekerja
+001;001. Agen Tenaga Kerja
+002;002. Ahli Sejarah dan Cagar budaya
+003;003. Akuntan
+004;004. Analis Keuangan
+005;005. Anggota DPD
+006;006. Anggota DPR RI/MPR RI
+007;007. Anggota DPRD Provinsi/ Anggota DPRD Kabupaten/Kota
+008;008. Apoteker
+009;009. Arsiparis
+010;010. Arsitek
+011;011. Asisten Apoteker
+012;012. Atase
+013;013. Atlet/Olahragawan
+014;014. Awak Kapal
+015;015. Bhikkhu
+016;016. Biarawan
+017;017. Biarawati
+018;018. Bidan
+019;019. Broker/Pialang Saham
+020;020. Bupati
+021;021. Buruh Angkut Barang
+022;022. Buruh Bangunan
+023;023. Buruh Industri
+024;024. Buruh Perikanan
+025;025. Buruh Pertambangan
+026;026. Buruh Pertanian/Kehutanan
+027;027. Buruh Peternakan
+028;028. Camat
+029;029. Chef
+030;030. Chief Executive Officer (CEO)
+031;031. Dokter Gigi
+032;032. Dokter Hewan
+033;033. Dokter Spesialis
+034;034. Dokter Umum
+035;035. Dosen
+036;036. Duta Besar
+037;037. Empu Keris
+038;038. Fotografer
+039;039. Gembala
+040;040. Gubernur
+041;041. Guru
+042;042. Hakim
+043;043. Hakim Agung
+044;044. Imam Masjid
+045;045. Jaksa
+046;046. Jaksa Agung
+047;047. Jiaosheng
+048;048. Juru Gambar Teknik/Drafter
+049;049. Kameramen
+050;050. Kapten Kapal
+051;051. Kasir
+052;052. Kepala Desa
+053;053. Ketua Adat
+054;054. Ketua Organisasi
+055;055. Konsultan
+056;056. Kreator Konten
+057;057. Kurator
+058;058. Kurir
+059;059. Lurah
+060;060. Makelar
+061;061. Manajer
+062;062. Masinis
+063;063. Mekanik
+064;064. Menteri/Kepala Badan (setingkat Menteri)/Wakil Menteri/Wakil Kepala Badan
+065;065. Nakhoda
+066;066. Nelayan
+067;067. Notaris
+068;068. Operator Layanan Pelanggan  (Customer Service)
+069;069. Operator Mesin
+070;070. Pandita
+071;071. Panitera Pengadilan
+072;072. Paraji
+073;073. Paranormal
+074;074. Pastor
+075;075. Pedagang
+076;076. Pedagang Asongan/Keliling Makanan
+077;077. Pedagang Asongan/Keliling Nonmakanan
+078;078. Pedagang Online
+079;079. Pegawai Pemerintah dengan Perjanjian Kerja (PPPK)
+080;080. Pekerja Garmen/Konveksi
+081;081. Pekerja Percetakan
+082;"082. Pekerja Profesional Penjualan (agen asuransi; sales penjualan; dll)"
+083;083. Pekerja Sosial
+084;084. Pelaku Ekosistem Musik
+085;085. Pelaku Ekosistem Perfilman
+086;086. Pelaku Ekosistem Seni Pertunjukan
+087;087. Pelaku Ekosistem Seni Rupa dan Kriya
+088;088. Pelatih/ Instruktur Olahraga
+089;089. Pelayan Toko
+090;090. Pembantu/Asisten Rumah Tangga
+091;091. Pemberi Pinjaman
+092;092. Pembuat Makanan/Juru Masak
+093;"093. Pembuat Minuman (Barista; Bartender; dll)"
+094;094. Pembuat Rokok/Cerutu/Tembakau Gulung
+095;095. Pembuat Sepatu dan Tas
+096;096. Pembudi Daya Ikan dan Biota Air Lainnya
+097;097. Pemulung
+098;098. Penagih Hutang (Debt Collector)
+099;099. Penasihat Spiritual
+100;100. Penata Busana
+101;101. Penata Rambut
+102;102. Penata Rias
+103;103. Penata Suara
+104;104. Pendeta
+105;105. Peneliti
+106;106. Penerjemah
+107;107. Pengacara
+108;108. Pengasuh Anak (Baby Sitter)
+109;109. Pengelola Gedung/Properti
+110;110. Pengemudi Ojek Online
+111;111. Pengemudi Ojek Pangkalan
+112;112. Pengepul
+113;113. Penjaga Keamanan/Satpam
+114;114. Penjahit
+115;115. Penulis
+116;116. Penyelenggara Acara (Event Organizer/EO)
+117;117. Penyiar Radio
+118;118. Penyiar Televisi
+119;119. Perajin Batu
+120;"120. Perajin Kayu; Bambu; dan Anyaman"
+121;121. Perajin Kulit dan Tekstil
+122;122. Perajin Logam
+123;123. Perajin Perhiasan
+124;124. Perajin Tembikar/Keramik
+125;125. Peramal
+126;126. Perancang Busana/Desainer
+127;127. Perangkat Desa
+128;128. Perawat
+129;129. Petani/Pekebun/Petani Hutan
+130;130. Peternak
+131;131. Petugas Pemadam Kebakaran
+132;132. Petugas Stasiun Pengisian Bahan Bakar
+133;133. Pilot
+134;134. Pinandita
+135;135. PNS Fungsional Tertentu
+136;136. PNS Fungsional Umum
+137;137. PNS Struktural
+138;138. Polisi
+139;139. Pramugara/i
+140;140. Pramusaji
+141;141. Presiden
+142;142. Programer
+143;143. Psikiater
+144;144. Psikolog
+145;145. Pustakawan
+146;146. Resepsionis
+147;147. Sekretaris
+148;148. Seniman/Artis
+149;149. Sopir
+150;150. Supervisor/Mandor
+151;151. Tabib
+152;152. Teknisi
+153;153. Teller Bank
+154;154. Tenaga Cuci
+155;155. Tenaga Humas
+156;156. Tenaga Kebersihan
+157;157. Tenaga Tata Usaha
+158;158. Tentara Nasional Indonesia (TNI)
+159;159. Tukang Bangunan
+160;160. Tukang Cat
+161;161. Tukang Cukur
+162;162. Tukang Fotokopi
+163;163. Tukang Gigi
+164;164. Tukang Kaca
+165;165. Tukang Kayu
+166;166. Tukang Kunci
+167;167. Tukang Las/Pandai Besi
+168;168. Tukang Listrik
+169;169. Tukang Pijat
+170;170. Tukang Pipa
+171;171. Tukang Sablon
+172;172. Tukang Sol Sepatu
+173;173. Tukang Tambal Ban
+174;174. Tukang Tebang Kayu
+175;175. Uskup
+176;176. Ustaz/Mubalig
+177;177. Wakil Bupati
+178;178. Wakil Gubernur
+179;179. Wakil Presiden
+180;180. Wakil Walikota
+181;181. Walikota
+182;182. Wartawan
+183;183. Wenshi
+184;184. Xueshi
+185;185. Lainnya (tuliskan….......)
+999;999. Tidak Tahu
