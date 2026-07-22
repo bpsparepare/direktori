@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/models/usaha_kbli_item.dart';
@@ -71,6 +72,120 @@ class _ImportAnomaliWilayahKbliPageState
   }
 
   KbliInfo? _kbliInfo(String kode) => _kbli[kode.trim()];
+
+  /// Dialog pencarian KBLI dari master CSV. Kembalikan yang dipilih.
+  Future<KbliInfo?> _cariKbli() async {
+    if (_kbli.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Master KBLI belum termuat.')),
+      );
+      return null;
+    }
+    final all = _kbli.values.toList()
+      ..sort((a, b) => a.kode.compareTo(b.kode));
+    final media = MediaQuery.of(context);
+    var query = '';
+    return showDialog<KbliInfo>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setLocal) {
+          final q = query.trim().toLowerCase();
+          final filtered = (q.isEmpty
+                  ? all
+                  : all.where((e) =>
+                      e.kode.contains(q) ||
+                      e.judul.toLowerCase().contains(q) ||
+                      e.deskripsi.toLowerCase().contains(q)))
+              .take(150)
+              .toList();
+          return Dialog(
+            insetPadding: EdgeInsets.symmetric(
+                horizontal: media.size.width * 0.05, vertical: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 8, 6),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Cari KBLI',
+                            style: TextStyle(
+                                fontSize: 17, fontWeight: FontWeight.w800)),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: TextField(
+                    autofocus: true,
+                    onChanged: (v) => setLocal(() => query = v),
+                    decoration: const InputDecoration(
+                      hintText: 'Ketik kode atau kata kunci...',
+                      prefixIcon: Icon(Icons.search_rounded),
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                Flexible(
+                  child: ConstrainedBox(
+                    constraints:
+                        BoxConstraints(maxHeight: media.size.height * 0.55),
+                    child: filtered.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text('Tidak ditemukan.'),
+                          )
+                        : ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final e = filtered[index];
+                              return ListTile(
+                                dense: true,
+                                title: Text('${e.kode} · ${e.judul}',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13)),
+                                subtitle: e.deskripsi.isEmpty
+                                    ? null
+                                    : Text(e.deskripsi,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 11)),
+                                onTap: () =>
+                                    Navigator.of(dialogContext).pop(e),
+                              );
+                            },
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _cariKbliReferensi() async {
+    final picked = await _cariKbli();
+    if (picked == null || !mounted) return;
+    await Clipboard.setData(
+        ClipboardData(text: '${picked.kode} - ${picked.judul}'));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Disalin: ${picked.kode} - ${picked.judul}')),
+    );
+  }
 
   @override
   void dispose() {
@@ -199,11 +314,27 @@ class _ImportAnomaliWilayahKbliPageState
               _kv('Keg. utama', item.kegUtama),
               _kv('Produk', item.produk),
               _kv('Status', item.statusText),
-              const SizedBox(height: 14),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(foregroundColor: _accent),
+                  icon: const Icon(Icons.manage_search_rounded, size: 18),
+                  label: const Text('Cari KBLI yang benar'),
+                  onPressed: () async {
+                    final picked = await _cariKbli();
+                    if (picked == null) return;
+                    final add = 'KBLI seharusnya ${picked.kode} '
+                        '(${picked.judul})';
+                    final cur = controller.text.trim();
+                    controller.text = cur.isEmpty ? add : '$cur\n$add';
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
               TextField(
                 controller: controller,
                 maxLines: 3,
-                autofocus: true,
                 decoration: const InputDecoration(
                   labelText: 'Catatan koreksi KBLI (wajib)',
                   hintText: 'Contoh: KBLI seharusnya 47111 (toko kelontong).',
@@ -403,6 +534,13 @@ class _ImportAnomaliWilayahKbliPageState
         title: const Text('Salah Penentuan KBLI'),
         backgroundColor: _accent,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            tooltip: 'Cari KBLI',
+            icon: const Icon(Icons.manage_search_rounded),
+            onPressed: _cariKbliReferensi,
+          ),
+        ],
       ),
       floatingActionButton: _buildFab(),
       body: SafeArea(
