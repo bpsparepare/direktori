@@ -16,6 +16,7 @@ import 'import_anomali_wilayah_pendapatan_page.dart';
 import 'import_anomali_wilayah_profesi_page.dart';
 import 'responden_sulit_page.dart';
 import 'lembar_kerja_page.dart';
+import 'bukti_dukung_page.dart';
 import '../widgets/documentation_upload_dialog.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
@@ -406,6 +407,19 @@ class _MainPageState extends State<MainPage> {
                     );
                   },
                 ),
+                if (_se2026Role == 'admin' || _se2026Role == 'pengawas')
+                  ListTile(
+                    leading: const Icon(Icons.verified_outlined),
+                    title: const Text('Bukti Dukung'),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const BuktiDukungPage(),
+                        ),
+                      );
+                    },
+                  ),
                 if (_se2026Role == 'admin')
                   _buildDrawerMenuItem(
                     icon: Icons.query_stats_rounded,

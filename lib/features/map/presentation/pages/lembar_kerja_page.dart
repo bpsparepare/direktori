@@ -112,40 +112,41 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
 
   Future<FasihRekapPayload> _fetchPayload(Se2026UserProfile profile) {
     final search = _searchController.text;
-    switch (profile.role) {
-      case 'pendata':
-        return _rekapService.fetchPendataWilayah(search: search, limit: 300);
-      case 'pengawas':
-        if (_selectedPetugas != null) {
-          return _rekapService.fetchPengawasWilayahPetugas(
-            petugasId: _selectedPetugas!.unitId,
-            search: search,
-            limit: 300,
-          );
-        }
-        return _rekapService.fetchPengawasPetugas(
-          search: search,
-          limit: 150,
-          sortBy: 'title',
-          sortDir: 'asc',
-        );
-      case 'admin':
-        if (_selectedPetugas != null) {
-          return _rekapService.fetchAdminWilayahByPetugas(
-            petugasId: _selectedPetugas!.unitId,
-            search: search,
-            limit: 300,
-          );
-        }
-        return _rekapService.fetchAdminPetugas(
-          search: search,
-          limit: 300,
-          sortBy: 'title',
-          sortDir: 'asc',
-        );
-      default:
-        return Future.value(FasihRekapPayload.empty());
+    final role = profile.role;
+
+    // Sumber terpadu get_fasih_rekap (berbasis snapshot rekap). Level ditentukan
+    // server dari role + parameter petugasId/allPetugas.
+    if (role == 'pendata') {
+      return _rekapService.fetchRekap(search: search, limit: 300);
     }
+    if (_selectedPetugas != null) {
+      // Drill ke wilayah (SLS) petugas terpilih → *_wilayah.
+      return _rekapService.fetchRekap(
+        petugasId: _selectedPetugas!.unitId,
+        search: search,
+        limit: 300,
+      );
+    }
+    if (role == 'admin') {
+      // Daftar semua petugas → admin_petugas.
+      return _rekapService.fetchRekap(
+        allPetugas: true,
+        search: search,
+        limit: 300,
+        sortBy: 'title',
+        sortDir: 'asc',
+      );
+    }
+    if (role == 'pengawas') {
+      // Daftar petugas binaan → pengawas_petugas.
+      return _rekapService.fetchRekap(
+        search: search,
+        limit: 150,
+        sortBy: 'title',
+        sortDir: 'asc',
+      );
+    }
+    return Future.value(FasihRekapPayload.empty());
   }
 
   Future<void> _loadPrelistTargets(Se2026UserProfile profile) async {
@@ -180,7 +181,8 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
     if (_pengawasLoading) return;
     setState(() => _pengawasLoading = true);
     try {
-      final payload = await _rekapService.fetchAdminPengawas(
+      // Admin tanpa parameter → level admin_pengawas (daftar pengawas).
+      final payload = await _rekapService.fetchRekap(
         limit: 200,
         sortBy: 'title',
         sortDir: 'asc',
@@ -405,7 +407,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
 
     // Pendata: cukup wilayah tugasnya sendiri.
     if (profile.role == 'pendata') {
-      final payload = await _rekapService.fetchPendataWilayah(limit: 500);
+      final payload = await _rekapService.fetchRekap(limit: 500);
       return payload.rows
           .map((row) => _toExportRow(row, petugas: '(Saya)', email: ''))
           .toList();
@@ -413,23 +415,22 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
 
     // Admin & pengawas: ambil daftar petugas, lalu wilayah tiap petugas.
     final petugasPayload = profile.role == 'admin'
-        ? await _rekapService.fetchAdminPetugas(limit: 500, sortBy: 'title')
-        : await _rekapService.fetchPengawasPetugas(limit: 500, sortBy: 'title');
+        ? await _rekapService.fetchRekap(
+            allPetugas: true,
+            limit: 500,
+            sortBy: 'title',
+          )
+        : await _rekapService.fetchRekap(limit: 500, sortBy: 'title');
 
     final result = <LembarKerjaExportRow>[];
     for (final petugas in petugasPayload.rows) {
       // Lewati baris "tanpa petugas" (ppl_id null → unitId kosong); tidak bisa
       // di-drill per petugas dan string kosong tak valid sebagai UUID.
       if (petugas.unitId.trim().isEmpty) continue;
-      final wilayahPayload = profile.role == 'admin'
-          ? await _rekapService.fetchAdminWilayahByPetugas(
-              petugasId: petugas.unitId,
-              limit: 500,
-            )
-          : await _rekapService.fetchPengawasWilayahPetugas(
-              petugasId: petugas.unitId,
-              limit: 500,
-            );
+      final wilayahPayload = await _rekapService.fetchRekap(
+        petugasId: petugas.unitId,
+        limit: 500,
+      );
       for (final row in wilayahPayload.rows) {
         result.add(
           _toExportRow(

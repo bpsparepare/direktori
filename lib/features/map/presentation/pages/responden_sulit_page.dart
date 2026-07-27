@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:open_file/open_file.dart';
 
 import '../../data/models/responden_sulit_item.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
+import '../../data/services/responden_sulit_export_service.dart';
 import '../../data/services/responden_sulit_service.dart';
 
 /// Halaman fitur "Responden Sulit".
@@ -20,9 +22,12 @@ class RespondenSulitPage extends StatefulWidget {
 class _RespondenSulitPageState extends State<RespondenSulitPage> {
   final RespondenSulitService _service = RespondenSulitService();
   final GroundcheckSupabaseService _gcService = GroundcheckSupabaseService();
+  final RespondenSulitExportService _exportService =
+      RespondenSulitExportService();
   final TextEditingController _searchController = TextEditingController();
 
   bool _isLoading = true;
+  bool _isExporting = false;
   String? _error;
   String _query = '';
   String? _role;
@@ -160,6 +165,44 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
     }
   }
 
+  Future<void> _exportExcel() async {
+    if (_isExporting) return;
+    final rows = _filtered;
+    if (rows.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tidak ada data untuk diekspor.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    setState(() => _isExporting = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final path = await _exportService.exportToFile(rows);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Berhasil mengekspor ${rows.length} data.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      await OpenFile.open(path);
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Gagal mengekspor: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -168,6 +211,22 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
         title: const Text('Responden Sulit'),
         backgroundColor: const Color(0xFF0F4C81),
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            tooltip: 'Ekspor Excel',
+            onPressed: _isExporting ? null : _exportExcel,
+            icon: _isExporting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.file_download_outlined),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'responden_sulit_fab',
