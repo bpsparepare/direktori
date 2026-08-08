@@ -68,6 +68,8 @@ class MapControls extends StatefulWidget {
   final bool hasAssignmentPolygons;
   final bool showAssignmentPolygons;
   final VoidCallback? onToggleAssignmentPolygons;
+  final bool colorAssignmentByStatus;
+  final VoidCallback? onToggleColorByStatus;
   final bool preserveAssignmentFocusOnInit;
   final bool isPolygonSelected; // Boolean to track if a polygon is selected
   final VoidCallback? onToggleFontSize; // Callback for font size toggle
@@ -102,6 +104,8 @@ class MapControls extends StatefulWidget {
     this.hasAssignmentPolygons = false,
     this.showAssignmentPolygons = false,
     this.onToggleAssignmentPolygons,
+    this.colorAssignmentByStatus = false,
+    this.onToggleColorByStatus,
     this.preserveAssignmentFocusOnInit = false,
     this.isPolygonSelected = false, // Initialize
     this.onToggleFontSize,
@@ -997,6 +1001,38 @@ class _MapControlsState extends State<MapControls> {
                 ),
               ),
               const SizedBox(height: 8),
+              // Toggle warnai polygon assignment berdasarkan status pendataan
+              if (widget.hasAssignmentPolygons &&
+                  widget.onToggleColorByStatus != null) ...[
+                Container(
+                  decoration: BoxDecoration(
+                    color: widget.colorAssignmentByStatus
+                        ? Colors.deepPurple[50]
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: IconButton(
+                    onPressed: widget.onToggleColorByStatus,
+                    icon: Icon(
+                      Icons.palette_outlined,
+                      color: widget.colorAssignmentByStatus
+                          ? Colors.deepPurple
+                          : Colors.black87,
+                    ),
+                    tooltip: widget.colorAssignmentByStatus
+                        ? 'Warna: status pendataan (aktif)'
+                        : 'Warnai polygon per status pendataan',
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               // Pilih Polygon FAB
               Container(
                 decoration: BoxDecoration(

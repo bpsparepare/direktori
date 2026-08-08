@@ -26,10 +26,12 @@ class MapView extends StatefulWidget {
   final LatLng? temporaryMarker;
   final List<PolygonData> polygonsMeta;
   final bool showAssignmentPolygons;
+  final bool colorAssignmentByStatus;
   final MapFocusBounds? assignmentFocusBounds;
   final void Function(Place) onPlaceTap;
   final void Function(LatLng point)? onMapLongPress;
   final VoidCallback? onToggleAssignmentPolygons;
+  final VoidCallback? onToggleColorByStatus;
   final void Function(int)? onPolygonSelected;
   final void Function(List<PolygonData>)?
   onMultiplePolygonsSelected; // Add callback
@@ -53,10 +55,12 @@ class MapView extends StatefulWidget {
     this.temporaryMarker,
     this.polygonsMeta = const [],
     this.showAssignmentPolygons = false,
+    this.colorAssignmentByStatus = false,
     this.assignmentFocusBounds,
     required this.onPlaceTap,
     this.onMapLongPress,
     this.onToggleAssignmentPolygons,
+    this.onToggleColorByStatus,
     this.onPolygonSelected,
     this.onMultiplePolygonsSelected,
     this.mapController, // Add to constructor
@@ -92,6 +96,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   MarkerLabelMode _markerLabelMode = MarkerLabelMode.nama;
   double _baseFontSize = 10.0; // Initial font size
   Timer? _boundsDebounce;
+  // Filter tampilan polygon per status pendataan (kode status disembunyikan).
+  // Untuk wilayah tanpa status dipakai sentinel [_statusKeyNull].
+  final Set<String> _hiddenStatuses = <String>{};
   LatLng? _clipboardCheckedPoint;
   String? _clipboardCheckedLabel;
   bool _hasAppliedAssignmentFocus = false;
@@ -595,6 +602,233 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     return '$baseName ($subsls)';
   }
 
+  /// Label untuk polygon assignment: nama SLS + kelurahan + nama petugas (PPL)
+  /// dan pengawas (PML). Tiap bagian di baris terpisah agar mudah dibaca.
+  String? _assignmentPolygonLabel(PolygonData polygon) {
+    final base = _polygonDisplayLabel(polygon);
+    final lines = <String>[];
+    if (base != null && base.isNotEmpty) lines.add(base);
+
+    if (widget.colorAssignmentByStatus) {
+      final code = polygon.statusPendataan;
+      lines.add('[${_statusLabel[code] ?? 'Belum ditandai'}]');
+    }
+
+    final desa = polygon.desa?.trim();
+    if (desa != null && desa.isNotEmpty) lines.add('Kel. $desa');
+
+    final petugas = polygon.namaPetugas?.trim();
+    if (petugas != null && petugas.isNotEmpty) lines.add('PPL: $petugas');
+
+    final pengawas = polygon.namaPengawas?.trim();
+    if (pengawas != null && pengawas.isNotEmpty) lines.add('PML: $pengawas');
+
+    if (lines.isEmpty) return null;
+    return lines.join('\n');
+  }
+
+  // Warna & label status pendataan — konsisten dengan Lembar Kerja.
+  static const Map<String, String> _statusLabel = {
+    'BELUM': 'Belum Mulai',
+    'P30': '30%',
+    'P50': '50%',
+    'P70': '70%',
+    'P90': '90%',
+    'SELESAI': 'Selesai',
+  };
+
+  static Color _statusColor(String? code) {
+    switch (code) {
+      case 'SELESAI':
+        return const Color(0xFF1D8F5A);
+      case 'P90':
+        return const Color(0xFF2E9E6B);
+      case 'P70':
+        return const Color(0xFF2D77D0);
+      case 'P50':
+        return const Color(0xFFE08A00);
+      case 'P30':
+        return const Color(0xFFE05A2B);
+      case 'BELUM':
+        return const Color(0xFFB0392B);
+      default:
+        return const Color(0xFF8895A7); // belum ditandai
+    }
+  }
+
+  /// Warna isi polygon assignment. Bila mode pewarnaan status aktif, pakai
+  /// warna status pendataan; jika tidak, hijau seragam.
+  Color _assignmentFillColor(PolygonData p) {
+    if (!widget.colorAssignmentByStatus) {
+      return Colors.green.withValues(alpha: 0.18);
+    }
+    return _statusColor(p.statusPendataan).withValues(alpha: 0.35);
+  }
+
+  Color _assignmentBorderColor(PolygonData p) {
+    if (!widget.colorAssignmentByStatus) return Colors.green;
+    return _statusColor(p.statusPendataan);
+  }
+
+  // Sentinel untuk wilayah tanpa status (belum ditandai).
+  static const String _statusKeyNull = '__NULL__';
+
+  String _statusKey(PolygonData p) {
+    final s = p.statusPendataan;
+    return (s == null || s.isEmpty) ? _statusKeyNull : s;
+  }
+
+  /// True bila polygon boleh ditampilkan. Filter hanya berlaku saat mode
+  /// pewarnaan status aktif.
+  bool _isStatusVisible(PolygonData p) {
+    if (!widget.colorAssignmentByStatus) return true;
+    return !_hiddenStatuses.contains(_statusKey(p));
+  }
+
+  Widget _buildStatusLegend() {
+    // Hitung jumlah polygon per status untuk statistik & persentase.
+    final counts = <String, int>{};
+    for (final p in widget.assignmentPolygons) {
+      final key = _statusKey(p);
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    final total = widget.assignmentPolygons.length;
+
+    // Urutan tampil: dari belum ke selesai, ditutup "belum ditandai".
+    const order = ['BELUM', 'P30', 'P50', 'P70', 'P90', 'SELESAI'];
+    final entries = <MapEntry<String, String>>[
+      for (final code in order) MapEntry(code, _statusLabel[code]!),
+      const MapEntry(_statusKeyNull, 'Belum ditandai'),
+    ];
+
+    // Persentase "selesai" untuk ringkasan header.
+    final selesai = counts['SELESAI'] ?? 0;
+    final pctSelesai = total == 0 ? 0 : (selesai * 100 / total).round();
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 210),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Status Pendataan',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+              const Spacer(),
+              Text(
+                '$total SLS',
+                style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+              ),
+            ],
+          ),
+          Text(
+            'Selesai $pctSelesai%',
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF1D8F5A),
+            ),
+          ),
+          const Divider(height: 10),
+          for (final e in entries)
+            _legendRow(
+              key: e.key,
+              color: _statusColor(e.key == _statusKeyNull ? null : e.key),
+              label: e.value,
+              count: counts[e.key] ?? 0,
+              total: total,
+            ),
+          const SizedBox(height: 2),
+          Text(
+            'Ketuk untuk filter',
+            style: TextStyle(fontSize: 9, color: Colors.grey[500]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _legendRow({
+    required String key,
+    required Color color,
+    required String label,
+    required int count,
+    required int total,
+  }) {
+    final hidden = _hiddenStatuses.contains(key);
+    final pct = total == 0 ? 0 : (count * 100 / total).round();
+    return InkWell(
+      onTap: () {
+        setState(() {
+          if (hidden) {
+            _hiddenStatuses.remove(key);
+          } else {
+            _hiddenStatuses.add(key);
+          }
+        });
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Opacity(
+          opacity: hidden ? 0.4 : 1.0,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.55),
+                  border: Border.all(color: color, width: 1.2),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: hidden
+                    ? const Icon(Icons.close, size: 10, color: Colors.black54)
+                    : null,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    decoration: hidden ? TextDecoration.lineThrough : null,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '$pct% ($count)',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[700],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // Calculate dynamic offset based on zoom level for Esri maps
   double _getDynamicOffsetX(double baseOffsetX, double zoomLevel) {
     // Base zoom level where the offset was calibrated (assuming zoom 13)
@@ -704,13 +938,15 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
             if (widget.showAssignmentPolygons &&
                 widget.assignmentPolygons.isNotEmpty)
               PolygonLayer(
-                polygons: widget.assignmentPolygons.map((p) {
+                polygons: widget.assignmentPolygons.where(_isStatusVisible).map((
+                  p,
+                ) {
                   return Polygon(
                     points: p.points,
-                    color: Colors.green.withValues(alpha: 0.18),
-                    borderColor: Colors.green,
+                    color: _assignmentFillColor(p),
+                    borderColor: _assignmentBorderColor(p),
                     borderStrokeWidth: 2,
-                    label: _polygonDisplayLabel(p),
+                    label: _assignmentPolygonLabel(p),
                     labelStyle: const TextStyle(
                       color: Colors.black,
                       fontWeight: FontWeight.bold,
@@ -947,6 +1183,8 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
           polygonsMeta: widget.polygonsMeta,
           hasAssignmentPolygons: widget.assignmentPolygons.isNotEmpty,
           showAssignmentPolygons: widget.showAssignmentPolygons,
+          colorAssignmentByStatus: widget.colorAssignmentByStatus,
+          onToggleColorByStatus: widget.onToggleColorByStatus,
           preserveAssignmentFocusOnInit:
               widget.assignmentFocusBounds != null ||
               widget.assignmentPolygons.isNotEmpty,
@@ -1037,6 +1275,15 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
             });
           },
         ),
+        // Legenda status pendataan (muncul saat mode pewarnaan status aktif)
+        if (widget.colorAssignmentByStatus &&
+            widget.showAssignmentPolygons &&
+            widget.assignmentPolygons.isNotEmpty)
+          Positioned(
+            left: 12,
+            bottom: 24,
+            child: SafeArea(child: _buildStatusLegend()),
+          ),
         if (_clipboardCheckedPoint != null && _clipboardCheckedLabel != null)
           Positioned(
             left: 16,

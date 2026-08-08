@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import '../../domain/entities/place.dart';
 import '../../data/services/map_assignment_focus_cache_service.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
+import '../../data/services/fasih_rekap_service.dart';
 import '../../domain/entities/map_focus_bounds.dart';
 import '../../domain/entities/polygon_data.dart';
 import '../../domain/usecases/get_all_polygons_meta_from_geojson.dart';
@@ -37,6 +38,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       GroundcheckSupabaseService();
   final MapAssignmentFocusCacheService _focusCacheService =
       MapAssignmentFocusCacheService();
+  final FasihRekapService _rekapService = FasihRekapService();
 
   MapBloc({
     required this.getInitialMapConfig,
@@ -62,6 +64,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     on<TemporaryMarkerAdded>(_onTemporaryMarkerAdded);
     on<TemporaryMarkerRemoved>(_onTemporaryMarkerRemoved);
     on<AssignmentPolygonsToggleRequested>(_onAssignmentPolygonsToggleRequested);
+    on<AssignmentColorByStatusToggled>(_onAssignmentColorByStatusToggled);
     on<MarkerEditModeToggled>(_onMarkerEditModeToggled);
     on<MarkerMovedLocally>(_onMarkerMovedLocally);
     on<MarkerMovesSaved>(_onMarkerMovesSaved);
@@ -535,6 +538,17 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     emit(state.copyWith(showAssignmentPolygons: !state.showAssignmentPolygons));
   }
 
+  void _onAssignmentColorByStatusToggled(
+    AssignmentColorByStatusToggled event,
+    Emitter<MapState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        colorAssignmentByStatus: !state.colorAssignmentByStatus,
+      ),
+    );
+  }
+
   Future<void> _onMultiplePolygonsSelected(
     MultiplePolygonsSelected event,
     Emitter<MapState> emit,
@@ -606,6 +620,23 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     );
   }
 
+  /// Cari baris wilayah tugas yang cocok dengan sebuah polygon assignment,
+  /// berdasarkan id-kandidat (idsubsls lalu idsls).
+  Map<String, dynamic>? _matchWilayahItem(
+    PolygonData polygon,
+    Map<String, Map<String, dynamic>> candidateToItem,
+  ) {
+    for (final c in _idCandidates(polygon.idsubsls)) {
+      final item = candidateToItem[c];
+      if (item != null) return item;
+    }
+    for (final c in _idCandidates(polygon.idsls)) {
+      final item = candidateToItem[c];
+      if (item != null) return item;
+    }
+    return null;
+  }
+
   Set<String> _idCandidates(dynamic value) {
     final raw = value?.toString().trim() ?? '';
     if (raw.isEmpty) return <String>{};
@@ -673,11 +704,19 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       if (wilayah.isEmpty) return const [];
 
       final assignmentIds = <String>{};
+      // Petakan tiap id-kandidat wilayah ke baris wilayah-nya, agar polygon yang
+      // cocok bisa dilengkapi ppl_id/pml_id (untuk nama petugas & pengawas).
+      final candidateToItem = <String, Map<String, dynamic>>{};
       for (final item in wilayah) {
-        assignmentIds.addAll(_idCandidates(item['id']));
-        assignmentIds.addAll(_idCandidates(item['id_sls']));
-        assignmentIds.addAll(_idCandidates(item['kode_subsls']));
-        assignmentIds.addAll(_idCandidates(item['kode_sls']));
+        final itemCandidates = <String>{};
+        itemCandidates.addAll(_idCandidates(item['id']));
+        itemCandidates.addAll(_idCandidates(item['id_sls']));
+        itemCandidates.addAll(_idCandidates(item['kode_subsls']));
+        itemCandidates.addAll(_idCandidates(item['kode_sls']));
+        assignmentIds.addAll(itemCandidates);
+        for (final c in itemCandidates) {
+          candidateToItem.putIfAbsent(c, () => item);
+        }
       }
       if (assignmentIds.isEmpty) return const [];
 
@@ -686,6 +725,61 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         candidates.addAll(_idCandidates(polygon.idsubsls));
         candidates.addAll(_idCandidates(polygon.idsls));
         return candidates.any(assignmentIds.contains);
+      }).toList();
+
+      // Kumpulkan ppl_id/pml_id dari baris wilayah yang cocok, lalu ambil
+      // namanya dari se2026_petugas untuk melengkapi label polygon.
+      final petugasIds = <String>{};
+      for (final polygon in matchedPolygons) {
+        final item = _matchWilayahItem(polygon, candidateToItem);
+        if (item == null) continue;
+        final pplId = item['ppl_id']?.toString().trim();
+        final pmlId = item['pml_id']?.toString().trim();
+        if (pplId != null && pplId.isNotEmpty) petugasIds.add(pplId);
+        if (pmlId != null && pmlId.isNotEmpty) petugasIds.add(pmlId);
+      }
+
+      final petugasNames = petugasIds.isEmpty
+          ? const <String, String>{}
+          : await _groundcheckService.fetchPetugasNames(petugasIds);
+
+      // Status pendataan manual per wilayah (kode_wilayah = SLS/sub-SLS).
+      // Dipetakan lewat id-kandidat agar cocok dgn idsubsls/idsls polygon.
+      final statusByCandidate = <String, String>{};
+      try {
+        final statusRecords = await _rekapService.fetchStatusPendataan();
+        for (final rec in statusRecords) {
+          if (rec.status.isEmpty) continue;
+          for (final c in _idCandidates(rec.kodeWilayah)) {
+            statusByCandidate.putIfAbsent(c, () => rec.status);
+          }
+        }
+      } catch (e) {
+        debugPrint('BLoC: failed to load status pendataan: $e');
+      }
+
+      final enrichedPolygons = matchedPolygons.map((polygon) {
+        final item = _matchWilayahItem(polygon, candidateToItem);
+        final pplId = item?['ppl_id']?.toString().trim();
+        final pmlId = item?['pml_id']?.toString().trim();
+
+        String? status;
+        for (final c in _idCandidates(polygon.idsubsls)) {
+          status = statusByCandidate[c];
+          if (status != null) break;
+        }
+        if (status == null) {
+          for (final c in _idCandidates(polygon.idsls)) {
+            status = statusByCandidate[c];
+            if (status != null) break;
+          }
+        }
+
+        return polygon.copyWith(
+          namaPetugas: pplId == null ? null : petugasNames[pplId],
+          namaPengawas: pmlId == null ? null : petugasNames[pmlId],
+          statusPendataan: status,
+        );
       }).toList();
 
       // #region debug-point B:wilayah-match-result
@@ -722,7 +816,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       );
       // #endregion
 
-      return matchedPolygons;
+      return enrichedPolygons;
     } catch (e) {
       debugPrint('BLoC: failed to load assignment polygons: $e');
       unawaited(

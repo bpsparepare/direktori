@@ -44,6 +44,13 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
   Map<String, Map<String, int>> _kodeBangByPetugas = {};
   bool _kodeBangLoaded = false;
 
+  /// Status pendataan manual per wilayah (key: kode_wilayah 16 digit).
+  /// [_statusByWilayah] menyimpan kode status, [_noteByWilayah] catatannya.
+  Map<String, String> _statusByWilayah = {};
+  Map<String, String> _noteByWilayah = {};
+  bool _statusLoaded = false;
+  bool _savingStatus = false;
+
   /// Tab tabel: 0 = Progres, 1 = Jenis Bangunan (kode_bang).
   int _tableTab = 0;
 
@@ -93,6 +100,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
       final preFutures = <Future<void>>[];
       if (!_prelistLoaded) preFutures.add(_loadPrelistTargets(profile));
       if (!_kodeBangLoaded) preFutures.add(_loadKodeBang());
+      if (!_statusLoaded) preFutures.add(_loadStatusPendataan());
       if (preFutures.isNotEmpty) await Future.wait(preFutures);
       final payload = await payloadFuture;
       if (!mounted) return;
@@ -249,6 +257,209 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
     return _isPetugasLevel
         ? (_kodeBangByPetugas[row.unitId] ?? const {})
         : (_kodeBangByWilayah[row.unitId] ?? const {});
+  }
+
+  // ---------------------------------------------------------------------
+  // Status pendataan manual per wilayah (SLS/sub-SLS).
+  // ---------------------------------------------------------------------
+
+  /// Urutan & kode status yang tersedia.
+  static const List<String> _statusOrder = [
+    'BELUM', 'P30', 'P50', 'P70', 'P90', 'SELESAI',
+  ];
+
+  /// Label singkat status untuk chip & export.
+  static const Map<String, String> _statusLabel = {
+    'BELUM': 'Belum Mulai',
+    'P30': '30%',
+    'P50': '50%',
+    'P70': '70%',
+    'P90': '90%',
+    'SELESAI': 'Selesai',
+  };
+
+  static Color _statusColor(String code) {
+    switch (code) {
+      case 'SELESAI':
+        return const Color(0xFF1D8F5A);
+      case 'P90':
+        return const Color(0xFF2E9E6B);
+      case 'P70':
+        return const Color(0xFF2D77D0);
+      case 'P50':
+        return const Color(0xFFE08A00);
+      case 'P30':
+        return const Color(0xFFE05A2B);
+      case 'BELUM':
+        return const Color(0xFFB0392B);
+      default:
+        return const Color(0xFF8895A7);
+    }
+  }
+
+  /// Muat seluruh status pendataan manual (semua wilayah).
+  Future<void> _loadStatusPendataan() async {
+    final records = await _rekapService.fetchStatusPendataan();
+    final byStatus = <String, String>{};
+    final byNote = <String, String>{};
+    for (final r in records) {
+      if (r.kodeWilayah.isEmpty || r.status.isEmpty) continue;
+      byStatus[r.kodeWilayah] = r.status;
+      if (r.note != null && r.note!.isNotEmpty) {
+        byNote[r.kodeWilayah] = r.note!;
+      }
+    }
+    _statusByWilayah = byStatus;
+    _noteByWilayah = byNote;
+    _statusLoaded = true;
+  }
+
+  /// Kode status untuk satu wilayah, atau null bila belum ditandai.
+  String? _statusOf(FasihRekapRow row) => _statusByWilayah[row.unitId];
+
+  /// Label status siap tampil (mis. untuk export); '' bila belum ditandai.
+  String _statusLabelOf(FasihRekapRow row) {
+    final code = _statusByWilayah[row.unitId];
+    if (code == null) return '';
+    return _statusLabel[code] ?? code;
+  }
+
+  /// Buka editor pemilihan status untuk sebuah wilayah lalu simpan ke server.
+  Future<void> _editStatus(FasihRekapRow row) async {
+    final current = _statusByWilayah[row.unitId];
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
+                child: Text(
+                  'Status Pendataan',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  row.title,
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                ),
+              ),
+              const Divider(height: 1),
+              for (final code in _statusOrder)
+                ListTile(
+                  leading: Icon(
+                    current == code
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_unchecked_rounded,
+                    color: _statusColor(code),
+                  ),
+                  title: Text(_statusLabel[code] ?? code),
+                  onTap: () => Navigator.of(sheetContext).pop(code),
+                ),
+              if (current != null) ...[
+                const Divider(height: 1),
+                ListTile(
+                  leading: Icon(
+                    Icons.delete_outline_rounded,
+                    color: Colors.red[400],
+                  ),
+                  title: Text(
+                    'Hapus status',
+                    style: TextStyle(color: Colors.red[400]),
+                  ),
+                  onTap: () => Navigator.of(sheetContext).pop('__DELETE__'),
+                ),
+              ],
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (selected == null || _savingStatus) return;
+    if (selected == current) return;
+    if (!mounted) return;
+
+    setState(() => _savingStatus = true);
+    final messenger = ScaffoldMessenger.of(context);
+    String? error;
+    if (selected == '__DELETE__') {
+      error = await _rekapService.deleteStatusPendataan(row.unitId);
+      if (error == null) {
+        _statusByWilayah.remove(row.unitId);
+        _noteByWilayah.remove(row.unitId);
+      }
+    } else {
+      error = await _rekapService.upsertStatusPendataan(
+        kodeWilayah: row.unitId,
+        status: selected,
+      );
+      if (error == null) _statusByWilayah[row.unitId] = selected;
+    }
+    if (!mounted) return;
+    setState(() => _savingStatus = false);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(error ?? 'Status pendataan tersimpan.'),
+        backgroundColor: error == null ? null : Colors.red,
+      ),
+    );
+  }
+
+  /// Chip status untuk sel tabel wilayah (ketuk untuk mengubah).
+  Widget _statusChip(FasihRekapRow row) {
+    final code = _statusOf(row);
+    final color = code == null ? const Color(0xFF8895A7) : _statusColor(code);
+    final label = code == null ? 'Tandai' : (_statusLabel[code] ?? code);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: _savingStatus ? null : () => _editStatus(row),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: code == null ? 0.06 : 0.12),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: color.withValues(alpha: code == null ? 0.4 : 0.7),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                code == null ? Icons.add_rounded : Icons.circle,
+                size: code == null ? 15 : 9,
+                color: color,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  color: code == null ? Colors.blueGrey[500] : color,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// Target prelist untuk satu baris tabel sesuai level yang sedang tampil.
@@ -465,6 +676,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
       submitted: breakdown.submitted,
       draft: breakdown.draft,
       open: breakdown.open,
+      status: _statusLabelOf(row),
       kodeBang: _kodeBangByWilayah[row.unitId] ?? const {},
     );
   }
@@ -1078,7 +1290,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
             ? ['No', 'Petugas', 'Email', 'Target', 'Total', 'Submitted',
                 'Draft', 'Open', '%']
             : ['No', 'SLS', 'Sub', 'Nama SLS', 'Kec/Desa', 'Target', 'Total',
-                'Submitted', 'Draft', 'Open', '%'],
+                'Submitted', 'Draft', 'Open', '%', 'Status'],
       );
       for (var i = 0; i < rows.length; i++) {
         final row = rows[i];
@@ -1100,7 +1312,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
           lines.add([
             '${i + 1}', ids[0], ids[1], ids[2], sub, '$target',
             '${row.totalAssignment}', '${b.submitted}', '${b.draft}',
-            '${b.open}', pct(b.submitted, target),
+            '${b.open}', pct(b.submitted, target), _statusLabelOf(row),
           ]);
         }
       }
@@ -1584,6 +1796,12 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
           _numColumn('Draft'),
           _numColumn('Open'),
           _numColumn('%'),
+          const DataColumn(
+            label: Text(
+              'Status',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+            ),
+          ),
         ],
         rows: rows.asMap().entries.map((entry) {
           final row = entry.value;
@@ -1643,6 +1861,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
               _numCell(breakdown.draft, color: Colors.orange[800]),
               _numCell(breakdown.open, color: Colors.blueGrey[500]),
               _percentCell(breakdown.submitted, target),
+              DataCell(_statusChip(row)),
             ],
           );
         }).toList()..add(
@@ -1659,6 +1878,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
                 ),
               ),
               ..._totalNumberCells(totals),
+              const DataCell(Text('')),
             ],
           ),
         ),

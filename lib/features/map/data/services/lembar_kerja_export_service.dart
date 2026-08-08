@@ -17,6 +17,10 @@ class LembarKerjaExportRow {
   final int draft;
   final int open;
 
+  /// Status pendataan manual (label siap tampil, mis. "Selesai"); '' bila
+  /// belum ditandai.
+  final String status;
+
   /// Distribusi jenis bangunan untuk wilayah ini: key kode_bang ('1'..'9',
   /// '' = Tidak Diketahui) -> jumlah.
   final Map<String, int> kodeBang;
@@ -32,6 +36,7 @@ class LembarKerjaExportRow {
     required this.submitted,
     required this.draft,
     required this.open,
+    this.status = '',
     this.kodeBang = const {},
   });
 
@@ -105,10 +110,11 @@ class LembarKerjaExportService {
       'Open',
       'Potensi (Sub+Draft)',
       '% Capaian',
+      'Status Pendataan',
       for (final code in _kodeBangOrder) _kodeBangHeader(code),
     ];
-    // Kolom pertama rincian kode_bang (setelah 21 kolom dasar).
-    const kodeBangStartCol = 22;
+    // Kolom pertama rincian kode_bang (setelah 22 kolom dasar).
+    const kodeBangStartCol = 23;
 
     for (var c = 0; c < headers.length; c++) {
       final cell = sheet.getRangeByIndex(1, c + 1);
@@ -143,6 +149,7 @@ class LembarKerjaExportService {
         13: r.kecDesa,
         14: kw,
         21: persen,
+        22: r.status,
       };
       texts.forEach((col, value) {
         sheet.getRangeByIndex(row, col).setText(value);

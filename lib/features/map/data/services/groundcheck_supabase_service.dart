@@ -419,6 +419,41 @@ class GroundcheckSupabaseService {
     return profile.role;
   }
 
+  /// Ambil nama petugas (kolom `nama` pada se2026_petugas) untuk sekumpulan id.
+  /// Mengembalikan map id(string) -> nama. Dipakai untuk melengkapi label
+  /// polygon assignment dengan nama PPL & PML.
+  Future<Map<String, String>> fetchPetugasNames(Set<String> ids) async {
+    final cleanIds = ids
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (cleanIds.isEmpty) return const {};
+
+    try {
+      final response = await _client
+          .from('se2026_petugas')
+          .select('id, nama')
+          .inFilter('id', cleanIds);
+
+      final out = <String, String>{};
+      if (response is List) {
+        for (final row in response) {
+          if (row is Map) {
+            final id = row['id']?.toString();
+            final nama = row['nama']?.toString();
+            if (id != null && id.isNotEmpty && nama != null) {
+              out[id] = nama;
+            }
+          }
+        }
+      }
+      return out;
+    } catch (e) {
+      debugPrint('[assignment-focus-cache] fetchPetugasNames exception: $e');
+      return const {};
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchCurrentUserWilayahTugas() async {
     try {
       final profile = await fetchCurrentSe2026Profile();

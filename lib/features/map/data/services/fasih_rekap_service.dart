@@ -255,6 +255,30 @@ class KodeBangWilayahRow {
   }
 }
 
+/// Status pendataan manual satu wilayah (SLS/sub-SLS) dari RPC
+/// get_status_pendataan. [status] adalah kode kanonik
+/// (BELUM/P30/P50/P70/P90/SELESAI).
+class StatusPendataanRecord {
+  final String kodeWilayah;
+  final String status;
+  final String? note;
+
+  const StatusPendataanRecord({
+    required this.kodeWilayah,
+    required this.status,
+    this.note,
+  });
+
+  factory StatusPendataanRecord.fromJson(Map<dynamic, dynamic> json) {
+    final rawNote = (json['note'] ?? '').toString().trim();
+    return StatusPendataanRecord(
+      kodeWilayah: (json['kode_wilayah'] ?? '').toString(),
+      status: (json['status'] ?? '').toString().toUpperCase().trim(),
+      note: rawNote.isEmpty ? null : rawNote,
+    );
+  }
+}
+
 class FasihRekapService {
   final SupabaseClient _client = SupabaseConfig.client;
 
@@ -314,6 +338,68 @@ class FasihRekapService {
     } catch (e) {
       debugPrint('fetchKodeBangByWilayah error: $e');
       return const [];
+    }
+  }
+
+  /// Ambil seluruh status pendataan manual per wilayah (SLS/sub-SLS).
+  /// RPC gagal / belum ada -> daftar kosong.
+  Future<List<StatusPendataanRecord>> fetchStatusPendataan() async {
+    try {
+      final response = await _client.rpc('get_status_pendataan');
+      if (response is! List) return const [];
+      return response
+          .whereType<Map>()
+          .map((item) => StatusPendataanRecord.fromJson(item))
+          .toList();
+    } catch (e) {
+      debugPrint('fetchStatusPendataan error: $e');
+      return const [];
+    }
+  }
+
+  /// Simpan/perbarui status pendataan sebuah wilayah. Mengembalikan pesan error
+  /// dari server, atau null bila sukses.
+  Future<String?> upsertStatusPendataan({
+    required String kodeWilayah,
+    required String status,
+    String? note,
+  }) async {
+    try {
+      final response = await _client.rpc(
+        'upsert_status_pendataan',
+        params: {
+          'p_kode_wilayah': kodeWilayah,
+          'p_status': status,
+          'p_note': note,
+        },
+      );
+      if (response is Map && response['ok'] == true) return null;
+      if (response is Map && response['error'] != null) {
+        return response['error'].toString();
+      }
+      return 'Gagal menyimpan status.';
+    } catch (e) {
+      debugPrint('upsertStatusPendataan error: $e');
+      return e.toString();
+    }
+  }
+
+  /// Hapus status pendataan sebuah wilayah. Mengembalikan pesan error dari
+  /// server, atau null bila sukses.
+  Future<String?> deleteStatusPendataan(String kodeWilayah) async {
+    try {
+      final response = await _client.rpc(
+        'delete_status_pendataan',
+        params: {'p_kode_wilayah': kodeWilayah},
+      );
+      if (response is Map && response['ok'] == true) return null;
+      if (response is Map && response['error'] != null) {
+        return response['error'].toString();
+      }
+      return 'Gagal menghapus status.';
+    } catch (e) {
+      debugPrint('deleteStatusPendataan error: $e');
+      return e.toString();
     }
   }
 

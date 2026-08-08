@@ -70,6 +70,7 @@ class MapPage extends StatelessWidget {
                     temporaryMarker: state.temporaryMarker,
                     polygonsMeta: state.polygonsMeta,
                     showAssignmentPolygons: state.showAssignmentPolygons,
+                    colorAssignmentByStatus: state.colorAssignmentByStatus,
                     assignmentFocusBounds: state.assignmentFocusBounds,
                     mapController: mapController, // Pass shared MapController
                     onPlaceTap: (place) {
@@ -103,6 +104,11 @@ class MapPage extends StatelessWidget {
                     onToggleAssignmentPolygons: () {
                       context.read<MapBloc>().add(
                         const AssignmentPolygonsToggleRequested(),
+                      );
+                    },
+                    onToggleColorByStatus: () {
+                      context.read<MapBloc>().add(
+                        const AssignmentColorByStatusToggled(),
                       );
                     },
                     markerEditMode: state.markerEditMode,

@@ -98,6 +98,12 @@ class AssignmentPolygonsToggleRequested extends MapEvent {
   const AssignmentPolygonsToggleRequested();
 }
 
+/// Aktif/nonaktifkan pewarnaan polygon assignment berdasarkan status pendataan
+/// (BELUM/P30/.../SELESAI). Saat nonaktif, polygon berwarna hijau seragam.
+class AssignmentColorByStatusToggled extends MapEvent {
+  const AssignmentColorByStatusToggled();
+}
+
 /// Aktifkan/nonaktifkan mode edit posisi marker (drag). Menonaktifkan =
 /// membatalkan seluruh perpindahan yang belum disimpan.
 class MarkerEditModeToggled extends MapEvent {

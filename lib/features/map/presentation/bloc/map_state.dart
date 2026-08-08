@@ -19,6 +19,8 @@ class MapState extends Equatable {
   final PolygonData? selectedPolygonMeta;
   final List<PolygonData> selectedPolygons; // New field for multiple selection
   final bool showAssignmentPolygons;
+  // Warnai polygon assignment berdasarkan status pendataan (bukan hijau seragam).
+  final bool colorAssignmentByStatus;
   final MapFocusBounds? assignmentFocusBounds;
   final int assignmentWilayahCount;
   final LatLng? temporaryMarker;
@@ -45,6 +47,7 @@ class MapState extends Equatable {
     this.selectedPolygonMeta,
     this.selectedPolygons = const [], // Initialize
     this.showAssignmentPolygons = false,
+    this.colorAssignmentByStatus = false,
     this.assignmentFocusBounds,
     this.assignmentWilayahCount = 0,
     this.temporaryMarker,
@@ -69,6 +72,7 @@ class MapState extends Equatable {
     PolygonData? selectedPolygonMeta,
     List<PolygonData>? selectedPolygons, // Parameter
     bool? showAssignmentPolygons,
+    bool? colorAssignmentByStatus,
     MapFocusBounds? assignmentFocusBounds,
     int? assignmentWilayahCount,
     LatLng? temporaryMarker,
@@ -101,6 +105,8 @@ class MapState extends Equatable {
       selectedPolygons: selectedPolygons ?? this.selectedPolygons, // Assign
       showAssignmentPolygons:
           showAssignmentPolygons ?? this.showAssignmentPolygons,
+      colorAssignmentByStatus:
+          colorAssignmentByStatus ?? this.colorAssignmentByStatus,
       assignmentFocusBounds: clearAssignmentFocusBounds
           ? null
           : (assignmentFocusBounds ?? this.assignmentFocusBounds),
@@ -132,6 +138,7 @@ class MapState extends Equatable {
     selectedPolygonMeta,
     selectedPolygons, // Add to props
     showAssignmentPolygons,
+    colorAssignmentByStatus,
     assignmentFocusBounds,
     assignmentWilayahCount,
     temporaryMarker,
