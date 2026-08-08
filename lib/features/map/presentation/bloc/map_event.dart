@@ -104,6 +104,13 @@ class AssignmentColorByStatusToggled extends MapEvent {
   const AssignmentColorByStatusToggled();
 }
 
+/// Muat ulang status pendataan manual per wilayah lalu warnai ulang polygon
+/// assignment yang sudah ada — tanpa parse ulang GeoJSON. Dipakai bersama
+/// refresh peta agar perubahan status dari petugas lain langsung terlihat.
+class AssignmentStatusRefreshRequested extends MapEvent {
+  const AssignmentStatusRefreshRequested();
+}
+
 /// Aktifkan/nonaktifkan mode edit posisi marker (drag). Menonaktifkan =
 /// membatalkan seluruh perpindahan yang belum disimpan.
 class MarkerEditModeToggled extends MapEvent {

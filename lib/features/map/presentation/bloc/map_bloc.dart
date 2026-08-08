@@ -65,6 +65,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     on<TemporaryMarkerRemoved>(_onTemporaryMarkerRemoved);
     on<AssignmentPolygonsToggleRequested>(_onAssignmentPolygonsToggleRequested);
     on<AssignmentColorByStatusToggled>(_onAssignmentColorByStatusToggled);
+    on<AssignmentStatusRefreshRequested>(_onAssignmentStatusRefreshRequested);
     on<MarkerEditModeToggled>(_onMarkerEditModeToggled);
     on<MarkerMovedLocally>(_onMarkerMovedLocally);
     on<MarkerMovesSaved>(_onMarkerMovesSaved);
@@ -536,6 +537,49 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     );
     // #endregion
     emit(state.copyWith(showAssignmentPolygons: !state.showAssignmentPolygons));
+  }
+
+  /// Ambil ulang status pendataan lalu perbarui field [statusPendataan] pada
+  /// polygon assignment yang sudah ada (tanpa parse ulang GeoJSON). Aman
+  /// dipanggil bersamaan dengan refresh peta.
+  Future<void> _onAssignmentStatusRefreshRequested(
+    AssignmentStatusRefreshRequested event,
+    Emitter<MapState> emit,
+  ) async {
+    if (state.assignmentPolygons.isEmpty) return;
+    try {
+      final statusRecords = await _rekapService.fetchStatusPendataan();
+      final statusByCandidate = <String, String>{};
+      for (final rec in statusRecords) {
+        if (rec.status.isEmpty) continue;
+        for (final c in _idCandidates(rec.kodeWilayah)) {
+          statusByCandidate.putIfAbsent(c, () => rec.status);
+        }
+      }
+
+      final updated = state.assignmentPolygons.map((polygon) {
+        String? status;
+        for (final c in _idCandidates(polygon.idsubsls)) {
+          status = statusByCandidate[c];
+          if (status != null) break;
+        }
+        if (status == null) {
+          for (final c in _idCandidates(polygon.idsls)) {
+            status = statusByCandidate[c];
+            if (status != null) break;
+          }
+        }
+        // Bila status kini null (dihapus petugas), clear agar warna kembali
+        // netral; copyWith biasa akan mempertahankan nilai lama.
+        return status == null
+            ? polygon.copyWith(clearStatusPendataan: true)
+            : polygon.copyWith(statusPendataan: status);
+      }).toList();
+
+      emit(state.copyWith(assignmentPolygons: updated));
+    } catch (e) {
+      debugPrint('BLoC: failed to refresh status pendataan: $e');
+    }
   }
 
   void _onAssignmentColorByStatusToggled(

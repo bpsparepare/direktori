@@ -40,6 +40,7 @@ class PolygonData {
     String? namaPetugas,
     String? namaPengawas,
     String? statusPendataan,
+    bool clearStatusPendataan = false,
   }) {
     return PolygonData(
       points: points ?? this.points,
@@ -52,7 +53,9 @@ class PolygonData {
       kodePos: kodePos ?? this.kodePos,
       namaPetugas: namaPetugas ?? this.namaPetugas,
       namaPengawas: namaPengawas ?? this.namaPengawas,
-      statusPendataan: statusPendataan ?? this.statusPendataan,
+      statusPendataan: clearStatusPendataan
+          ? null
+          : (statusPendataan ?? this.statusPendataan),
     );
   }
 }

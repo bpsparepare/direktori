@@ -841,10 +841,11 @@ class _MapControlsState extends State<MapControls> {
                     if (value == 'all') {
                       _handleFullDownload(context);
                     } else if (value == 'refresh') {
-                      // Incremental sync (default)
-                      context.read<MapBloc>().add(
-                        const PlacesRefreshRequested(),
-                      );
+                      // Incremental sync (default) + muat ulang status pendataan
+                      // agar warna polygon RT ikut ter-update.
+                      context.read<MapBloc>()
+                        ..add(const PlacesRefreshRequested())
+                        ..add(const AssignmentStatusRefreshRequested());
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Mengambil data terbaru...'),

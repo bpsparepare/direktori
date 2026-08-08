@@ -51,6 +51,12 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
   bool _statusLoaded = false;
   bool _savingStatus = false;
 
+  /// Seluruh baris wilayah (SLS/sub-SLS) dalam scope pengguna, dimuat sekali
+  /// saat tab Status dibuka di level petugas — agar rekap status umum terlihat
+  /// tanpa membuka tiap petugas.
+  List<FasihRekapRow>? _allWilayahRows;
+  bool _allWilayahLoading = false;
+
   /// Tab tabel: 0 = Progres, 1 = Jenis Bangunan (kode_bang).
   int _tableTab = 0;
 
@@ -82,6 +88,20 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
 
   bool get _isPetugasLevel =>
       (_role == 'admin' || _role == 'pengawas') && _selectedPetugas == null;
+
+  /// Muat ulang penuh (dipakai pull-to-refresh): paksa ambil ulang target
+  /// prelist, distribusi kode_bang, dan status pendataan — bukan hanya tabel
+  /// progres — agar perubahan dari petugas lain langsung terlihat.
+  Future<void> _refreshAll() async {
+    _prelistLoaded = false;
+    _kodeBangLoaded = false;
+    _statusLoaded = false;
+    _pengawasPayload = null;
+    _allWilayahRows = null;
+    await _loadData();
+    // Tab Pengawas punya sumber baris sendiri; muat ulang bila sedang dibuka.
+    if (mounted && _tableTab == 3) await _loadPengawas();
+  }
 
   Future<void> _loadData() async {
     setState(() {
@@ -312,6 +332,57 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
     _statusByWilayah = byStatus;
     _noteByWilayah = byNote;
     _statusLoaded = true;
+  }
+
+  /// Muat seluruh baris wilayah dalam scope (untuk rekap status di level
+  /// petugas). Berat untuk admin (satu RPC per petugas) → hanya on-demand,
+  /// lalu di-cache sampai refresh.
+  Future<void> _loadAllWilayah() async {
+    if (_allWilayahLoading) return;
+    final profile = _profile;
+    if (profile == null) return;
+    setState(() => _allWilayahLoading = true);
+    try {
+      final rows = await _collectAllWilayahFasihRows(profile);
+      if (!mounted) return;
+      setState(() {
+        _allWilayahRows = rows;
+        _allWilayahLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _allWilayahLoading = false);
+    }
+  }
+
+  /// Kumpulkan seluruh baris wilayah (SLS/sub-SLS) untuk semua petugas dalam
+  /// scope pengguna sebagai [FasihRekapRow].
+  Future<List<FasihRekapRow>> _collectAllWilayahFasihRows(
+    Se2026UserProfile profile,
+  ) async {
+    if (profile.role == 'pendata') {
+      final payload = await _rekapService.fetchRekap(limit: 500);
+      return payload.rows;
+    }
+
+    final petugasPayload = profile.role == 'admin'
+        ? await _rekapService.fetchRekap(
+            allPetugas: true,
+            limit: 500,
+            sortBy: 'title',
+          )
+        : await _rekapService.fetchRekap(limit: 500, sortBy: 'title');
+
+    final result = <FasihRekapRow>[];
+    for (final petugas in petugasPayload.rows) {
+      if (petugas.unitId.trim().isEmpty) continue;
+      final wilayahPayload = await _rekapService.fetchRekap(
+        petugasId: petugas.unitId,
+        limit: 500,
+      );
+      result.addAll(wilayahPayload.rows);
+    }
+    return result;
   }
 
   /// Kode status untuk satu wilayah, atau null bila belum ditandai.
@@ -785,7 +856,7 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
               : _error != null
               ? _buildErrorState()
               : RefreshIndicator(
-                  onRefresh: _loadData,
+                  onRefresh: _refreshAll,
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
@@ -1185,6 +1256,8 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
             (_isPetugasLevel ? _buildPetugasTable() : _buildWilayahTable())
           else if (_tableTab == 1)
             _buildKodeBangTable()
+          else if (_tableTab == 4)
+            _buildStatusRekap()
           else
             _buildRekapTable(),
         ],
@@ -1334,6 +1407,36 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
           '$total',
         ]);
       }
+    } else if (_tableTab == 4) {
+      // Status pendataan + progres otomatis per SLS/sub-SLS. Di level petugas,
+      // salin seluruh wilayah scope (bukan baris petugas).
+      final statusRows =
+          (_isPetugasLevel
+              ? [...(_allWilayahRows ?? const <FasihRekapRow>[])]
+              : [...rows])
+            ..sort((a, b) => a.unitId.compareTo(b.unitId));
+      lines.add([
+        'No', 'SLS', 'Sub', 'Nama SLS', 'Status', 'Target', 'Submitted', '%',
+      ]);
+      for (var i = 0; i < statusRows.length; i++) {
+        final row = statusRows[i];
+        final b = _breakdownOf(
+          row.statusCounts,
+          row.totalAssignment,
+          row.totalTerkirim,
+        );
+        final target = _targetOf(row);
+        final kodeSls = row.unitId.length >= 14
+            ? row.unitId.substring(10, 14)
+            : row.unitId;
+        final kodeSubsls = row.unitId.length >= 16
+            ? row.unitId.substring(14, 16)
+            : '-';
+        lines.add([
+          '${i + 1}', kodeSls, kodeSubsls, row.title, _statusLabelOf(row),
+          '$target', '${b.submitted}', pct(b.submitted, target),
+        ]);
+      }
     } else {
       // Rekap.
       lines.add(['No', ...identityHeaders(), ..._rekapGroupLabels, 'Total']);
@@ -1353,7 +1456,9 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
     messenger.showSnackBar(
-      SnackBar(content: Text('Tersalin ${rows.length} baris ke clipboard.')),
+      SnackBar(
+        content: Text('Tersalin ${lines.length - 1} baris ke clipboard.'),
+      ),
     );
   }
 
@@ -1368,6 +1473,12 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
         return 'Approved = disetujui pengawas. Approved+ = semua status selain '
             'OPEN, DRAFT & SUBMITTED BY PENCACAH. % = Approved+/target; '
             'baris hijau = capaian 40% ke atas.';
+      case 4:
+        return _isPetugasLevel
+            ? 'Rekap status seluruh SLS/sub-SLS dalam cakupan Anda. Ketuk chip '
+                  'status untuk mengubah. % = submitted otomatis / target.'
+            : 'Status pendataan manual per SLS/sub-SLS. Ketuk chip status '
+                  'untuk mengubah. % = submitted otomatis dibanding target.';
       default:
         return _isPetugasLevel
             ? 'Ketuk baris petugas untuk detail per SLS/sub-SLS. '
@@ -1390,6 +1501,9 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
             });
             if (idx == 3 && _pengawasPayload == null) {
               _loadPengawas();
+            }
+            if (idx == 4 && _isPetugasLevel && _allWilayahRows == null) {
+              _loadAllWilayah();
             }
           },
           child: Container(
@@ -1439,6 +1553,8 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
           seg(1, Icons.home_work_outlined, 'Bangunan'),
           const SizedBox(width: 4),
           seg(2, Icons.summarize_outlined, 'Rekap'),
+          const SizedBox(width: 4),
+          seg(4, Icons.checklist_rounded, 'Status'),
           if (_role == 'admin' && _isPetugasLevel) ...[
             const SizedBox(width: 4),
             seg(3, Icons.supervisor_account_rounded, 'Pengawas'),
@@ -2160,6 +2276,227 @@ class _LembarKerjaPageState extends State<LembarKerjaPage> {
               for (var i = 0; i < totals.length; i++)
                 _numCell(totals[i], color: _rekapGroupColor(i)),
               _numCell(grandTotal, color: const Color(0xFF0F4C81)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Tab "Status": ringkasan sebaran status pendataan manual + tabel detail
+  // (status berdampingan progres otomatis) per SLS/sub-SLS.
+  // -------------------------------------------------------------------------
+
+  Widget _buildStatusRekap() {
+    // Di level petugas, rekap dihitung dari SELURUH wilayah scope (dimuat
+    // on-demand); di level wilayah, dari baris yang sedang tampil.
+    final List<FasihRekapRow> source;
+    if (_isPetugasLevel) {
+      if (_allWilayahLoading || _allWilayahRows == null) {
+        if (!_allWilayahLoading) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _loadAllWilayah(),
+          );
+        }
+        return const Padding(
+          padding: EdgeInsets.symmetric(vertical: 24),
+          child: Center(child: CircularProgressIndicator()),
+        );
+      }
+      source = _allWilayahRows!;
+    } else {
+      source = _filteredRows;
+    }
+
+    final rows = [...source]..sort((a, b) => a.unitId.compareTo(b.unitId));
+
+    final counts = {for (final c in _statusOrder) c: 0};
+    var belum = 0;
+    for (final row in rows) {
+      final code = _statusOf(row);
+      if (code != null && counts.containsKey(code)) {
+        counts[code] = counts[code]! + 1;
+      } else {
+        belum++;
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildStatusDistribution(counts, belum, rows.length),
+        const SizedBox(height: 14),
+        _buildStatusDetailTable(rows),
+      ],
+    );
+  }
+
+  Widget _buildStatusDistribution(
+    Map<String, int> counts,
+    int belum,
+    int total,
+  ) {
+    Widget tile(String label, int value, Color color) {
+      return Container(
+        width: 104,
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          children: [
+            Text(
+              '$value',
+              style: TextStyle(
+                color: color,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                height: 1.1,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7FAFF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE3EBF6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Sebaran Status • $total SLS/sub-SLS',
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final code in _statusOrder)
+                tile(_statusLabel[code] ?? code, counts[code] ?? 0,
+                    _statusColor(code)),
+              tile('Belum ditandai', belum, const Color(0xFF8895A7)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusDetailTable(List<FasihRekapRow> rows) {
+    var totTarget = 0;
+    var totSubmitted = 0;
+    for (final row in rows) {
+      totTarget += _targetOf(row);
+      final b = _breakdownOf(
+        row.statusCounts,
+        row.totalAssignment,
+        row.totalTerkirim,
+      );
+      totSubmitted += b.submitted;
+    }
+
+    const headerStyle = TextStyle(fontWeight: FontWeight.w600, fontSize: 12);
+
+    return _fullWidthScroll(
+      DataTable(
+        showCheckboxColumn: false,
+        horizontalMargin: 12,
+        columnSpacing: 18,
+        headingRowHeight: 48,
+        dataRowMinHeight: 46,
+        dataRowMaxHeight: 60,
+        headingRowColor: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
+        columns: [
+          _noColumn(),
+          const DataColumn(label: Text('SLS', style: headerStyle)),
+          const DataColumn(label: Text('Sub', style: headerStyle)),
+          const DataColumn(label: Text('Nama SLS', style: headerStyle)),
+          const DataColumn(label: Text('Status', style: headerStyle)),
+          _numColumn('Target', sortable: false),
+          _numColumn('Submitted', sortable: false),
+          _numColumn('%', sortable: false),
+        ],
+        rows: rows.asMap().entries.map((entry) {
+          final row = entry.value;
+          final b = _breakdownOf(
+            row.statusCounts,
+            row.totalAssignment,
+            row.totalTerkirim,
+          );
+          final target = _targetOf(row);
+          final kodeSls = row.unitId.length >= 14
+              ? row.unitId.substring(10, 14)
+              : row.unitId;
+          final kodeSubsls = row.unitId.length >= 16
+              ? row.unitId.substring(14, 16)
+              : '-';
+          return DataRow(
+            cells: [
+              _noCell(entry.key + 1),
+              DataCell(
+                Text(
+                  kodeSls,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0F4C81),
+                  ),
+                ),
+              ),
+              DataCell(Text(kodeSubsls)),
+              DataCell(
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 180),
+                  child: Text(
+                    row.title,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              DataCell(_statusChip(row)),
+              _numCell(target, color: const Color(0xFF0F4C81)),
+              _numCell(b.submitted, color: const Color(0xFF1D8F5A)),
+              _percentCell(b.submitted, target),
+            ],
+          );
+        }).toList()..add(
+          DataRow(
+            color: WidgetStateProperty.all(const Color(0xFFF5F8FD)),
+            cells: [
+              const DataCell(Text('')),
+              _totalLabelCell('Total'),
+              const DataCell(Text('')),
+              DataCell(
+                Text(
+                  '${rows.length} SLS/Sub-SLS',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const DataCell(Text('')),
+              _numCell(totTarget, color: const Color(0xFF0F4C81)),
+              _numCell(totSubmitted, color: const Color(0xFF1D8F5A)),
+              _percentCell(totSubmitted, totTarget),
             ],
           ),
         ),

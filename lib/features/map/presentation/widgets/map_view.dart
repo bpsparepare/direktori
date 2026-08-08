@@ -705,6 +705,10 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     final selesai = counts['SELESAI'] ?? 0;
     final pctSelesai = total == 0 ? 0 : (selesai * 100 / total).round();
 
+    // Semua kunci status (untuk select/deselect all).
+    final allKeys = entries.map((e) => e.key).toList();
+    final allHidden = allKeys.every(_hiddenStatuses.contains);
+
     return Container(
       constraints: const BoxConstraints(maxWidth: 210),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -754,10 +758,57 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               count: counts[e.key] ?? 0,
               total: total,
             ),
-          const SizedBox(height: 2),
-          Text(
-            'Ketuk untuk filter',
-            style: TextStyle(fontSize: 9, color: Colors.grey[500]),
+          const Divider(height: 10),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Ketuk untuk filter',
+                style: TextStyle(fontSize: 9, color: Colors.grey[500]),
+              ),
+              const Spacer(),
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    if (allHidden) {
+                      _hiddenStatuses.clear();
+                    } else {
+                      _hiddenStatuses
+                        ..clear()
+                        ..addAll(allKeys);
+                    }
+                  });
+                },
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        allHidden
+                            ? Icons.check_box_outline_blank
+                            : Icons.select_all,
+                        size: 14,
+                        color: Colors.blue[700],
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        allHidden ? 'Pilih semua' : 'Kosongkan',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue[700],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
