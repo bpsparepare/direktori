@@ -99,6 +99,13 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
   // Filter tampilan polygon per status pendataan (kode status disembunyikan).
   // Untuk wilayah tanpa status dipakai sentinel [_statusKeyNull].
   final Set<String> _hiddenStatuses = <String>{};
+  // Filter polygon assignment per petugas (PPL) / pengawas (PML) — nama yang
+  // disembunyikan. Hanya SATU dimensi aktif dalam satu waktu ([_filterDim])
+  // agar tidak saling mengunci.
+  final Set<String> _hiddenPetugas = <String>{};
+  final Set<String> _hiddenPengawas = <String>{};
+  // Dimensi filter aktif: 'petugas' atau 'pengawas'.
+  String _filterDim = 'petugas';
   LatLng? _clipboardCheckedPoint;
   String? _clipboardCheckedLabel;
   bool _hasAppliedAssignmentFocus = false;
@@ -678,11 +685,45 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     return (s == null || s.isEmpty) ? _statusKeyNull : s;
   }
 
-  /// True bila polygon boleh ditampilkan. Filter hanya berlaku saat mode
-  /// pewarnaan status aktif.
-  bool _isStatusVisible(PolygonData p) {
-    if (!widget.colorAssignmentByStatus) return true;
-    return !_hiddenStatuses.contains(_statusKey(p));
+  // Kunci petugas/pengawas untuk filter (nama; kosong -> sentinel).
+  static const String _petugasKeyNull = '__NO_PETUGAS__';
+  static const String _pengawasKeyNull = '__NO_PENGAWAS__';
+
+  String _petugasKey(PolygonData p) {
+    final s = p.namaPetugas?.trim();
+    return (s == null || s.isEmpty) ? _petugasKeyNull : s;
+  }
+
+  String _pengawasKey(PolygonData p) {
+    final s = p.namaPengawas?.trim();
+    return (s == null || s.isEmpty) ? _pengawasKeyNull : s;
+  }
+
+  /// Dimensi filter yang efektif dipakai. Bila dimensi tersimpan tidak punya
+  /// data (hanya satu nilai unik), jatuh ke dimensi lain yang tersedia.
+  String _effectiveFilterDim() {
+    final multiPetugas = _distinctPetugas().length > 1;
+    final multiPengawas = _distinctPengawas().length > 1;
+    if (_filterDim == 'pengawas' && multiPengawas) return 'pengawas';
+    if (_filterDim == 'petugas' && multiPetugas) return 'petugas';
+    if (multiPetugas) return 'petugas';
+    if (multiPengawas) return 'pengawas';
+    return _filterDim;
+  }
+
+  /// True bila polygon boleh ditampilkan. Filter status berlaku saat mode warna
+  /// aktif; filter petugas/pengawas hanya pada dimensi yang aktif (tidak dua-duanya).
+  bool _isAssignmentVisible(PolygonData p) {
+    if (widget.colorAssignmentByStatus &&
+        _hiddenStatuses.contains(_statusKey(p))) {
+      return false;
+    }
+    if (_effectiveFilterDim() == 'pengawas') {
+      if (_hiddenPengawas.contains(_pengawasKey(p))) return false;
+    } else {
+      if (_hiddenPetugas.contains(_petugasKey(p))) return false;
+    }
+    return true;
   }
 
   Widget _buildStatusLegend() {
@@ -880,6 +921,266 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     );
   }
 
+  // ── Filter per petugas / pengawas ───────────────────────────────────────────
+
+  /// Nama petugas (label -> key) unik dari polygon assignment, terurut.
+  Map<String, String> _distinctPetugas() {
+    final map = <String, String>{}; // key -> label
+    for (final p in widget.assignmentPolygons) {
+      final key = _petugasKey(p);
+      map[key] = key == _petugasKeyNull ? '(Tanpa petugas)' : key;
+    }
+    return map;
+  }
+
+  Map<String, String> _distinctPengawas() {
+    final map = <String, String>{};
+    for (final p in widget.assignmentPolygons) {
+      final key = _pengawasKey(p);
+      map[key] = key == _pengawasKeyNull ? '(Tanpa pengawas)' : key;
+    }
+    return map;
+  }
+
+  bool _hasMultiplePetugasOrPengawas() {
+    if (widget.assignmentPolygons.isEmpty) return false;
+    return _distinctPetugas().length > 1 || _distinctPengawas().length > 1;
+  }
+
+  // Jumlah filter aktif pada dimensi yang sedang dipakai.
+  int _activePetugasPengawasFilterCount() => _effectiveFilterDim() == 'pengawas'
+      ? _hiddenPengawas.length
+      : _hiddenPetugas.length;
+
+  Widget _buildPetugasFilterButton() {
+    final activeCount = _activePetugasPengawasFilterCount();
+    final active = activeCount > 0;
+    final dimLabel = _effectiveFilterDim() == 'pengawas'
+        ? 'pengawas'
+        : 'petugas';
+    return Material(
+      color: active ? Colors.blue : Colors.white,
+      borderRadius: BorderRadius.circular(8),
+      elevation: 2,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: _showPetugasFilterSheet,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.groups_outlined,
+                size: 20,
+                color: active ? Colors.white : Colors.black87,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                active ? 'Filter ($activeCount)' : 'Filter $dimLabel',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: active ? Colors.white : Colors.black87,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPetugasFilterSheet() {
+    final petugas = _distinctPetugas();
+    final pengawas = _distinctPengawas();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            // Sinkronkan perubahan ke state utama sekaligus rebuild sheet.
+            void apply(VoidCallback fn) {
+              setState(fn);
+              setSheetState(() {});
+            }
+
+            final multiPetugas = petugas.length > 1;
+            final multiPengawas = pengawas.length > 1;
+            final dim = _effectiveFilterDim();
+            final activeHidden = dim == 'pengawas'
+                ? _hiddenPengawas
+                : _hiddenPetugas;
+
+            Widget section(
+              String title,
+              Map<String, String> items,
+              Set<String> hiddenSet,
+            ) {
+              // Hitung jumlah polygon per key untuk info di tiap baris.
+              final counts = <String, int>{};
+              for (final p in widget.assignmentPolygons) {
+                final k = title.startsWith('Petugas')
+                    ? _petugasKey(p)
+                    : _pengawasKey(p);
+                counts[k] = (counts[k] ?? 0) + 1;
+              }
+              final keys = items.keys.toList()
+                ..sort((a, b) => items[a]!.compareTo(items[b]!));
+              final allHidden = keys.every(hiddenSet.contains);
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () => apply(() {
+                          if (allHidden) {
+                            hiddenSet.clear();
+                          } else {
+                            hiddenSet
+                              ..clear()
+                              ..addAll(keys);
+                          }
+                        }),
+                        child: Text(allHidden ? 'Pilih semua' : 'Kosongkan'),
+                      ),
+                    ],
+                  ),
+                  ...keys.map((k) {
+                    final checked = !hiddenSet.contains(k);
+                    return CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: checked,
+                      title: Text(
+                        items[k]!,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      secondary: Text(
+                        '${counts[k] ?? 0} SLS',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                      onChanged: (v) => apply(() {
+                        if (v == true) {
+                          hiddenSet.remove(k);
+                        } else {
+                          hiddenSet.add(k);
+                        }
+                      }),
+                    );
+                  }),
+                ],
+              );
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        const Icon(Icons.groups_outlined, color: Colors.blue),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Filter Wilayah',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (activeHidden.isNotEmpty)
+                          TextButton.icon(
+                            onPressed: () => apply(activeHidden.clear),
+                            icon: const Icon(Icons.clear_all, size: 18),
+                            label: const Text('Reset'),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Pemilih dimensi filter — hanya bila kedua dimensi tersedia.
+                    if (multiPetugas && multiPengawas) ...[
+                      SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(
+                            value: 'petugas',
+                            label: Text('Petugas'),
+                            icon: Icon(Icons.person_outline, size: 16),
+                          ),
+                          ButtonSegment(
+                            value: 'pengawas',
+                            label: Text('Pengawas'),
+                            icon: Icon(Icons.supervisor_account_outlined,
+                                size: 16),
+                          ),
+                        ],
+                        selected: {dim},
+                        onSelectionChanged: (s) =>
+                            apply(() => _filterDim = s.first),
+                        style: const ButtonStyle(
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (dim == 'pengawas')
+                      section('Pengawas (PML)', pengawas, _hiddenPengawas)
+                    else
+                      section('Petugas (PPL)', petugas, _hiddenPetugas),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () => Navigator.pop(sheetContext),
+                        child: const Text('Tutup'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   // Calculate dynamic offset based on zoom level for Esri maps
   double _getDynamicOffsetX(double baseOffsetX, double zoomLevel) {
     // Base zoom level where the offset was calibrated (assuming zoom 13)
@@ -989,9 +1290,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
             if (widget.showAssignmentPolygons &&
                 widget.assignmentPolygons.isNotEmpty)
               PolygonLayer(
-                polygons: widget.assignmentPolygons.where(_isStatusVisible).map((
-                  p,
-                ) {
+                polygons: widget.assignmentPolygons
+                    .where(_isAssignmentVisible)
+                    .map((p) {
                   return Polygon(
                     points: p.points,
                     color: _assignmentFillColor(p),
@@ -1326,14 +1627,29 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
             });
           },
         ),
-        // Legenda status pendataan (muncul saat mode pewarnaan status aktif)
-        if (widget.colorAssignmentByStatus &&
-            widget.showAssignmentPolygons &&
-            widget.assignmentPolygons.isNotEmpty)
+        // Panel assignment (kiri-bawah): tombol filter petugas/pengawas di atas,
+        // legenda status di bawah. Ditaruh di kiri agar tidak tertutup FAB
+        // Dokumentasi (kanan-bawah).
+        if (widget.showAssignmentPolygons &&
+            widget.assignmentPolygons.isNotEmpty &&
+            (widget.colorAssignmentByStatus ||
+                _hasMultiplePetugasOrPengawas()))
           Positioned(
             left: 12,
             bottom: 24,
-            child: SafeArea(child: _buildStatusLegend()),
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_hasMultiplePetugasOrPengawas()) ...[
+                    _buildPetugasFilterButton(),
+                    const SizedBox(height: 8),
+                  ],
+                  if (widget.colorAssignmentByStatus) _buildStatusLegend(),
+                ],
+              ),
+            ),
           ),
         if (_clipboardCheckedPoint != null && _clipboardCheckedLabel != null)
           Positioned(

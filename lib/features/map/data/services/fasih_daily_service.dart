@@ -117,6 +117,7 @@ class FasihDailyService {
     String? petugasId,
     bool allPetugas = false,
     String progressMode = 'petugas',
+    int baselineDays = 1,
   }) async {
     final date = targetDate ?? DateTime.now();
     final dateStr =
@@ -131,6 +132,7 @@ class FasihDailyService {
         'p_petugas_id': petugasId,
         'p_all_petugas': allPetugas,
         'p_progress_mode': progressMode,
+        'p_baseline_days': baselineDays,
       },
     );
 

@@ -21,6 +21,15 @@ class UnifiedRekapRow {
   final int delta;
   final Map<String, int> statusCountsToday;
 
+  /// Progress 7 hari terakhir (kumulatif hari acuan − kumulatif 7 hari lalu).
+  final int weeklyDelta;
+
+  /// Kumulatif "terkirim" pada 7 hari lalu (baseline mingguan).
+  final int weekAgoCount;
+
+  /// Pecahan kenaikan per status dalam 7 hari terakhir.
+  final Map<String, int> statusCountsWeek;
+
   const UnifiedRekapRow({
     required this.unitId,
     required this.title,
@@ -32,6 +41,9 @@ class UnifiedRekapRow {
     required this.yesterdayCount,
     required this.delta,
     required this.statusCountsToday,
+    this.weeklyDelta = 0,
+    this.weekAgoCount = 0,
+    this.statusCountsWeek = const {},
   });
 }
 
@@ -52,10 +64,13 @@ class _StatusDetailSection {
 List<UnifiedRekapRow> _mergeRows(
   List<FasihRekapRow> rekap,
   List<DailyContributionRow> daily,
+  List<DailyContributionRow> weekly,
 ) {
   final dailyMap = {for (final d in daily) d.unitId: d};
+  final weeklyMap = {for (final w in weekly) w.unitId: w};
   return rekap.map((r) {
     final d = dailyMap[r.unitId];
+    final w = weeklyMap[r.unitId];
     return UnifiedRekapRow(
       unitId: r.unitId,
       title: r.title,
@@ -67,6 +82,9 @@ List<UnifiedRekapRow> _mergeRows(
       yesterdayCount: d?.yesterdayCount ?? 0,
       delta: d?.delta ?? 0,
       statusCountsToday: d?.statusCountsToday ?? {},
+      weeklyDelta: w?.delta ?? 0,
+      weekAgoCount: w?.yesterdayCount ?? 0,
+      statusCountsWeek: w?.statusCountsToday ?? {},
     );
   }).toList();
 }
@@ -87,7 +105,7 @@ int _deltaThreshold(String level) {
 
 // ── Sort options ──────────────────────────────────────────────────────────────
 
-enum _SortField { kumulatif, delta }
+enum _SortField { kumulatif, delta, week }
 
 enum _SortDir { asc, desc }
 
@@ -125,6 +143,8 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
   int _totalTerkirimAll = 0;
   int _totalDeltaToday = 0;
   int _activeUnitsToday = 0;
+  int _totalDeltaWeek = 0;
+  int _activeUnitsWeek = 0;
   String _level = '';
 
   DateTime _targetDate = DateTime.now();
@@ -181,12 +201,25 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
           allPetugas: isAllPetugas,
           progressMode: _progressModeParam,
         ),
+        _dailyService.fetchDailyContribution(
+          targetDate: _targetDate,
+          pengawasId: effectivePengawasId,
+          petugasId: petugasId,
+          allPetugas: isAllPetugas,
+          progressMode: _progressModeParam,
+          baselineDays: 7,
+        ),
       ]);
 
       final rekapPayload = results[0] as FasihRekapPayload;
       final dailyPayload = results[1] as DailyContributionPayload;
+      final weeklyPayload = results[2] as DailyContributionPayload;
 
-      final merged = _mergeRows(rekapPayload.rows, dailyPayload.rows);
+      final merged = _mergeRows(
+        rekapPayload.rows,
+        dailyPayload.rows,
+        weeklyPayload.rows,
+      );
 
       if (!mounted) return;
       setState(() {
@@ -199,6 +232,8 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
         _totalTerkirimAll = rekapPayload.summary.totalTerkirim;
         _totalDeltaToday = dailyPayload.summary.totalDelta;
         _activeUnitsToday = merged.where((r) => r.delta > 0).length;
+        _totalDeltaWeek = weeklyPayload.summary.totalDelta;
+        _activeUnitsWeek = merged.where((r) => r.weeklyDelta > 0).length;
         _isLoading = false;
       });
     } catch (e) {
@@ -260,15 +295,35 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
     return Map.fromEntries(sorted);
   }
 
+  Map<String, int> get _aggregatedStatusWeek {
+    final out = <String, int>{};
+    for (final row in _rows) {
+      for (final e in row.statusCountsWeek.entries) {
+        out[e.key] = (out[e.key] ?? 0) + e.value;
+      }
+    }
+    final sorted = out.entries.where((e) => e.value > 0).toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return Map.fromEntries(sorted);
+  }
+
+  /// Nilai sort/progress baris sesuai field terpilih.
+  int _sortValue(UnifiedRekapRow row) {
+    switch (_sortField) {
+      case _SortField.kumulatif:
+        return row.totalTerkirim;
+      case _SortField.delta:
+        return row.delta;
+      case _SortField.week:
+        return row.weeklyDelta;
+    }
+  }
+
   List<UnifiedRekapRow> get _sortedRows {
     final sorted = List<UnifiedRekapRow>.from(_rows);
     sorted.sort((a, b) {
-      final va = _sortField == _SortField.kumulatif
-          ? a.totalTerkirim
-          : a.delta;
-      final vb = _sortField == _SortField.kumulatif
-          ? b.totalTerkirim
-          : b.delta;
+      final va = _sortValue(a);
+      final vb = _sortValue(b);
       return _sortDir == _SortDir.desc ? vb.compareTo(va) : va.compareTo(vb);
     });
     return sorted;
@@ -289,6 +344,8 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
           return a.totalTerkirim.compareTo(b.totalTerkirim) * asc;
         case 'delta':
           return a.delta.compareTo(b.delta) * asc;
+        case 'week':
+          return a.weeklyDelta.compareTo(b.weeklyDelta) * asc;
         case 'kmrn':
           return a.yesterdayCount.compareTo(b.yesterdayCount) * asc;
         default:
@@ -609,46 +666,87 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
             ],
           ),
           const SizedBox(height: 20),
-          Row(
-            children: [
-              _buildHeroStat(
-                label: 'Total Kumulatif',
-                value: '$_totalAssignmentAll',
-                icon: Icons.assignment_rounded,
-                onTap: () => _showStatusDetail(
-                  title: 'Detail Kumulatif',
-                  totalLabel: 'Total Kumulatif',
-                  totalValue: _totalAssignmentAll,
-                  statuses: _aggregatedStatusCumul,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // 5 tile: memenuhi lebar saat cukup, menggulir horizontal saat sempit.
+              const gap = 8.0;
+              const count = 6;
+              final tileW = max(
+                120.0,
+                (constraints.maxWidth - gap * (count - 1)) / count,
+              );
+              final tiles = <Widget>[
+                _buildHeroStat(
+                  width: tileW,
+                  label: 'Total Kumulatif',
+                  value: '$_totalAssignmentAll',
+                  icon: Icons.assignment_rounded,
+                  onTap: () => _showStatusDetail(
+                    title: 'Detail Kumulatif',
+                    totalLabel: 'Total Kumulatif',
+                    totalValue: _totalAssignmentAll,
+                    statuses: _aggregatedStatusCumul,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              _buildHeroStat(
-                label: 'Terkirim (final)',
-                value: '$_totalTerkirimAll',
-                icon: Icons.task_alt_rounded,
-              ),
-              const SizedBox(width: 8),
-              _buildHeroStat(
-                label: 'Progress Hari Ini',
-                value: _formatSigned(_totalDeltaToday),
-                icon: Icons.trending_up_rounded,
-                highlight: true,
-                onTap: () => _showStatusDetail(
-                  title: 'Detail Hari Ini',
-                  totalLabel: 'Progress Hari Ini',
-                  totalValue: _totalDeltaToday,
-                  statuses: _aggregatedStatusToday,
-                  isToday: true,
+                _buildHeroStat(
+                  width: tileW,
+                  label: 'Terkirim (final)',
+                  value: '$_totalTerkirimAll',
+                  icon: Icons.task_alt_rounded,
                 ),
-              ),
-              const SizedBox(width: 8),
-              _buildHeroStat(
-                label: 'Aktif Hari Ini',
-                value: '$_activeUnitsToday',
-                icon: Icons.groups_rounded,
-              ),
-            ],
+                _buildHeroStat(
+                  width: tileW,
+                  label: 'Progress Hari Ini',
+                  value: _formatSigned(_totalDeltaToday),
+                  icon: Icons.trending_up_rounded,
+                  highlight: true,
+                  onTap: () => _showStatusDetail(
+                    title: 'Detail Hari Ini',
+                    totalLabel: 'Progress Hari Ini',
+                    totalValue: _totalDeltaToday,
+                    statuses: _aggregatedStatusToday,
+                    isToday: true,
+                  ),
+                ),
+                _buildHeroStat(
+                  width: tileW,
+                  label: 'Aktif Hari Ini',
+                  value: '$_activeUnitsToday',
+                  icon: Icons.groups_rounded,
+                ),
+                _buildHeroStat(
+                  width: tileW,
+                  label: 'Progress 7 Hari',
+                  value: _formatSigned(_totalDeltaWeek),
+                  icon: Icons.date_range_rounded,
+                  highlight: true,
+                  onTap: () => _showStatusDetail(
+                    title: 'Detail 7 Hari Terakhir',
+                    totalLabel: 'Progress 7 Hari',
+                    totalValue: _totalDeltaWeek,
+                    statuses: _aggregatedStatusWeek,
+                    isToday: true,
+                  ),
+                ),
+                _buildHeroStat(
+                  width: tileW,
+                  label: 'Aktif 7 Hari',
+                  value: '$_activeUnitsWeek',
+                  icon: Icons.groups_rounded,
+                ),
+              ];
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (int i = 0; i < tiles.length; i++) ...[
+                      if (i > 0) const SizedBox(width: gap),
+                      tiles[i],
+                    ],
+                  ],
+                ),
+              );
+            },
           ),
           const SizedBox(height: 10),
           _buildDateNav(),
@@ -661,10 +759,12 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
     required String label,
     required String value,
     required IconData icon,
+    double? width,
     bool highlight = false,
     VoidCallback? onTap,
   }) {
-    return Expanded(
+    return SizedBox(
+      width: width,
       child: GestureDetector(
         onTap: onTap,
         child: Container(
@@ -872,36 +972,32 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
         ? 'Hari ini'
         : '${d.day.toString().padLeft(2, '0')} ${_monthName(d.month)} ${d.year}';
     final todayAccent = const Color(0xFF10B981);
+    final weekAccent = const Color(0xFF0E7490);
     final cumulAccent = const Color(0xFF2D77D0);
-    final sections = _sortField == _SortField.delta
-        ? [
-            _StatusDetailSection(
-              title: 'Hari Ini',
-              total: _formatSigned(row.delta),
-              statuses: row.statusCountsToday,
-              accent: todayAccent,
-            ),
-            _StatusDetailSection(
-              title: 'Kumulatif',
-              total: '${row.totalAssignment}',
-              statuses: row.statusCounts,
-              accent: cumulAccent,
-            ),
-          ]
-        : [
-            _StatusDetailSection(
-              title: 'Kumulatif',
-              total: '${row.totalAssignment}',
-              statuses: row.statusCounts,
-              accent: cumulAccent,
-            ),
-            _StatusDetailSection(
-              title: 'Hari Ini',
-              total: _formatSigned(row.delta),
-              statuses: row.statusCountsToday,
-              accent: todayAccent,
-            ),
-          ];
+    final todaySection = _StatusDetailSection(
+      title: 'Hari Ini',
+      total: _formatSigned(row.delta),
+      statuses: row.statusCountsToday,
+      accent: todayAccent,
+    );
+    final weekSection = _StatusDetailSection(
+      title: '7 Hari Terakhir',
+      total: _formatSigned(row.weeklyDelta),
+      statuses: row.statusCountsWeek,
+      accent: weekAccent,
+    );
+    final cumulSection = _StatusDetailSection(
+      title: 'Kumulatif',
+      total: '${row.totalAssignment}',
+      statuses: row.statusCounts,
+      accent: cumulAccent,
+    );
+    // Section yang relevan dgn sort aktif ditaruh paling atas.
+    final sections = switch (_sortField) {
+      _SortField.delta => [todaySection, weekSection, cumulSection],
+      _SortField.week => [weekSection, todaySection, cumulSection],
+      _SortField.kumulatif => [cumulSection, todaySection, weekSection],
+    };
 
     showModalBottomSheet<void>(
       context: context,
@@ -1246,6 +1342,12 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                       onTap: () =>
                           setState(() => _sortField = _SortField.delta),
                     ),
+                    const SizedBox(width: 6),
+                    _buildToggleChip(
+                      label: '7 Hari',
+                      selected: _sortField == _SortField.week,
+                      onTap: () => setState(() => _sortField = _SortField.week),
+                    ),
                   ],
                 ),
               ),
@@ -1297,19 +1399,27 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
 
   Widget _buildCard(UnifiedRekapRow row) {
     final canOpen = _canTapRow;
-    final deltaPositive = row.delta > 0;
     final isSortKumulatif = _sortField == _SortField.kumulatif;
-    final cardTarget = _progressModeParam == 'pengawas' ? 77 : 11;
-    final targetReached = row.delta >= cardTarget;
+    final isSortWeek = _sortField == _SortField.week;
+    // Nilai progres yang jadi acuan badge & warna target (harian / mingguan).
+    final progressVal = isSortWeek ? row.weeklyDelta : row.delta;
+    final progressPositive = progressVal > 0;
+    // Target mingguan = target harian × 7.
+    final cardTarget =
+        (_progressModeParam == 'pengawas' ? 77 : 11) * (isSortWeek ? 7 : 1);
+    final targetReached = progressVal >= cardTarget;
     final showTargetColor = !isSortKumulatif;
     final statusColor = targetReached
         ? const Color(0xFF10B981)
         : const Color(0xFFEF4444);
     final badgeValue = isSortKumulatif
         ? '${row.totalTerkirim}'
-        : (deltaPositive ? '+${row.delta}' : '${row.delta}');
+        : (progressPositive ? '+$progressVal' : '$progressVal');
     final badgeColor = isSortKumulatif ? const Color(0xFF2D77D0) : statusColor;
-    final deltaLabel = deltaPositive ? '+${row.delta}' : '${row.delta}';
+    final todayLabel = row.delta > 0 ? '+${row.delta}' : '${row.delta}';
+    final weekLabel = row.weeklyDelta > 0
+        ? '+${row.weeklyDelta}'
+        : '${row.weeklyDelta}';
     final isPengawasMode = _progressModeParam == 'pengawas';
     final cardColor = showTargetColor
         ? targetReached
@@ -1455,8 +1565,10 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                           Expanded(
                             child: Text(
                               isSortKumulatif
-                                  ? '$deltaLabel hari ini  ·  ${row.yesterdayCount} kmrn'
-                                  : '${row.totalTerkirim} terkirim  ·  ${row.yesterdayCount} kmrn',
+                                  ? '$todayLabel hari ini  ·  $weekLabel 7 hari'
+                                  : isSortWeek
+                                  ? '${row.totalTerkirim} terkirim  ·  $todayLabel hari ini'
+                                  : '${row.totalTerkirim} terkirim  ·  $weekLabel 7 hari',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -1681,7 +1793,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
     const double hPad = 24.0; // 12px left + 12px right padding
     const double minNumW = 52.0;
     const double minNameW = 110.0;
-    final int numCols = 4 + statusKeys.length;
+    final int numCols = 5 + statusKeys.length;
     final double minTotal = minNameW + numCols * minNumW + hPad;
     final double tableWidth = max(availableWidth, minTotal);
     final double unit = (tableWidth - hPad) / (3 + numCols);
@@ -1716,6 +1828,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                   _sortableTh('Kumul', 'kumul', numW, headerStyle),
                   _sortableTh('Submitted', 'terkirim', numW, headerStyle),
                   _sortableTh('Hr Ini', 'delta', numW, headerStyle),
+                  _sortableTh('7 Hari', 'week', numW, headerStyle),
                   _sortableTh('Kmrn', 'kmrn', numW, headerStyle),
                   for (final k in statusKeys)
                     _sortableTh(k, k, numW, headerStyle),
@@ -1747,6 +1860,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
     final canOpen = _canTapRow;
     final delta = row.delta;
     final deltaStr = delta > 0 ? '+$delta' : '$delta';
+    final weekDelta = row.weeklyDelta;
 
     return GestureDetector(
       onTap: canOpen ? () => _handleRowTap(row) : null,
@@ -1832,6 +1946,20 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   color: delta > 0 ? const Color(0xFF10B981) : Colors.grey[400],
+                ),
+              ),
+            ),
+            SizedBox(
+              width: numW,
+              child: Text(
+                weekDelta > 0 ? '+$weekDelta' : '$weekDelta',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: weekDelta > 0
+                      ? const Color(0xFF0E7490)
+                      : Colors.grey[400],
                 ),
               ),
             ),
@@ -1966,6 +2094,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                 _sortableTh('Kumul', 'kumul', numW, headerStyle),
                 _sortableTh('Submitted', 'terkirim', numW, headerStyle),
                 _sortableTh('Hr Ini', 'delta', numW, headerStyle),
+                _sortableTh('7 Hari', 'week', numW, headerStyle),
                 _sortableTh('Kmrn', 'kmrn', numW, headerStyle),
                 for (final k in statusKeys)
                   _sortableTh(k, k, numW, headerStyle),
@@ -2008,6 +2137,19 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                         fontWeight: FontWeight.w700,
                         color: rows[i].delta > 0
                             ? const Color(0xFF10B981)
+                            : Colors.grey[400],
+                      ),
+                    ),
+                    _tableNumCell(
+                      rows[i].weeklyDelta > 0
+                          ? '+${rows[i].weeklyDelta}'
+                          : '${rows[i].weeklyDelta}',
+                      numW,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: rows[i].weeklyDelta > 0
+                            ? const Color(0xFF0E7490)
                             : Colors.grey[400],
                       ),
                     ),
@@ -2061,11 +2203,13 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
   // ── Chart view ────────────────────────────────────────────────────────────────
 
   Widget _buildChartView(List<UnifiedRekapRow> rows) {
-    final isCumul = _sortField == _SortField.kumulatif;
-    final values = rows
-        .map((r) => isCumul ? r.totalTerkirim : r.delta)
-        .toList();
+    final values = rows.map((r) => _sortValue(r)).toList();
     final maxVal = values.fold(0, (prev, v) => v > prev ? v : prev);
+    final chartLabel = switch (_sortField) {
+      _SortField.kumulatif => 'Terkirim',
+      _SortField.delta => 'Hari Ini',
+      _SortField.week => '7 Hari Terakhir',
+    };
 
     return Container(
       decoration: BoxDecoration(
@@ -2084,7 +2228,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            isCumul ? 'Terkirim' : 'Hari Ini',
+            chartLabel,
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
