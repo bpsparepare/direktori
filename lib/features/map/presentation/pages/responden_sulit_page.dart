@@ -108,6 +108,51 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
     }).toList();
   }
 
+  // Fallback label bila field wilayah kosong. Grup fallback selalu diletakkan
+  // di paling bawah.
+  static const String _noKec = 'Tanpa Kecamatan';
+  static const String _noDesa = 'Tanpa Kelurahan/Desa';
+  static const String _noSls = 'Tanpa SLS';
+
+  // Section kecamatan / kelurahan yang sedang ditutup (default: terbuka semua).
+  final Set<String> _collapsedKec = {};
+  final Set<String> _collapsedDesa = {};
+
+  /// Susun hasil filter menjadi pohon Kecamatan → Kelurahan/Desa → SLS.
+  List<_KecGroup> get _tree {
+    final kecMap = <String, _KecGroup>{};
+    for (final item in _filtered) {
+      final kecName = item.nmKec.trim().isNotEmpty ? item.nmKec.trim() : _noKec;
+      final desaName =
+          item.nmDesa.trim().isNotEmpty ? item.nmDesa.trim() : _noDesa;
+      final slsName = RespondenSulitItem.formatSlsLabel(item.nmSls, item.subSls);
+      final slsLabel = slsName.isNotEmpty ? slsName : _noSls;
+
+      final kec = kecMap.putIfAbsent(kecName, () => _KecGroup(kecName));
+      final desa =
+          kec.desaMap.putIfAbsent(desaName, () => _DesaGroup(desaName));
+      desa.slsMap.putIfAbsent(slsLabel, () => _SlsGroup(slsLabel)).items.add(item);
+    }
+
+    int cmp(String a, String b, String fallback) {
+      if (a == fallback) return 1;
+      if (b == fallback) return -1;
+      return a.toLowerCase().compareTo(b.toLowerCase());
+    }
+
+    final kecs = kecMap.values.toList()
+      ..sort((a, b) => cmp(a.nmKec, b.nmKec, _noKec));
+    for (final kec in kecs) {
+      kec.desa = kec.desaMap.values.toList()
+        ..sort((a, b) => cmp(a.nmDesa, b.nmDesa, _noDesa));
+      for (final desa in kec.desa) {
+        desa.sls = desa.slsMap.values.toList()
+          ..sort((a, b) => cmp(a.slsLabel, b.slsLabel, _noSls));
+      }
+    }
+    return kecs;
+  }
+
   Future<void> _openForm({RespondenSulitItem? existing}) async {
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -254,17 +299,7 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
                             child: _buildEmpty(),
                           )
                         else
-                          SliverPadding(
-                            padding:
-                                const EdgeInsets.fromLTRB(16, 0, 16, 120),
-                            sliver: SliverList.separated(
-                              itemCount: _filtered.length,
-                              itemBuilder: (context, index) =>
-                                  _buildCard(_filtered[index]),
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(height: 8),
-                            ),
-                          ),
+                          ..._buildGroupedSlivers(),
                       ],
                     ),
                   ),
@@ -365,12 +400,222 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
     );
   }
 
+  /// Bangun daftar sliver bertingkat: Kecamatan (rekap) → Kelurahan/Desa
+  /// (rekap) → header SLS → kartu. Kecamatan & kelurahan bisa dibuka-tutup.
+  List<Widget> _buildGroupedSlivers() {
+    final slivers = <Widget>[];
+    for (final kec in _tree) {
+      final kecCollapsed = _collapsedKec.contains(kec.nmKec);
+      slivers.add(
+        SliverToBoxAdapter(
+          child: _buildKecHeader(kec, collapsed: kecCollapsed),
+        ),
+      );
+      if (kecCollapsed) continue;
+
+      for (final desa in kec.desa) {
+        final desaKey = '${kec.nmKec}|||${desa.nmDesa}';
+        final desaCollapsed = _collapsedDesa.contains(desaKey);
+        slivers.add(
+          SliverToBoxAdapter(
+            child: _buildDesaHeader(desa,
+                collapseKey: desaKey, collapsed: desaCollapsed),
+          ),
+        );
+        if (desaCollapsed) continue;
+
+        for (final sls in desa.sls) {
+          slivers.add(
+            SliverToBoxAdapter(child: _buildSlsHeader(sls)),
+          );
+          slivers.add(
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              sliver: SliverList.separated(
+                itemCount: sls.items.length,
+                itemBuilder: (context, index) => _buildCard(sls.items[index]),
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+              ),
+            ),
+          );
+        }
+      }
+    }
+    // Ruang bawah agar kartu terakhir tidak tertutup FAB.
+    slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 108)));
+    return slivers;
+  }
+
+  /// Chip rekap kecil: "N total" atau "N belum TL".
+  Widget _statChip(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKecHeader(_KecGroup kec, {required bool collapsed}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+      child: Material(
+        color: const Color(0xFF0F4C81).withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => setState(() {
+            if (!_collapsedKec.remove(kec.nmKec)) _collapsedKec.add(kec.nmKec);
+          }),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              children: [
+                const Icon(Icons.location_city_rounded,
+                    size: 20, color: Color(0xFF0F4C81)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        kec.nmKec,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF10243E),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${kec.desa.length} kelurahan/desa',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: Colors.blueGrey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _statChip('${kec.total}', const Color(0xFF0F4C81)),
+                if (kec.belum > 0) ...[
+                  const SizedBox(width: 6),
+                  _statChip('${kec.belum} belum TL', const Color(0xFFEA8600)),
+                ],
+                const SizedBox(width: 4),
+                Icon(
+                  collapsed
+                      ? Icons.expand_more_rounded
+                      : Icons.expand_less_rounded,
+                  color: Colors.blueGrey[400],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesaHeader(_DesaGroup desa,
+      {required String collapseKey, required bool collapsed}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 4, 16, 4),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => setState(() {
+          if (!_collapsedDesa.remove(collapseKey)) {
+            _collapsedDesa.add(collapseKey);
+          }
+        }),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Row(
+            children: [
+              Icon(collapsed ? Icons.chevron_right_rounded
+                  : Icons.expand_more_rounded,
+                  size: 18, color: Colors.blueGrey[400]),
+              const SizedBox(width: 4),
+              const Icon(Icons.holiday_village_outlined,
+                  size: 16, color: Color(0xFF2D77D0)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  desa.nmDesa,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF10243E),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _statChip('${desa.total}', const Color(0xFF2D77D0)),
+              if (desa.belum > 0) ...[
+                const SizedBox(width: 6),
+                _statChip('${desa.belum} belum TL', const Color(0xFFEA8600)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSlsHeader(_SlsGroup sls) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 6, 20, 6),
+      child: Row(
+        children: [
+          const Icon(Icons.map_outlined, size: 14, color: Color(0xFF5B6B7B)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              sls.slsLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Colors.blueGrey[600],
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '${sls.items.length}',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: Colors.blueGrey[400],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Kartu compact: hanya nama + baris ringkas (wilayah / alamat). Detail
   /// lengkap dibuka lewat tap.
   Widget _buildCard(RespondenSulitItem item) {
-    final subtitle = item.wilayahLabel.isNotEmpty
-        ? item.wilayahLabel
-        : (item.alamat.isNotEmpty ? item.alamat : '—');
+    // Wilayah sudah tampil di header grup, jadi subtitle utamakan alamat / PPL.
+    final subtitle = item.alamat.isNotEmpty
+        ? item.alamat
+        : (item.pplNama.isNotEmpty ? 'PPL: ${item.pplNama}' : '—');
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
@@ -691,6 +936,40 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
       ),
     );
   }
+}
+
+/// Node pohon tingkat Kecamatan → menampung kelurahan/desa.
+class _KecGroup {
+  final String nmKec;
+  final Map<String, _DesaGroup> desaMap = {};
+  List<_DesaGroup> desa = [];
+
+  _KecGroup(this.nmKec);
+
+  int get total => desa.fold(0, (sum, d) => sum + d.total);
+  int get belum => desa.fold(0, (sum, d) => sum + d.belum);
+}
+
+/// Node pohon tingkat Kelurahan/Desa → menampung SLS.
+class _DesaGroup {
+  final String nmDesa;
+  final Map<String, _SlsGroup> slsMap = {};
+  List<_SlsGroup> sls = [];
+
+  _DesaGroup(this.nmDesa);
+
+  int get total => sls.fold(0, (sum, s) => sum + s.items.length);
+  int get belum => sls.fold(0, (sum, s) => sum + s.belum);
+}
+
+/// Node pohon tingkat SLS → menampung daftar responden.
+class _SlsGroup {
+  final String slsLabel;
+  final List<RespondenSulitItem> items = [];
+
+  _SlsGroup(this.slsLabel);
+
+  int get belum => items.where((i) => i.tindakLanjut.trim().isEmpty).length;
 }
 
 /// Opsi wilayah kerja untuk dropdown, dari se2026_wilayah_tugas.
