@@ -61,6 +61,22 @@ flutter build apk --release --split-per-abi --dart-define-from-file=env/env.loca
 flutter build ios --release --dart-define-from-file=env/env.local.json
 ```
 
+- macOS (aplikasi `.app` + `.dmg` siap pakai):
+```
+./scripts/build_macos.sh
+```
+
+## Build macOS (aplikasi mandiri)
+
+Aplikasi bisa dibangun menjadi `direktori.app` sehingga dapat dibuka lewat
+Launchpad/Finder tanpa menjalankan editor.
+
+- Di Mac: `./scripts/build_macos.sh` — hasilnya di `dist/macos/`.
+- Tanpa Mac: jalankan workflow **Actions → Build macOS**, lalu unduh artifact `.dmg`.
+
+Panduan lengkap (prasyarat, GitHub Actions, izin sistem, cara melewati
+peringatan Gatekeeper, dan troubleshooting) ada di **[BUILD_MACOS.md](BUILD_MACOS.md)**.
+
 Catatan keamanan:
 - Nilai yang diinject akan dibundel ke artefak aplikasi (biner/JS). Jangan taruh rahasia server (admin key, private API keys) di sini.
 - Aman untuk nilai publik seperti `SUPABASE_URL`, `SUPABASE_ANON_KEY`, dan base URL Upload API.

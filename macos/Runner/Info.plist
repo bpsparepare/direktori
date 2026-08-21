@@ -34,5 +34,13 @@
 	<string>Aplikasi ini memerlukan akses lokasi untuk menampilkan posisi Anda di peta.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>Aplikasi ini memerlukan akses lokasi untuk menampilkan posisi Anda di peta.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Aplikasi ini memerlukan akses mikrofon untuk fitur pencarian dengan suara.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Aplikasi ini memerlukan pengenalan suara untuk mengubah ucapan Anda menjadi teks pencarian.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Aplikasi membutuhkan akses kamera untuk mengambil foto dokumentasi.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Aplikasi membutuhkan akses galeri untuk memilih foto dokumentasi.</string>
 </dict>
 </plist>

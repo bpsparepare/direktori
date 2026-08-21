@@ -54,5 +54,5 @@ app.*.map.json
 assets/env
 
 # Dart define JSON environment files
-env/
+env/*
 !env/env.example.json
