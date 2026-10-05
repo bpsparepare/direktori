@@ -64,8 +64,10 @@ class UsahaKbliItem {
   String get key => '$assignmentId#$noUsaha';
 
   String get wilayahLabel {
-    final parts =
-        [namaDesa, namaSls].where((v) => v.trim().isNotEmpty).toList();
+    final parts = [
+      namaDesa,
+      namaSls,
+    ].where((v) => v.trim().isNotEmpty).toList();
     return parts.isEmpty ? kodeWilayah : parts.join(' / ');
   }
 }

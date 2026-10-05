@@ -72,8 +72,7 @@ class AnomaliWilayahService {
 
   /// Opsi filter lengkap: {'kategori': [...], 'petugas': [...]}.
   Future<Map<String, List<String>>> fetchKbliFilterOptions() async {
-    final response =
-        await _client.rpc('get_usaha_kbli_filter_options');
+    final response = await _client.rpc('get_usaha_kbli_filter_options');
     final result = <String, List<String>>{'kategori': [], 'petugas': []};
     if (response is List) {
       for (final row in response) {
@@ -94,11 +93,14 @@ class AnomaliWilayahService {
     required int noUsaha,
     required String komentar,
   }) async {
-    await _client.rpc('insert_anomali_kbli', params: {
-      'p_assignment_id': assignmentId,
-      'p_no_usaha': noUsaha,
-      'p_komentar': komentar,
-    });
+    await _client.rpc(
+      'insert_anomali_kbli',
+      params: {
+        'p_assignment_id': assignmentId,
+        'p_no_usaha': noUsaha,
+        'p_komentar': komentar,
+      },
+    );
   }
 
   /// Tandai banyak usaha sebagai UW3 sekaligus dengan catatan sama.
@@ -109,10 +111,10 @@ class AnomaliWilayahService {
     final payload = items
         .map((e) => {'assignment_id': e.assignmentId, 'no_usaha': e.noUsaha})
         .toList();
-    final response = await _client.rpc('insert_anomali_kbli_batch', params: {
-      'p_items': payload,
-      'p_komentar': komentar,
-    });
+    final response = await _client.rpc(
+      'insert_anomali_kbli_batch',
+      params: {'p_items': payload, 'p_komentar': komentar},
+    );
     if (response is int) return response;
     return int.tryParse(response?.toString() ?? '') ?? 0;
   }
@@ -126,14 +128,17 @@ class AnomaliWilayahService {
     int limit = 200,
     int offset = 0,
   }) async {
-    final response = await _client.rpc('get_anggota_profesi', params: {
-      'p_query': query,
-      'p_petugas': petugas,
-      'p_profesi': profesi,
-      'p_tanpa_usaha': tanpaUsaha,
-      'p_limit': limit,
-      'p_offset': offset,
-    });
+    final response = await _client.rpc(
+      'get_anggota_profesi',
+      params: {
+        'p_query': query,
+        'p_petugas': petugas,
+        'p_profesi': profesi,
+        'p_tanpa_usaha': tanpaUsaha,
+        'p_limit': limit,
+        'p_offset': offset,
+      },
+    );
     if (response is! List) return [];
     return response
         .map((e) => AnggotaProfesiItem.fromJson(e as Map<String, dynamic>))
@@ -141,8 +146,7 @@ class AnomaliWilayahService {
   }
 
   Future<Map<String, List<String>>> fetchProfesiFilterOptions() async {
-    final response =
-        await _client.rpc('get_anggota_profesi_filter_options');
+    final response = await _client.rpc('get_anggota_profesi_filter_options');
     final result = <String, List<String>>{'profesi': [], 'petugas': []};
     if (response is List) {
       for (final row in response) {
@@ -162,22 +166,25 @@ class AnomaliWilayahService {
     required String profesiNama,
     required String komentar,
   }) async {
-    await _client.rpc('insert_anomali_profesi', params: {
-      'p_assignment_id': assignmentId,
-      'p_no_urut': noUrut,
-      'p_profesi_nama': profesiNama,
-      'p_komentar': komentar,
-    });
+    await _client.rpc(
+      'insert_anomali_profesi',
+      params: {
+        'p_assignment_id': assignmentId,
+        'p_no_urut': noUrut,
+        'p_profesi_nama': profesiNama,
+        'p_komentar': komentar,
+      },
+    );
   }
 
   Future<int> insertAnomaliProfesiBatch({
     required List<Map<String, dynamic>> items,
     required String komentar,
   }) async {
-    final response = await _client.rpc('insert_anomali_profesi_batch', params: {
-      'p_items': items,
-      'p_komentar': komentar,
-    });
+    final response = await _client.rpc(
+      'insert_anomali_profesi_batch',
+      params: {'p_items': items, 'p_komentar': komentar},
+    );
     if (response is int) return response;
     return int.tryParse(response?.toString() ?? '') ?? 0;
   }
@@ -192,15 +199,18 @@ class AnomaliWilayahService {
     int limit = 200,
     int offset = 0,
   }) async {
-    final response = await _client.rpc('get_keluarga_aset', params: {
-      'p_query': query,
-      'p_petugas': petugas,
-      'p_hanya_anomali': hanyaAnomali,
-      'p_aset': aset,
-      'p_thresholds': thresholds,
-      'p_limit': limit,
-      'p_offset': offset,
-    });
+    final response = await _client.rpc(
+      'get_keluarga_aset',
+      params: {
+        'p_query': query,
+        'p_petugas': petugas,
+        'p_hanya_anomali': hanyaAnomali,
+        'p_aset': aset,
+        'p_thresholds': thresholds,
+        'p_limit': limit,
+        'p_offset': offset,
+      },
+    );
     if (response is! List) return [];
     return response
         .map((e) => KeluargaAsetItem.fromJson(e as Map<String, dynamic>))
@@ -225,11 +235,14 @@ class AnomaliWilayahService {
     required String komentar,
     Map<String, int> thresholds = const {},
   }) async {
-    await _client.rpc('insert_anomali_aset', params: {
-      'p_assignment_id': assignmentId,
-      'p_komentar': komentar,
-      'p_thresholds': thresholds,
-    });
+    await _client.rpc(
+      'insert_anomali_aset',
+      params: {
+        'p_assignment_id': assignmentId,
+        'p_komentar': komentar,
+        'p_thresholds': thresholds,
+      },
+    );
   }
 
   Future<int> insertAnomaliAsetBatch({
@@ -237,13 +250,15 @@ class AnomaliWilayahService {
     required String komentar,
     Map<String, int> thresholds = const {},
   }) async {
-    final response = await _client.rpc('insert_anomali_aset_batch', params: {
-      'p_items': items,
-      'p_komentar': komentar,
-      'p_thresholds': thresholds,
-    });
+    final response = await _client.rpc(
+      'insert_anomali_aset_batch',
+      params: {
+        'p_items': items,
+        'p_komentar': komentar,
+        'p_thresholds': thresholds,
+      },
+    );
     if (response is int) return response;
     return int.tryParse(response?.toString() ?? '') ?? 0;
   }
 }
-

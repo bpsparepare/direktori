@@ -40,6 +40,16 @@ class PlaceSelected extends MapEvent {
   List<Object?> get props => [place];
 }
 
+/// Highlight visual sebuah titik TANPA membuka panel detail.
+/// Digunakan, misalnya, saat memilih item dari daftar "luar batas".
+/// `selectedPlace` (yang membuka panel) dibersihkan ketika event ini masuk.
+class PlaceHighlighted extends MapEvent {
+  final Place place;
+  const PlaceHighlighted(this.place);
+  @override
+  List<Object?> get props => [place];
+}
+
 class PlaceCleared extends MapEvent {
   const PlaceCleared();
 }

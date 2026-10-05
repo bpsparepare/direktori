@@ -29,13 +29,14 @@ class _ImportAnomaliWilayahAsetPageState
   Future<void> _openFasih(String assignmentId) async {
     if (assignmentId.isEmpty) return;
     final uri = Uri.tryParse(
-        'https://fasih-sm.bps.go.id/app/assignment/$_fasihSurveyId/$assignmentId/edit');
+      'https://fasih-sm.bps.go.id/app/assignment/$_fasihSurveyId/$assignmentId/edit',
+    );
     if (uri == null) return;
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tidak bisa membuka Fasih')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Tidak bisa membuka Fasih')));
     }
   }
 
@@ -60,9 +61,9 @@ class _ImportAnomaliWilayahAsetPageState
   bool _batchMode = false;
 
   void _onSort(int col, bool asc) => setState(() {
-        _sortColumnIndex = col;
-        _sortAscending = asc;
-      });
+    _sortColumnIndex = col;
+    _sortAscending = asc;
+  });
 
   String _sortKey(KeluargaAsetItem it, int col) {
     switch (col) {
@@ -86,8 +87,12 @@ class _ImportAnomaliWilayahAsetPageState
 
   List<KeluargaAsetItem> get _viewItems {
     final list = [..._items];
-    list.sort((a, b) =>
-        _sortKey(a, _sortColumnIndex).compareTo(_sortKey(b, _sortColumnIndex)));
+    list.sort(
+      (a, b) => _sortKey(
+        a,
+        _sortColumnIndex,
+      ).compareTo(_sortKey(b, _sortColumnIndex)),
+    );
     return _sortAscending ? list : list.reversed.toList();
   }
 
@@ -176,22 +181,33 @@ class _ImportAnomaliWilayahAsetPageState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(item.namaKk.isEmpty ? item.assignmentId : item.namaKk,
-                  style: const TextStyle(fontWeight: FontWeight.w800)),
+              Text(
+                item.namaKk.isEmpty ? item.assignmentId : item.namaKk,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
               const SizedBox(height: 8),
-              Text('Petugas: ${item.namaPetugas}',
-                  style: const TextStyle(fontSize: 13)),
-              Text('Wilayah: ${item.wilayahLabel}',
-                  style: const TextStyle(fontSize: 13)),
+              Text(
+                'Petugas: ${item.namaPetugas}',
+                style: const TextStyle(fontSize: 13),
+              ),
+              Text(
+                'Wilayah: ${item.wilayahLabel}',
+                style: const TextStyle(fontSize: 13),
+              ),
               const SizedBox(height: 8),
-              const Text('Aset melewati ambang:',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+              const Text(
+                'Aset melewati ambang:',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              ),
               if (item.lewat.isEmpty)
                 const Text('—')
               else
-                ...item.lewat.map((k) => Text(
+                ...item.lewat.map(
+                  (k) => Text(
                     '• ${KeluargaAsetItem.asetLabel[k] ?? k}: ${item.nilai[k]}',
-                    style: const TextStyle(fontSize: 13, color: _warn))),
+                    style: const TextStyle(fontSize: 13, color: _warn),
+                  ),
+                ),
               const SizedBox(height: 14),
               TextField(
                 controller: controller,
@@ -232,13 +248,15 @@ class _ImportAnomaliWilayahAsetPageState
         thresholds: _thresholds,
       );
       if (!mounted) return;
-      messenger
-          .showSnackBar(const SnackBar(content: Text('Anomali aset ditandai.')));
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Anomali aset ditandai.')),
+      );
       await _loadPage(_page);
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(
-          content: Text('Gagal: $e'), backgroundColor: Colors.red));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Gagal: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -254,22 +272,27 @@ class _ImportAnomaliWilayahAsetPageState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Catatan sama untuk semua terpilih.',
-                style: TextStyle(fontSize: 12, color: Colors.blueGrey[600])),
+            Text(
+              'Catatan sama untuk semua terpilih.',
+              style: TextStyle(fontSize: 12, color: Colors.blueGrey[600]),
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
               maxLines: 3,
               autofocus: true,
               decoration: const InputDecoration(
-                  labelText: 'Catatan (wajib)', border: OutlineInputBorder()),
+                labelText: 'Catatan (wajib)',
+                border: OutlineInputBorder(),
+              ),
             ),
           ],
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Batal')),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Batal'),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: _accent),
             onPressed: () {
@@ -293,12 +316,14 @@ class _ImportAnomaliWilayahAsetPageState
       );
       if (!mounted) return;
       messenger.showSnackBar(
-          SnackBar(content: Text('$n keluarga ditandai anomali.')));
+        SnackBar(content: Text('$n keluarga ditandai anomali.')),
+      );
       await _loadPage(_page);
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(
-          content: Text('Gagal: $e'), backgroundColor: Colors.red));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Gagal: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -407,8 +432,10 @@ class _ImportAnomaliWilayahAsetPageState
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _accent,
                   foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 14,
+                  ),
                 ),
                 child: const Text('Cari'),
               ),
@@ -426,13 +453,18 @@ class _ImportAnomaliWilayahAsetPageState
                     labelText: 'Petugas',
                     isDense: true,
                     border: OutlineInputBorder(),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                   ),
                   items: [_allPtg, ..._ptgOpts]
-                      .map((o) => DropdownMenuItem(
+                      .map(
+                        (o) => DropdownMenuItem(
                           value: o,
-                          child: Text(o, overflow: TextOverflow.ellipsis)))
+                          child: Text(o, overflow: TextOverflow.ellipsis),
+                        ),
+                      )
                       .toList(),
                   onChanged: (v) {
                     setState(() => _petugasFilter = v ?? _allPtg);
@@ -450,18 +482,23 @@ class _ImportAnomaliWilayahAsetPageState
                     labelText: 'Filter aset',
                     isDense: true,
                     border: OutlineInputBorder(),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                   ),
                   items: [_allAset, ...KeluargaAsetItem.asetKeys]
-                      .map((o) => DropdownMenuItem(
-                            value: o,
-                            child: Text(
-                                o == _allAset
-                                    ? _allAset
-                                    : (KeluargaAsetItem.asetLabel[o] ?? o),
-                                overflow: TextOverflow.ellipsis),
-                          ))
+                      .map(
+                        (o) => DropdownMenuItem(
+                          value: o,
+                          child: Text(
+                            o == _allAset
+                                ? _allAset
+                                : (KeluargaAsetItem.asetLabel[o] ?? o),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
                       .toList(),
                   onChanged: (v) {
                     setState(() => _asetFilter = v ?? _allAset);
@@ -515,8 +552,10 @@ class _ImportAnomaliWilayahAsetPageState
     }
     if (_items.isEmpty) {
       return Center(
-        child: Text('Tidak ada data.',
-            style: TextStyle(color: Colors.blueGrey[600])),
+        child: Text(
+          'Tidak ada data.',
+          style: TextStyle(color: Colors.blueGrey[600]),
+        ),
       );
     }
     return Column(
@@ -545,8 +584,7 @@ class _ImportAnomaliWilayahAsetPageState
       sortAscending: _sortAscending,
       dataRowMinHeight: 44,
       dataRowMaxHeight: 60,
-      headingRowColor:
-          WidgetStatePropertyAll(_accent.withValues(alpha: 0.08)),
+      headingRowColor: WidgetStatePropertyAll(_accent.withValues(alpha: 0.08)),
       columnSpacing: 16,
       columns: [
         const DataColumn(label: Text('No')),
@@ -588,36 +626,57 @@ class _ImportAnomaliWilayahAsetPageState
           : null,
       cells: [
         DataCell(Text('${index + 1}')),
-        DataCell(ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 150),
-          child: Text(it.namaKk.isEmpty ? it.assignmentId : it.namaKk,
+        DataCell(
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 150),
+            child: Text(
+              it.namaKk.isEmpty ? it.assignmentId : it.namaKk,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w700)),
-        )),
-        DataCell(ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 120),
-          child: Text(it.namaPetugas.isEmpty ? '-' : it.namaPetugas,
-              maxLines: 1, overflow: TextOverflow.ellipsis),
-        )),
-        DataCell(ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 150),
-          child: Text(it.wilayahLabel.isEmpty ? '-' : it.wilayahLabel,
-              maxLines: 2, overflow: TextOverflow.ellipsis),
-        )),
-        DataCell(IconButton(
-          icon: const Icon(Icons.open_in_new_rounded, size: 18),
-          color: const Color(0xFF1F6FEB),
-          tooltip: 'Buka di Fasih',
-          visualDensity: VisualDensity.compact,
-          onPressed: () => _openFasih(it.assignmentId),
-        )),
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+        DataCell(
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 120),
+            child: Text(
+              it.namaPetugas.isEmpty ? '-' : it.namaPetugas,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        DataCell(
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 150),
+            child: Text(
+              it.wilayahLabel.isEmpty ? '-' : it.wilayahLabel,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        DataCell(
+          IconButton(
+            icon: const Icon(Icons.open_in_new_rounded, size: 18),
+            color: const Color(0xFF1F6FEB),
+            tooltip: 'Buka di Fasih',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _openFasih(it.assignmentId),
+          ),
+        ),
         for (final k in KeluargaAsetItem.asetKeys) _asetCell(it, k),
-        DataCell(ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 130),
-          child: Text(it.statusText.isEmpty ? '-' : it.statusText,
-              maxLines: 2, overflow: TextOverflow.ellipsis),
-        )),
+        DataCell(
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 130),
+            child: Text(
+              it.statusText.isEmpty ? '-' : it.statusText,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
         DataCell(
           it.sudahAnomali
               ? TextButton.icon(
@@ -630,8 +689,10 @@ class _ImportAnomaliWilayahAsetPageState
                   onPressed: () => _tandai(it),
                   style: FilledButton.styleFrom(
                     backgroundColor: _accent,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     minimumSize: const Size(0, 30),
                   ),
                   child: const Text('Tandai'),
@@ -673,16 +734,20 @@ class _ImportAnomaliWilayahAsetPageState
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           TextButton.icon(
-            onPressed:
-                (_isLoading || _page == 0) ? null : () => _loadPage(_page - 1),
+            onPressed: (_isLoading || _page == 0)
+                ? null
+                : () => _loadPage(_page - 1),
             icon: const Icon(Icons.chevron_left_rounded),
             label: const Text('Sebelumnya'),
           ),
-          Text('Halaman ${_page + 1}',
-              style: const TextStyle(fontWeight: FontWeight.w700)),
+          Text(
+            'Halaman ${_page + 1}',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
           TextButton(
-            onPressed:
-                (_isLoading || !_hasNext) ? null : () => _loadPage(_page + 1),
+            onPressed: (_isLoading || !_hasNext)
+                ? null
+                : () => _loadPage(_page + 1),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: const [

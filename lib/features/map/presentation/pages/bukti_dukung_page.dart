@@ -216,12 +216,15 @@ class _BuktiDukungPageState extends State<BuktiDukungPage> {
         children: [
           const SizedBox(
             width: 26,
-            child: Text('No',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF10243E))),
+            child: Text(
+              'No',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF10243E),
+              ),
+            ),
           ),
           const Expanded(flex: 3, child: Text('Petugas', style: style)),
           _headerCell('Termin 1', 's/d Juli'),
@@ -347,8 +350,10 @@ class _BuktiDukungPageState extends State<BuktiDukungPage> {
                 borderRadius: BorderRadius.circular(10),
                 onTap: () => _showEvidence(title, cell),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFEAF7EF),
                     borderRadius: BorderRadius.circular(10),
@@ -398,7 +403,10 @@ class _BuktiDukungPageState extends State<BuktiDukungPage> {
         final imageUrl = cell.imageUrl;
 
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 24,
+          ),
           clipBehavior: Clip.antiAlias,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(26),
@@ -519,8 +527,11 @@ class _BuktiDukungPageState extends State<BuktiDukungPage> {
       child: const Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.image_not_supported_outlined,
-              size: 40, color: Color(0xFF9AA6B6)),
+          Icon(
+            Icons.image_not_supported_outlined,
+            size: 40,
+            color: Color(0xFF9AA6B6),
+          ),
           SizedBox(height: 8),
           Text(
             'Pratinjau tidak tersedia.\nBuka di Drive untuk melihat.',

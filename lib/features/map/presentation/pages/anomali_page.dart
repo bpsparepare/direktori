@@ -1089,8 +1089,10 @@ class _AnomaliPageState extends State<AnomaliPage> {
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFF1D8F5A),
                 side: const BorderSide(color: Color(0xFF1D8F5A)),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
@@ -1109,9 +1111,8 @@ class _AnomaliPageState extends State<AnomaliPage> {
     );
   }
 
-  Color _itemSumberColor(AnomaliGabunganItem item) => item.isSumberWilayah
-      ? const Color(0xFF8B1D5E)
-      : const Color(0xFF1F6FEB);
+  Color _itemSumberColor(AnomaliGabunganItem item) =>
+      item.isSumberWilayah ? const Color(0xFF8B1D5E) : const Color(0xFF1F6FEB);
 
   Widget _buildSumberBadge(AnomaliGabunganItem item) {
     final color = _itemSumberColor(item);
@@ -1550,9 +1551,7 @@ class _AnomaliPageState extends State<AnomaliPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      constraints: isWide
-          ? BoxConstraints(maxWidth: width * 0.8)
-          : null,
+      constraints: isWide ? BoxConstraints(maxWidth: width * 0.8) : null,
       builder: (_) => _AnomaliDetailSheet(
         item: item,
         service: _service,
@@ -1677,8 +1676,8 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
             target == 'verified'
                 ? 'Anomali diverifikasi'
                 : target == 'rejected'
-                    ? 'Anomali ditolak'
-                    : 'Keputusan verifikasi dibatalkan',
+                ? 'Anomali ditolak'
+                : 'Keputusan verifikasi dibatalkan',
           ),
         ),
       );
@@ -1803,7 +1802,11 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
   }
 
   Widget _buildResponsChoice(
-      String value, String label, Color color, IconData icon) {
+    String value,
+    String label,
+    Color color,
+    IconData icon,
+  ) {
     final selected = _jenisRespons == value;
     return OutlinedButton.icon(
       onPressed: _isSaving ? null : () => setState(() => _jenisRespons = value),
@@ -2157,8 +2160,8 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
     final accent = _verified
         ? green
         : _rejected
-            ? red
-            : const Color(0xFF6B7A8D);
+        ? red
+        : const Color(0xFF6B7A8D);
     final active = _verified || _rejected;
 
     return Container(
@@ -2166,7 +2169,9 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
       decoration: BoxDecoration(
         color: active ? accent.withValues(alpha: 0.08) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: active ? Border.all(color: accent.withValues(alpha: 0.4)) : null,
+        border: active
+            ? Border.all(color: accent.withValues(alpha: 0.4))
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2177,8 +2182,8 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                 _verified
                     ? Icons.verified_user_rounded
                     : _rejected
-                        ? Icons.gpp_bad_rounded
-                        : Icons.verified_user_outlined,
+                    ? Icons.gpp_bad_rounded
+                    : Icons.verified_user_outlined,
                 size: 20,
                 color: accent,
               ),
@@ -2200,11 +2205,11 @@ class _AnomaliDetailSheetState extends State<_AnomaliDetailSheet> {
                       '${_verifiedOleh != null ? ' oleh $_verifiedOleh' : ''}'
                       '${_verifiedAt != null ? ' · ${_formatDate(_verifiedAt!)}' : ''}'
                 : _rejected
-                    ? 'Ditolak admin'
-                          '${_verifiedOleh != null ? ' oleh $_verifiedOleh' : ''}'
-                          '${_verifiedAt != null ? ' · ${_formatDate(_verifiedAt!)}' : ''}'
-                    : 'Belum ada keputusan. Setujui bila kasus valid, atau '
-                          'tolak bila tidak sesuai.',
+                ? 'Ditolak admin'
+                      '${_verifiedOleh != null ? ' oleh $_verifiedOleh' : ''}'
+                      '${_verifiedAt != null ? ' · ${_formatDate(_verifiedAt!)}' : ''}'
+                : 'Belum ada keputusan. Setujui bila kasus valid, atau '
+                      'tolak bila tidak sesuai.',
             style: TextStyle(fontSize: 12, color: Colors.blueGrey[600]),
           ),
           const SizedBox(height: 12),

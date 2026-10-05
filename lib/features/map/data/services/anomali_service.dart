@@ -24,10 +24,7 @@ class AnomalyService {
     int limit = 500,
     int offset = 0,
   }) async {
-    final params = <String, dynamic>{
-      'p_limit': limit,
-      'p_offset': offset,
-    };
+    final params = <String, dynamic>{'p_limit': limit, 'p_offset': offset};
     if (sumber != null) params['p_sumber'] = sumber;
     if (kategoriBesar != null) params['p_kategori_besar'] = kategoriBesar;
     if (kategoriKode != null) params['p_kategori_kode'] = kategoriKode;
@@ -36,12 +33,16 @@ class AnomalyService {
     if (petugasId != null) params['p_petugas_id'] = petugasId;
 
     try {
-      final response =
-          await _client.rpc('get_anomali_gabungan', params: params);
+      final response = await _client.rpc(
+        'get_anomali_gabungan',
+        params: params,
+      );
       if (response is! List) return [];
       return response
-          .map((item) =>
-              AnomaliGabunganItem.fromJson(item as Map<String, dynamic>))
+          .map(
+            (item) =>
+                AnomaliGabunganItem.fromJson(item as Map<String, dynamic>),
+          )
           .toList();
     } catch (e, stack) {
       debugPrint('[AnomalyService] fetchAnomaliGabungan ERROR: $e');
@@ -64,15 +65,18 @@ class AnomalyService {
     String namaSubjek = '',
     String? keterangan,
   }) async {
-    await _client.rpc('upsert_anomali_respons', params: {
-      'p_sumber': sumber,
-      'p_scope': scope,
-      'p_assignment_id': assignmentId,
-      'p_kategori_kode': kategoriKode,
-      'p_jenis_respons': jenisRespons,
-      'p_nama_subjek': namaSubjek,
-      'p_keterangan': keterangan,
-    });
+    await _client.rpc(
+      'upsert_anomali_respons',
+      params: {
+        'p_sumber': sumber,
+        'p_scope': scope,
+        'p_assignment_id': assignmentId,
+        'p_kategori_kode': kategoriKode,
+        'p_jenis_respons': jenisRespons,
+        'p_nama_subjek': namaSubjek,
+        'p_keterangan': keterangan,
+      },
+    );
   }
 
   /// Progres pemeriksaan anomali pusat untuk grafik donut. Breakdown otomatis
@@ -88,12 +92,13 @@ class AnomalyService {
     if (pengawasId != null) params['p_pengawas_id'] = pengawasId;
     if (petugasId != null) params['p_petugas_id'] = petugasId;
 
-    final response =
-        await _client.rpc('get_anomali_pusat_progress', params: params);
+    final response = await _client.rpc(
+      'get_anomali_pusat_progress',
+      params: params,
+    );
     if (response is! List) return [];
     return response
-        .map((e) =>
-            AnomaliProgressItem.fromJson(e as Map<String, dynamic>))
+        .map((e) => AnomaliProgressItem.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 
@@ -124,14 +129,17 @@ class AnomalyService {
     required String? status,
     String? catatan,
   }) async {
-    await _client.rpc('set_anomali_pusat_verifikasi', params: {
-      'p_scope': scope,
-      'p_assignment_id': assignmentId,
-      'p_nama_subjek': namaSubjek,
-      'p_kategori_kode': kategoriKode,
-      'p_status': status,
-      'p_catatan': catatan,
-    });
+    await _client.rpc(
+      'set_anomali_pusat_verifikasi',
+      params: {
+        'p_scope': scope,
+        'p_assignment_id': assignmentId,
+        'p_nama_subjek': namaSubjek,
+        'p_kategori_kode': kategoriKode,
+        'p_status': status,
+        'p_catatan': catatan,
+      },
+    );
   }
 
   /// Thread multi-petugas untuk satu kasus (baik 'kualitas' maupun
@@ -143,13 +151,16 @@ class AnomalyService {
     required String kategoriKode,
     String namaSubjek = '',
   }) async {
-    final response = await _client.rpc('get_anomali_respons', params: {
-      'p_sumber': sumber,
-      'p_scope': scope,
-      'p_assignment_id': assignmentId,
-      'p_kategori_kode': kategoriKode,
-      'p_nama_subjek': namaSubjek,
-    });
+    final response = await _client.rpc(
+      'get_anomali_respons',
+      params: {
+        'p_sumber': sumber,
+        'p_scope': scope,
+        'p_assignment_id': assignmentId,
+        'p_kategori_kode': kategoriKode,
+        'p_nama_subjek': namaSubjek,
+      },
+    );
     if (response is! List) return [];
     return response
         .map((e) => KeteranganPusatItem.fromJson(e as Map<String, dynamic>))
@@ -164,10 +175,7 @@ class AnomalyService {
     int limit = 500,
     int offset = 0,
   }) async {
-    final params = <String, dynamic>{
-      'p_limit': limit,
-      'p_offset': offset,
-    };
+    final params = <String, dynamic>{'p_limit': limit, 'p_offset': offset};
     if (kategori != null) params['p_kategori'] = kategori;
     if (status != null) params['p_status'] = status;
     if (pengawasId != null) params['p_pengawas_id'] = pengawasId;
@@ -200,10 +208,7 @@ class AnomalyService {
     int limit = 500,
     int offset = 0,
   }) async {
-    final params = <String, dynamic>{
-      'p_limit': limit,
-      'p_offset': offset,
-    };
+    final params = <String, dynamic>{'p_limit': limit, 'p_offset': offset};
     if (petugasId != null) params['p_petugas_id'] = petugasId;
     if (pengawasId != null) params['p_pengawas_id'] = pengawasId;
     if (kategori != null) params['p_kategori'] = kategori;
@@ -213,10 +218,14 @@ class AnomalyService {
 
     try {
       final response = await _client.rpc('get_anomali_pusat', params: params);
-      debugPrint('[AnomalyService] pusat response type: ${response.runtimeType}');
+      debugPrint(
+        '[AnomalyService] pusat response type: ${response.runtimeType}',
+      );
       if (response is! List) return [];
       return response
-          .map((item) => AnomaliPusatItem.fromJson(item as Map<String, dynamic>))
+          .map(
+            (item) => AnomaliPusatItem.fromJson(item as Map<String, dynamic>),
+          )
           .toList();
     } catch (e, stack) {
       debugPrint('[AnomalyService] ERROR pusat: $e');
@@ -235,7 +244,7 @@ class AnomalyService {
           .neq('keterangan', '');
       return {
         for (final row in response)
-          '${row['assignment_id']}|${row['nama_anomali']}'
+          '${row['assignment_id']}|${row['nama_anomali']}',
       };
     } catch (e) {
       debugPrint('[AnomalyService] fetchMyKeteranganKeys ERROR: $e');
@@ -248,10 +257,13 @@ class AnomalyService {
     required String namaAnomali,
   }) async {
     try {
-      final response = await _client.rpc('get_anomali_pusat_keterangan', params: {
-        'p_assignment_id': assignmentId,
-        'p_nama_anomali': namaAnomali,
-      });
+      final response = await _client.rpc(
+        'get_anomali_pusat_keterangan',
+        params: {
+          'p_assignment_id': assignmentId,
+          'p_nama_anomali': namaAnomali,
+        },
+      );
       if (response is! List) return [];
       return response
           .map((e) => KeteranganPusatItem.fromJson(e as Map<String, dynamic>))
@@ -267,11 +279,14 @@ class AnomalyService {
     required String namaAnomali,
     required String keterangan,
   }) async {
-    await _client.rpc('upsert_anomali_pusat_keterangan', params: {
-      'p_assignment_id': assignmentId,
-      'p_nama_anomali': namaAnomali,
-      'p_keterangan': keterangan,
-    });
+    await _client.rpc(
+      'upsert_anomali_pusat_keterangan',
+      params: {
+        'p_assignment_id': assignmentId,
+        'p_nama_anomali': namaAnomali,
+        'p_keterangan': keterangan,
+      },
+    );
   }
 
   Future<int?> upsertTindakLanjut({

@@ -13,8 +13,7 @@ class AsetThresholdSettingsPage extends StatefulWidget {
       _AsetThresholdSettingsPageState();
 }
 
-class _AsetThresholdSettingsPageState
-    extends State<AsetThresholdSettingsPage> {
+class _AsetThresholdSettingsPageState extends State<AsetThresholdSettingsPage> {
   static const Color _accent = Color(0xFF9A3412);
   final Map<String, TextEditingController> _controllers = {};
   bool _loading = true;
@@ -54,8 +53,10 @@ class _AsetThresholdSettingsPageState
       if (v == null || v < 1) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(
-                  'Nilai ${KeluargaAsetItem.asetLabel[k]} harus angka ≥ 1')),
+            content: Text(
+              'Nilai ${KeluargaAsetItem.asetLabel[k]} harus angka ≥ 1',
+            ),
+          ),
         );
         return;
       }
@@ -63,8 +64,9 @@ class _AsetThresholdSettingsPageState
     }
     await AsetThresholds.save(values);
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Ambang disimpan.')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Ambang disimpan.')));
     Navigator.of(context).pop(true);
   }
 
@@ -87,8 +89,7 @@ class _AsetThresholdSettingsPageState
         actions: [
           TextButton(
             onPressed: _reset,
-            child: const Text('Default',
-                style: TextStyle(color: Colors.white)),
+            child: const Text('Default', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -110,9 +111,12 @@ class _AsetThresholdSettingsPageState
                       child: Row(
                         children: [
                           Expanded(
-                            child: Text(KeluargaAsetItem.asetLabel[k] ?? k,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600)),
+                            child: Text(
+                              KeluargaAsetItem.asetLabel[k] ?? k,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                           const Text('≥ '),
                           SizedBox(
@@ -121,7 +125,7 @@ class _AsetThresholdSettingsPageState
                               controller: _controllers[k],
                               keyboardType: TextInputType.number,
                               inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly
+                                FilteringTextInputFormatter.digitsOnly,
                               ],
                               textAlign: TextAlign.center,
                               decoration: const InputDecoration(

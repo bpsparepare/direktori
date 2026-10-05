@@ -149,12 +149,14 @@ class ScrapingRepositoryImpl {
       final ws = ss.worksheetByTitle(_worksheetTitle);
       if (ws == null) {
         debugPrint(
-            'ScrapingRepository: worksheet "$_worksheetTitle" not found');
+          'ScrapingRepository: worksheet "$_worksheetTitle" not found',
+        );
         return false;
       }
 
       // Read all rows to locate the matching record and status column
-      final rows = await ws.values.allRows(fromRow: 1) ?? const <List<String>>[];
+      final rows =
+          await ws.values.allRows(fromRow: 1) ?? const <List<String>>[];
       if (rows.isEmpty) {
         debugPrint('ScrapingRepository: empty sheet');
         return false;

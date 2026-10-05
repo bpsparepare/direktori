@@ -12,8 +12,18 @@ class NikTidakValidPage extends StatefulWidget {
 
 class _NikTidakValidPageState extends State<NikTidakValidPage> {
   static const List<String> _bulan = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'Mei',
+    'Jun',
+    'Jul',
+    'Agu',
+    'Sep',
+    'Okt',
+    'Nov',
+    'Des',
   ];
 
   final NikTidakValidService _service = NikTidakValidService();
@@ -169,36 +179,34 @@ class _NikTidakValidPageState extends State<NikTidakValidPage> {
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : _error != null
-                  ? _buildErrorState()
-                  : RefreshIndicator(
-                      onRefresh: _refreshData,
-                      child: CustomScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        slivers: [
-                          SliverToBoxAdapter(child: _buildHero()),
-                          SliverToBoxAdapter(child: _buildSearch()),
-                          SliverToBoxAdapter(child: _buildFilter()),
-                          SliverToBoxAdapter(child: _buildHeader(entries.length)),
-                          if (entries.isEmpty)
-                            SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: _buildEmpty(),
-                            )
-                          else
-                            SliverPadding(
-                              padding:
-                                  const EdgeInsets.fromLTRB(12, 0, 12, 100),
-                              sliver: SliverList.separated(
-                                itemCount: entries.length,
-                                itemBuilder: (_, i) =>
-                                    _buildCard(entries[i]),
-                                separatorBuilder: (_, __) =>
-                                    const SizedBox(height: 10),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
+              ? _buildErrorState()
+              : RefreshIndicator(
+                  onRefresh: _refreshData,
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverToBoxAdapter(child: _buildHero()),
+                      SliverToBoxAdapter(child: _buildSearch()),
+                      SliverToBoxAdapter(child: _buildFilter()),
+                      SliverToBoxAdapter(child: _buildHeader(entries.length)),
+                      if (entries.isEmpty)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _buildEmpty(),
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 100),
+                          sliver: SliverList.separated(
+                            itemCount: entries.length,
+                            itemBuilder: (_, i) => _buildCard(entries[i]),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
         ),
       ),
     );
@@ -240,7 +248,10 @@ class _NikTidakValidPageState extends State<NikTidakValidPage> {
                 Text(
                   '${_entries.length} anggota · NIK di luar format 16 digit',
                   style: const TextStyle(
-                      color: Colors.white70, fontSize: 12, height: 1.4),
+                    color: Colors.white70,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
                 ),
               ],
             ),
@@ -288,8 +299,10 @@ class _NikTidakValidPageState extends State<NikTidakValidPage> {
                         icon: const Icon(Icons.close_rounded, size: 20),
                       ),
                 border: InputBorder.none,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
               ),
             ),
           ),
@@ -318,23 +331,27 @@ class _NikTidakValidPageState extends State<NikTidakValidPage> {
         children: [
           for (int i = 0; i < items.length; i++) ...[
             if (i > 0) const SizedBox(width: 6),
-            Builder(builder: (context) {
-              final label = items[i];
-              final sel = label == _selectedKategori;
-              return FilterChip(
-                label: Text(label, style: const TextStyle(fontSize: 12)),
-                selected: sel,
-                onSelected: (_) => setState(() => _selectedKategori = label),
-                selectedColor: const Color(0xFFB83232).withValues(alpha: 0.12),
-                checkmarkColor: const Color(0xFFB83232),
-                labelStyle: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: sel ? const Color(0xFFB83232) : Colors.blueGrey[700],
-                ),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-              );
-            }),
+            Builder(
+              builder: (context) {
+                final label = items[i];
+                final sel = label == _selectedKategori;
+                return FilterChip(
+                  label: Text(label, style: const TextStyle(fontSize: 12)),
+                  selected: sel,
+                  onSelected: (_) => setState(() => _selectedKategori = label),
+                  selectedColor: const Color(
+                    0xFFB83232,
+                  ).withValues(alpha: 0.12),
+                  checkmarkColor: const Color(0xFFB83232),
+                  labelStyle: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: sel ? const Color(0xFFB83232) : Colors.blueGrey[700],
+                  ),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                );
+              },
+            ),
           ],
         ],
       ),
@@ -408,8 +425,11 @@ class _NikTidakValidPageState extends State<NikTidakValidPage> {
               // NIK + badge
               Row(
                 children: [
-                  const Icon(Icons.fingerprint,
-                      size: 14, color: Color(0xFFB83232)),
+                  const Icon(
+                    Icons.fingerprint,
+                    size: 14,
+                    color: Color(0xFFB83232),
+                  ),
                   const SizedBox(width: 5),
                   Flexible(
                     child: Text(
@@ -443,9 +463,7 @@ class _NikTidakValidPageState extends State<NikTidakValidPage> {
                   Expanded(
                     child: _infoRow(
                       Icons.person_outline_rounded,
-                      item.namaPpl?.isNotEmpty == true
-                          ? item.namaPpl!
-                          : '-',
+                      item.namaPpl?.isNotEmpty == true ? item.namaPpl! : '-',
                     ),
                   ),
                   if (item.status.isNotEmpty) ...[
@@ -502,7 +520,11 @@ class _NikTidakValidPageState extends State<NikTidakValidPage> {
       ),
       child: Text(
         kategori,
-        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
       ),
     );
   }
@@ -545,11 +567,16 @@ class _NikTidakValidPageState extends State<NikTidakValidPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.manage_search_rounded,
-                size: 48, color: Color(0xFFB83232)),
+            const Icon(
+              Icons.manage_search_rounded,
+              size: 48,
+              color: Color(0xFFB83232),
+            ),
             const SizedBox(height: 16),
             Text(
-              isFiltering ? 'Data tidak ditemukan' : 'Tidak ada NIK tidak valid',
+              isFiltering
+                  ? 'Data tidak ditemukan'
+                  : 'Tidak ada NIK tidak valid',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
@@ -681,8 +708,11 @@ class _AnggotaSheetState extends State<_AnggotaSheet> {
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
                 child: Row(
                   children: [
-                    const Icon(Icons.people_rounded,
-                        color: Color(0xFFB83232), size: 20),
+                    const Icon(
+                      Icons.people_rounded,
+                      color: Color(0xFFB83232),
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
@@ -691,13 +721,17 @@ class _AnggotaSheetState extends State<_AnggotaSheet> {
                           const Text(
                             'Anggota Keluarga',
                             style: TextStyle(
-                                fontSize: 15, fontWeight: FontWeight.w800),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                           if (widget.item.namaKk.isNotEmpty)
                             Text(
                               widget.item.namaKk,
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.blueGrey[600]),
+                                fontSize: 12,
+                                color: Colors.blueGrey[600],
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                         ],
@@ -716,30 +750,29 @@ class _AnggotaSheetState extends State<_AnggotaSheet> {
                           child: Text(
                             'Gagal memuat: $_error',
                             style: const TextStyle(
-                                color: Colors.red, fontSize: 13),
+                              color: Colors.red,
+                              fontSize: 13,
+                            ),
                             textAlign: TextAlign.center,
                           ),
                         ),
                       )
                     : _anggota == null
-                        ? const Center(child: CircularProgressIndicator())
-                        : _anggota!.isEmpty
-                            ? Center(
-                                child: Text(
-                                  'Tidak ada data anggota.',
-                                  style: TextStyle(color: Colors.blueGrey[600]),
-                                ),
-                              )
-                            : ListView.separated(
-                                controller: ctrl,
-                                padding:
-                                    const EdgeInsets.fromLTRB(12, 10, 12, 40),
-                                itemCount: _anggota!.length,
-                                separatorBuilder: (_, __) =>
-                                    const SizedBox(height: 8),
-                                itemBuilder: (ctx, i) =>
-                                    _buildRow(ctx, _anggota![i]),
-                              ),
+                    ? const Center(child: CircularProgressIndicator())
+                    : _anggota!.isEmpty
+                    ? Center(
+                        child: Text(
+                          'Tidak ada data anggota.',
+                          style: TextStyle(color: Colors.blueGrey[600]),
+                        ),
+                      )
+                    : ListView.separated(
+                        controller: ctrl,
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 40),
+                        itemCount: _anggota!.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (ctx, i) => _buildRow(ctx, _anggota![i]),
+                      ),
               ),
             ],
           ),
@@ -797,7 +830,9 @@ class _AnggotaSheetState extends State<_AnggotaSheet> {
                         child: Text(
                           a.namaDtsen.isNotEmpty ? a.namaDtsen : '(Tanpa Nama)',
                           style: const TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.w600),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -806,14 +841,18 @@ class _AnggotaSheetState extends State<_AnggotaSheet> {
                         Text(
                           a.jkDtsen!,
                           style: TextStyle(
-                              fontSize: 11, color: Colors.blueGrey[500]),
+                            fontSize: 11,
+                            color: Colors.blueGrey[500],
+                          ),
                         ),
                       ],
                       if (a.umurAk != null)
                         Text(
                           '  ${a.umurAk} th',
                           style: TextStyle(
-                              fontSize: 11, color: Colors.blueGrey[500]),
+                            fontSize: 11,
+                            color: Colors.blueGrey[500],
+                          ),
                         ),
                     ],
                   ),
@@ -826,8 +865,7 @@ class _AnggotaSheetState extends State<_AnggotaSheet> {
                       color: invalid
                           ? const Color(0xFFB83232)
                           : Colors.blueGrey[500],
-                      fontWeight:
-                          invalid ? FontWeight.w600 : FontWeight.normal,
+                      fontWeight: invalid ? FontWeight.w600 : FontWeight.normal,
                     ),
                   ),
                 ],
@@ -836,8 +874,7 @@ class _AnggotaSheetState extends State<_AnggotaSheet> {
             if (a.hubungan?.isNotEmpty == true) ...[
               const SizedBox(width: 6),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: Colors.blueGrey[50],
                   borderRadius: BorderRadius.circular(6),
@@ -849,8 +886,11 @@ class _AnggotaSheetState extends State<_AnggotaSheet> {
               ),
             ],
             const SizedBox(width: 4),
-            Icon(Icons.chevron_right_rounded,
-                size: 16, color: Colors.blueGrey[300]),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 16,
+              color: Colors.blueGrey[300],
+            ),
           ],
         ),
       ),
@@ -864,8 +904,18 @@ class _DetailDialog extends StatelessWidget {
   final AnggotaItem anggota;
 
   static const List<String> _bln = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'Mei',
+    'Jun',
+    'Jul',
+    'Agu',
+    'Sep',
+    'Okt',
+    'Nov',
+    'Des',
   ];
 
   const _DetailDialog({required this.anggota});
@@ -894,16 +944,18 @@ class _DetailDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _row('NIK', anggota.nikDtsen ?? 'NULL',
-                color: invalid ? const Color(0xFFB83232) : null,
-                mono: true,
-                badge: invalid ? 'Tidak Valid' : null,
-                badgeColor: const Color(0xFFB83232)),
+            _row(
+              'NIK',
+              anggota.nikDtsen ?? 'NULL',
+              color: invalid ? const Color(0xFFB83232) : null,
+              mono: true,
+              badge: invalid ? 'Tidak Valid' : null,
+              badgeColor: const Color(0xFFB83232),
+            ),
             _row('Hubungan', anggota.hubungan ?? '-'),
             _row('Jenis Kelamin', anggota.jkDtsen ?? '-'),
             _row('Tgl. Lahir', _tglLahir),
-            if (anggota.umurAk != null)
-              _row('Umur', '${anggota.umurAk} tahun'),
+            if (anggota.umurAk != null) _row('Umur', '${anggota.umurAk} tahun'),
             _row('Status Kawin', anggota.statusKawin ?? '-'),
             _row('Keberadaan', anggota.keberadaanDtsen ?? '-'),
           ],
@@ -936,9 +988,10 @@ class _DetailDialog extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.blueGrey[500],
-                  fontWeight: FontWeight.w500),
+                fontSize: 12,
+                color: Colors.blueGrey[500],
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
           Expanded(
@@ -959,8 +1012,10 @@ class _DetailDialog extends StatelessWidget {
                 if (badge != null && badgeColor != null) ...[
                   const SizedBox(width: 6),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 1,
+                    ),
                     decoration: BoxDecoration(
                       color: badgeColor.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(5),
@@ -968,9 +1023,10 @@ class _DetailDialog extends StatelessWidget {
                     child: Text(
                       badge,
                       style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          color: badgeColor),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: badgeColor,
+                      ),
                     ),
                   ),
                 ],

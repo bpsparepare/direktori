@@ -34,6 +34,14 @@ class MapState extends Equatable {
   final bool markerEditMode;
   // Perpindahan marker yang belum disimpan: placeId(assignmentId) -> posisi baru.
   final Map<String, LatLng> stagedMarkerMoves;
+  // Seluruh titik di dalam polygon/subSLS yang dipilih (tanpa filter viewport).
+  // Dipisah dari `places` (viewport-filtered) agar deteksi "luar batas"
+  // menemukan titik yang benar-benar jauh (misal luar negeri).
+  final List<Place> placesInSelectedBoundary;
+  // Id titik yang di-highlight visual (misal dari daftar luar batas), TANPA
+  // membuka panel detail. `selectedPlace` tetap mengontrol panel. Marker akan
+  // tampil "terpilih" visual jika salah satu keduanya match.
+  final String? highlightedPlaceId;
 
   const MapState({
     this.status = MapStatus.initial,
@@ -58,6 +66,8 @@ class MapState extends Equatable {
     this.lastEast,
     this.markerEditMode = false,
     this.stagedMarkerMoves = const {},
+    this.placesInSelectedBoundary = const [],
+    this.highlightedPlaceId,
   });
 
   MapState copyWith({
@@ -87,6 +97,10 @@ class MapState extends Equatable {
     double? lastEast,
     bool? markerEditMode,
     Map<String, LatLng>? stagedMarkerMoves,
+    List<Place>? placesInSelectedBoundary,
+    bool clearPlacesInSelectedBoundary = false,
+    String? highlightedPlaceId,
+    bool clearHighlightedPlaceId = false,
   }) {
     return MapState(
       status: status ?? this.status,
@@ -122,6 +136,12 @@ class MapState extends Equatable {
       lastEast: lastEast ?? this.lastEast,
       markerEditMode: markerEditMode ?? this.markerEditMode,
       stagedMarkerMoves: stagedMarkerMoves ?? this.stagedMarkerMoves,
+      placesInSelectedBoundary: clearPlacesInSelectedBoundary
+          ? const []
+          : (placesInSelectedBoundary ?? this.placesInSelectedBoundary),
+      highlightedPlaceId: clearHighlightedPlaceId
+          ? null
+          : (highlightedPlaceId ?? this.highlightedPlaceId),
     );
   }
 
@@ -149,5 +169,7 @@ class MapState extends Equatable {
     lastEast,
     markerEditMode,
     stagedMarkerMoves,
+    placesInSelectedBoundary,
+    highlightedPlaceId,
   ];
 }

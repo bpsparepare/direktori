@@ -13,12 +13,12 @@ class ProfesiLookup {
     try {
       final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
       final path = manifest.listAssets().firstWhere(
-            (p) =>
-                p.startsWith('assets/csv/') &&
-                p.toLowerCase().endsWith('.csv') &&
-                p.toLowerCase().contains('profesi'),
-            orElse: () => '',
-          );
+        (p) =>
+            p.startsWith('assets/csv/') &&
+            p.toLowerCase().endsWith('.csv') &&
+            p.toLowerCase().contains('profesi'),
+        orElse: () => '',
+      );
       if (path.isNotEmpty) {
         final raw = await rootBundle.loadString(path);
         final lines = const LineSplitter().convert(raw);

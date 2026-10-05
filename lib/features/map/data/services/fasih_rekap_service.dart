@@ -6,16 +6,24 @@ import '../../../../core/config/supabase_config.dart';
 class FasihRekapSummary {
   final String level;
   final int totalUnits;
+
+  /// Total kumulatif TANPA OPEN (Σ status bernama). Dipakai apa adanya di
+  /// Lembar Kerja.
   final int totalAssignments;
 
   /// Jumlah assignment yang sudah final (semua status kecuali OPEN & DRAFT).
   final int totalTerkirim;
+
+  /// Jumlah OPEN (assignment belum dikerjakan). total_assignments + totalOpen
+  /// = SUM(kolom `total`) di se2026_rekap_sls_harian.
+  final int totalOpen;
 
   const FasihRekapSummary({
     required this.level,
     required this.totalUnits,
     required this.totalAssignments,
     required this.totalTerkirim,
+    this.totalOpen = 0,
   });
 
   factory FasihRekapSummary.fromJson(Map<String, dynamic>? json) {
@@ -24,6 +32,7 @@ class FasihRekapSummary {
       totalUnits: _toInt(json?['total_units']),
       totalAssignments: _toInt(json?['total_assignments']),
       totalTerkirim: _toInt(json?['total_terkirim']),
+      totalOpen: _toInt(json?['total_open']),
     );
   }
 }
@@ -279,8 +288,58 @@ class StatusPendataanRecord {
   }
 }
 
+/// Satu baris progres riil per wilayah (snapshot terbaru) dari RPC
+/// get_progres_sls_by_wilayah.
+class ProgresSlsRow {
+  final String kodeWilayah;
+  final String pplId;
+  final int kkRiil;
+  final int usahaRiil;
+  final int usahaDitemukan;
+  final int kkTidakDitemukan;
+  final int usahaTidakDitemukan;
+
+  const ProgresSlsRow({
+    required this.kodeWilayah,
+    required this.pplId,
+    required this.kkRiil,
+    required this.usahaRiil,
+    required this.usahaDitemukan,
+    required this.kkTidakDitemukan,
+    required this.usahaTidakDitemukan,
+  });
+
+  factory ProgresSlsRow.fromJson(Map<dynamic, dynamic> json) {
+    return ProgresSlsRow(
+      kodeWilayah: (json['kode_wilayah'] ?? '').toString(),
+      pplId: (json['ppl_id'] ?? '').toString(),
+      kkRiil: _toInt(json['kk_riil']),
+      usahaRiil: _toInt(json['usaha_riil']),
+      usahaDitemukan: _toInt(json['usaha_ditemukan']),
+      kkTidakDitemukan: _toInt(json['kk_tidak_ditemukan']),
+      usahaTidakDitemukan: _toInt(json['usaha_tidak_ditemukan']),
+    );
+  }
+}
+
 class FasihRekapService {
   final SupabaseClient _client = SupabaseConfig.client;
+
+  /// Progres riil (snapshot terbaru) per wilayah + ppl_id. RPC gagal / belum
+  /// ada -> daftar kosong.
+  Future<List<ProgresSlsRow>> fetchProgresSlsByWilayah() async {
+    try {
+      final response = await _client.rpc('get_progres_sls_by_wilayah');
+      if (response is! List) return const [];
+      return response
+          .whereType<Map>()
+          .map((item) => ProgresSlsRow.fromJson(item))
+          .toList();
+    } catch (e) {
+      debugPrint('fetchProgresSlsByWilayah error: $e');
+      return const [];
+    }
+  }
 
   /// Ambil target prelist dari se2026_wilayah_tugas.
   /// [pmlId] membatasi ke wilayah binaan seorang pengawas,
@@ -533,6 +592,7 @@ class FasihRekapService {
     int offset = 0,
     String? sortBy,
     String? sortDir,
+    DateTime? targetDate,
   }) => _callRpc('get_fasih_rekap', {
     'p_pengawas_id': pengawasId,
     'p_petugas_id': petugasId,
@@ -543,6 +603,8 @@ class FasihRekapService {
     'p_offset': offset,
     'p_sort_by': sortBy,
     'p_sort_dir': sortDir,
+    // Kumulatif s/d tanggal terpilih. null → snapshot terbaru (perilaku lama).
+    'p_target_date': _formatDate(targetDate),
   });
 
   Future<FasihRekapPayload> _callRpc(
@@ -567,6 +629,14 @@ class FasihRekapService {
       return null;
     }
     return trimmed;
+  }
+
+  /// Format tanggal ke 'YYYY-MM-DD' untuk parameter date RPC; null → null.
+  String? _formatDate(DateTime? date) {
+    if (date == null) return null;
+    return '${date.year.toString().padLeft(4, '0')}-'
+        '${date.month.toString().padLeft(2, '0')}-'
+        '${date.day.toString().padLeft(2, '0')}';
   }
 }
 

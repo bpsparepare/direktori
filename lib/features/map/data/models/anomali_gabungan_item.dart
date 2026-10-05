@@ -109,11 +109,10 @@ class AnomaliGabunganItem {
       kategoriKode: (json['kategori_kode'] ?? '').toString(),
       kategoriLabel: (json['kategori_label'] ?? '').toString(),
       subjek: (json['subjek'] ?? '').toString(),
-      noAnomali:
-          json['no_anomali'] is int ? json['no_anomali'] as int : null,
+      noAnomali: json['no_anomali'] is int ? json['no_anomali'] as int : null,
       deskripsi: bersihkanDeskripsi((json['deskripsi'] ?? '').toString()),
-      statusTindakLanjut:
-          (json['status_tindak_lanjut'] ?? 'belum_diperiksa').toString(),
+      statusTindakLanjut: (json['status_tindak_lanjut'] ?? 'belum_diperiksa')
+          .toString(),
       jenisRespons: nullableString(json['jenis_respons']),
       keterangan: nullableString(json['keterangan']),
       diperiksaOleh: nullableString(json['diperiksa_oleh']),
@@ -223,7 +222,8 @@ class AnomaliGabunganItem {
 
   /// Label rincian: kode + nama, mis. "KP4 - Biaya Produksi Dominan".
   String get kategoriRincianLabel {
-    if (kategoriKode.isEmpty) return kategoriLabel.isEmpty ? '-' : kategoriLabel;
+    if (kategoriKode.isEmpty)
+      return kategoriLabel.isEmpty ? '-' : kategoriLabel;
     if (kategoriLabel.isEmpty) return kategoriKode;
     return '$kategoriKode - $kategoriLabel';
   }

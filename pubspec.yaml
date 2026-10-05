@@ -1,5 +1,5 @@
 name: direktori
-description: "Direktori Kota Parepare"
+description: "Direktori Kota Parepare" 
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 3.1.4+28
+version: 3.3.1+33
  
 environment: 
   sdk: ^3.9.2 
@@ -75,7 +75,7 @@ dependencies:
   csv: ^6.0.0 
   flutter_inappwebview: ^6.1.5
   package_info_plus: ^9.0.0
-  speech_to_text: ^7.3.0
+  speech_to_text: ^7.4.0
   archive: ^4.0.9
   xml: ^6.6.1
 

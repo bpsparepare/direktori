@@ -17,6 +17,12 @@ class LembarKerjaExportRow {
   final int draft;
   final int open;
 
+  /// Progres riil (progres_sls_harian): keluarga & usaha ditemukan, serta
+  /// jumlah tidak ditemukan (keluarga + usaha).
+  final int keluarga;
+  final int usaha;
+  final int tidakDitemukan;
+
   /// Status pendataan manual (label siap tampil, mis. "Selesai"); '' bila
   /// belum ditandai.
   final String status;
@@ -36,11 +42,17 @@ class LembarKerjaExportRow {
     required this.submitted,
     required this.draft,
     required this.open,
+    this.keluarga = 0,
+    this.usaha = 0,
+    this.tidakDitemukan = 0,
     this.status = '',
     this.kodeBang = const {},
   });
 
   int get potensi => submitted + draft;
+
+  /// Total riil = Keluarga + Usaha (sama dengan kolom Total di tabel).
+  int get totalRiil => keluarga + usaha;
 }
 
 /// Ekspor Lembar Kerja (progres per wilayah untuk seluruh petugas) ke file
@@ -53,7 +65,17 @@ class LembarKerjaExportService {
   /// Urutan kolom kode_bang. Bucket "tidak ditemukan" (kode_bang kosong) sudah
   /// dipecah RPC menjadi TD_USAHA & TD_KELUARGA (via jenis_prelist).
   static const List<String> _kodeBangOrder = [
-    '1', '2', '3', '4', '5', '6', '7', '8', '9', 'TD_USAHA', 'TD_KELUARGA',
+    '1',
+    '2',
+    '3',
+    '4',
+    '5',
+    '6',
+    '7',
+    '8',
+    '9',
+    'TD_USAHA',
+    'TD_KELUARGA',
   ];
 
   /// Label singkat kode_bang untuk header Excel.
@@ -87,7 +109,7 @@ class LembarKerjaExportService {
     final sheet = workbook.worksheets[0];
     sheet.name = 'Lembar Kerja';
 
-    // Kolom dasar (21 kolom), lalu rincian distribusi kode_bang.
+    // Kolom dasar (26 kolom), lalu rincian distribusi kode_bang.
     final headers = <String>[
       'No',
       'Petugas (PPL)',
@@ -108,13 +130,17 @@ class LembarKerjaExportService {
       'Submitted',
       'Draft',
       'Open',
+      'Keluarga',
+      'Usaha',
+      'Total (Keluarga+Usaha)',
+      'Tidak Ditemukan',
       'Potensi (Sub+Draft)',
       '% Capaian',
       'Status Pendataan',
       for (final code in _kodeBangOrder) _kodeBangHeader(code),
     ];
-    // Kolom pertama rincian kode_bang (setelah 22 kolom dasar).
-    const kodeBangStartCol = 23;
+    // Kolom pertama rincian kode_bang (setelah 26 kolom dasar).
+    const kodeBangStartCol = 27;
 
     for (var c = 0; c < headers.length; c++) {
       final cell = sheet.getRangeByIndex(1, c + 1);
@@ -128,8 +154,9 @@ class LembarKerjaExportService {
       final r = rows[i];
       final row = i + 2;
       final kw = r.kodeWilayah;
+      // % mengikuti tabel: Total (Keluarga+Usaha) terhadap target prelist.
       final persen = r.target > 0
-          ? '${(r.submitted / r.target * 100).toStringAsFixed(0)}%'
+          ? '${(r.totalRiil / r.target * 100).toStringAsFixed(2)}%'
           : '';
 
       // Kolom teks.
@@ -148,8 +175,8 @@ class LembarKerjaExportService {
         12: r.namaSls,
         13: r.kecDesa,
         14: kw,
-        21: persen,
-        22: r.status,
+        25: persen,
+        26: r.status,
       };
       texts.forEach((col, value) {
         sheet.getRangeByIndex(row, col).setText(value);
@@ -162,7 +189,11 @@ class LembarKerjaExportService {
         17: r.submitted,
         18: r.draft,
         19: r.open,
-        20: r.potensi,
+        20: r.keluarga,
+        21: r.usaha,
+        22: r.totalRiil,
+        23: r.tidakDitemukan,
+        24: r.potensi,
       };
       numbers.forEach((col, value) {
         sheet.getRangeByIndex(row, col).setNumber(value.toDouble());
@@ -186,6 +217,10 @@ class LembarKerjaExportService {
       final totDraft = rows.fold<int>(0, (s, r) => s + r.draft);
       final totOpen = rows.fold<int>(0, (s, r) => s + r.open);
       final totPotensi = totSubmitted + totDraft;
+      final totKeluarga = rows.fold<int>(0, (s, r) => s + r.keluarga);
+      final totUsaha = rows.fold<int>(0, (s, r) => s + r.usaha);
+      final totRiil = totKeluarga + totUsaha;
+      final totTidak = rows.fold<int>(0, (s, r) => s + r.tidakDitemukan);
 
       final labelCell = sheet.getRangeByIndex(totalRow, 2);
       labelCell.setText('TOTAL');
@@ -195,15 +230,19 @@ class LembarKerjaExportService {
         17: totSubmitted,
         18: totDraft,
         19: totOpen,
-        20: totPotensi,
+        20: totKeluarga,
+        21: totUsaha,
+        22: totRiil,
+        23: totTidak,
+        24: totPotensi,
       };
       totNumbers.forEach((col, value) {
         sheet.getRangeByIndex(totalRow, col).setNumber(value.toDouble());
       });
       if (totTarget > 0) {
         sheet
-            .getRangeByIndex(totalRow, 21)
-            .setText('${(totSubmitted / totTarget * 100).toStringAsFixed(0)}%');
+            .getRangeByIndex(totalRow, 25)
+            .setText('${(totRiil / totTarget * 100).toStringAsFixed(2)}%');
       }
       // Total rincian kode_bang.
       for (var k = 0; k < _kodeBangOrder.length; k++) {

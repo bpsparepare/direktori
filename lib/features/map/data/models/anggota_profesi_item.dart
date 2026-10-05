@@ -37,8 +37,7 @@ class AnggotaProfesiItem {
 
   factory AnggotaProfesiItem.fromJson(Map<String, dynamic> json) {
     String s(dynamic v) => (v ?? '').toString();
-    int asInt(dynamic v) =>
-        v is int ? v : int.tryParse(s(v)) ?? 0;
+    int asInt(dynamic v) => v is int ? v : int.tryParse(s(v)) ?? 0;
     return AnggotaProfesiItem(
       assignmentId: s(json['assignment_id']),
       noUrut: asInt(json['no_urut']),
@@ -63,8 +62,10 @@ class AnggotaProfesiItem {
   bool get tanpaUsaha => jumlahUsaha == 0;
 
   String get wilayahLabel {
-    final parts =
-        [namaDesa, namaSls].where((v) => v.trim().isNotEmpty).toList();
+    final parts = [
+      namaDesa,
+      namaSls,
+    ].where((v) => v.trim().isNotEmpty).toList();
     return parts.isEmpty ? kodeWilayah : parts.join(' / ');
   }
 }

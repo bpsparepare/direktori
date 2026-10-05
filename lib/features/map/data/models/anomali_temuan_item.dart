@@ -57,8 +57,9 @@ class AnomaliTemuanItem {
       wilayah: (json['wilayah'] ?? '').toString().trim(),
       keterangan: (json['keterangan'] ?? '').toString().trim(),
       detail: (json['detail'] ?? '').toString().trim(),
-      statusTindakLanjut:
-          (json['status_tindak_lanjut'] ?? '').toString().trim(),
+      statusTindakLanjut: (json['status_tindak_lanjut'] ?? '')
+          .toString()
+          .trim(),
       catatanPetugas: (json['catatan_petugas'] ?? '').toString().trim(),
       diperiksaOleh: (json['diperiksa_oleh'] ?? '').toString().trim(),
       diperiksaAt: parseDate(json['diperiksa_at']),
@@ -69,8 +70,7 @@ class AnomaliTemuanItem {
   }
 
   bool get sudahDitindaklanjuti =>
-      statusTindakLanjut.isNotEmpty &&
-      statusTindakLanjut != 'belum_diperiksa';
+      statusTindakLanjut.isNotEmpty && statusTindakLanjut != 'belum_diperiksa';
 
   String get kategoriLabel =>
       kategori.isEmpty ? 'Kategori tidak tersedia' : kategori;

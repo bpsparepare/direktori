@@ -72,7 +72,10 @@ class MapAssignmentFocusCacheService {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_cacheKey(authUser.id), jsonEncode(bounds.toJson()));
+      await prefs.setString(
+        _cacheKey(authUser.id),
+        jsonEncode(bounds.toJson()),
+      );
       // #region debug-point A:focus-cache-save
       unawaited(
         _debugReport(

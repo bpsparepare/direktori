@@ -55,6 +55,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     on<PlacesRefreshRequested>(_onPlacesRefreshRequested);
     on<PlacesInBoundsRequested>(_onPlacesInBoundsRequested);
     on<PlaceSelected>(_onPlaceSelected);
+    on<PlaceHighlighted>(_onPlaceHighlighted);
     on<PlaceCleared>(_onPlaceCleared);
     on<PolygonRequested>(_onPolygonRequested);
     on<PolygonsListRequested>(_onPolygonsListRequested);
@@ -101,10 +102,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     }
   }
 
-  void _onMarkerMovedLocally(
-    MarkerMovedLocally event,
-    Emitter<MapState> emit,
-  ) {
+  void _onMarkerMovedLocally(MarkerMovedLocally event, Emitter<MapState> emit) {
     final idx = state.places.indexWhere((p) => p.id == event.placeId);
     if (idx < 0) return;
 
@@ -430,6 +428,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         polygonLabel: label,
         selectedPolygonMeta: sel,
         selectedPolygons: [], // Clear multiple selection
+        clearPlacesInSelectedBoundary: true,
       ),
     );
 
@@ -475,6 +474,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         polygonLabel: label,
         selectedPolygonMeta: sel,
         selectedPolygons: [], // Clear multiple selection
+        clearPlacesInSelectedBoundary: true,
       ),
     );
 
@@ -489,18 +489,31 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     if (trimmed.length < 14) return;
     try {
       final places = await getPlacesBySls(trimmed);
-      emit(state.copyWith(places: places));
+      emit(state.copyWith(places: places, placesInSelectedBoundary: places));
     } catch (e) {
       debugPrint('BLoC: failed to load places for SLS $trimmed: $e');
     }
   }
 
   void _onPlaceSelected(PlaceSelected event, Emitter<MapState> emit) {
-    emit(state.copyWith(selectedPlace: event.place));
+    emit(
+      state.copyWith(selectedPlace: event.place, clearHighlightedPlaceId: true),
+    );
+  }
+
+  void _onPlaceHighlighted(PlaceHighlighted event, Emitter<MapState> emit) {
+    emit(
+      state.copyWith(
+        highlightedPlaceId: event.place.id,
+        clearSelectedPlace: true,
+      ),
+    );
   }
 
   void _onPlaceCleared(PlaceCleared event, Emitter<MapState> emit) {
-    emit(state.copyWith(clearSelectedPlace: true));
+    emit(
+      state.copyWith(clearSelectedPlace: true, clearHighlightedPlaceId: true),
+    );
   }
 
   void _onTemporaryMarkerAdded(
@@ -587,9 +600,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     Emitter<MapState> emit,
   ) {
     emit(
-      state.copyWith(
-        colorAssignmentByStatus: !state.colorAssignmentByStatus,
-      ),
+      state.copyWith(colorAssignmentByStatus: !state.colorAssignmentByStatus),
     );
   }
 
@@ -604,6 +615,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
           polygon: [],
           polygonLabel: '',
           clearSelectedPolygonMeta: true,
+          clearPlacesInSelectedBoundary: true,
         ),
       );
       return;
@@ -636,6 +648,24 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       }
     }
 
+    // Muat semua places di semua polygon terpilih (tanpa filter viewport).
+    final seenPlaceIds = <String>{};
+    final mergedPlaces = <Place>[];
+    for (final p in polygonsWithPoints) {
+      final code = (p.idsubsls ?? p.idsls ?? '').trim();
+      if (code.length < 14) continue;
+      try {
+        final places = await getPlacesBySls(code);
+        for (final pl in places) {
+          if (seenPlaceIds.add(pl.id)) {
+            mergedPlaces.add(pl);
+          }
+        }
+      } catch (e) {
+        debugPrint('BLoC: failed to load places for multi $code: $e');
+      }
+    }
+
     final first = polygonsWithPoints.first;
     String label = '';
     final firstId = first.idsls ?? '';
@@ -660,6 +690,8 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         polygon: first.points,
         polygonLabel: label,
         selectedPolygonMeta: first,
+        places: mergedPlaces,
+        placesInSelectedBoundary: mergedPlaces,
       ),
     );
   }

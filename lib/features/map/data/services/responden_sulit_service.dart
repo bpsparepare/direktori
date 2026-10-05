@@ -16,15 +16,17 @@ class RespondenSulitService {
     int offset = 0,
   }) async {
     try {
-      final response = await _client.rpc('get_responden_sulit', params: {
-        'p_limit': limit,
-        'p_offset': offset,
-      });
+      final response = await _client.rpc(
+        'get_responden_sulit',
+        params: {'p_limit': limit, 'p_offset': offset},
+      );
       if (response is! List) return [];
       return response
           .whereType<Map>()
-          .map((item) =>
-              RespondenSulitItem.fromJson(Map<String, dynamic>.from(item)))
+          .map(
+            (item) =>
+                RespondenSulitItem.fromJson(Map<String, dynamic>.from(item)),
+          )
           .toList();
     } catch (e, stack) {
       debugPrint('[RespondenSulitService] fetchList ERROR: $e');
@@ -42,14 +44,17 @@ class RespondenSulitService {
     String? penjelasan,
     String? tindakLanjut,
   }) async {
-    final response = await _client.rpc('upsert_responden_sulit', params: {
-      'p_id': id,
-      'p_kode_wilayah': kodeWilayah,
-      'p_nama': nama,
-      'p_alamat': alamat,
-      'p_penjelasan': penjelasan,
-      'p_tindak_lanjut': tindakLanjut,
-    });
+    final response = await _client.rpc(
+      'upsert_responden_sulit',
+      params: {
+        'p_id': id,
+        'p_kode_wilayah': kodeWilayah,
+        'p_nama': nama,
+        'p_alamat': alamat,
+        'p_penjelasan': penjelasan,
+        'p_tindak_lanjut': tindakLanjut,
+      },
+    );
     return response?.toString() ?? '';
   }
 

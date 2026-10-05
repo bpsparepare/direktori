@@ -226,10 +226,7 @@ class DocumentationUploadService {
     // 1. Hapus baris di Supabase (butuh policy delete_own).
     if (entry.id.isNotEmpty) {
       try {
-        await _client
-            .from('documentation_uploads')
-            .delete()
-            .eq('id', entry.id);
+        await _client.from('documentation_uploads').delete().eq('id', entry.id);
       } catch (_) {
         // Abaikan; entry lokal-only (offline) tidak punya baris Supabase.
       }
@@ -418,6 +415,8 @@ class DocumentationUploadService {
         return 'Bukti Paket Data';
       case 'fasih':
         return 'Fasih';
+      case 'uninstall':
+        return 'Uninstall';
       case 'lainnya':
         return 'Lainnya';
     }

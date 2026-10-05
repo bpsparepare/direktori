@@ -22,7 +22,8 @@ class KeteranganPusatItem {
       role: (json['role'] ?? '').toString(),
       keterangan: (json['keterangan'] ?? '').toString(),
       jenisRespons: (json['jenis_respons'] ?? '').toString(),
-      updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? '') ??
+      updatedAt:
+          DateTime.tryParse(json['updated_at']?.toString() ?? '') ??
           DateTime.now(),
     );
   }

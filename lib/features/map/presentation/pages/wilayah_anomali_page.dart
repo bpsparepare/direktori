@@ -45,16 +45,16 @@ class _WilayahAnomaliPageState extends State<WilayahAnomaliPage> {
 
   Future<void> _loadFieldOptions() async {
     try {
-      final raw = await rootBundle
-          .loadString('assets/json/anomali_field_options.json');
+      final raw = await rootBundle.loadString(
+        'assets/json/anomali_field_options.json',
+      );
       final json = jsonDecode(raw) as Map<String, dynamic>;
       final parsed = <String, Map<String, String>>{};
       for (final entry in json.entries) {
         final opts = (entry.value['options'] as List)
             .cast<Map<String, dynamic>>();
         parsed[entry.key] = {
-          for (final o in opts)
-            o['value'].toString(): o['label'].toString()
+          for (final o in opts) o['value'].toString(): o['label'].toString(),
         };
       }
       if (mounted) setState(() => _fieldOptions = parsed);
@@ -132,22 +132,24 @@ class _WilayahAnomaliPageState extends State<WilayahAnomaliPage> {
   Future<void> _refreshData() => _loadData();
 
   List<String> get _statusOptions {
-    final values = _items
-        .map((item) => item.statusTindakLanjut)
-        .where((v) => v.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final values =
+        _items
+            .map((item) => item.statusTindakLanjut)
+            .where((v) => v.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
     return [_allStatus, ...values];
   }
 
   List<String> get _kategoriOptions {
-    final values = _items
-        .map((item) => item.kategori)
-        .where((v) => v.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final values =
+        _items
+            .map((item) => item.kategori)
+            .where((v) => v.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
     return [_allKategori, ...values];
   }
 
@@ -201,40 +203,38 @@ class _WilayahAnomaliPageState extends State<WilayahAnomaliPage> {
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : _error != null
-                  ? _buildErrorState()
-                  : RefreshIndicator(
-                      onRefresh: _refreshData,
-                      child: CustomScrollView(
-                        controller: _scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        slivers: [
-                          SliverToBoxAdapter(child: _buildHeroSection()),
-                          SliverToBoxAdapter(child: _buildSearchSection()),
-                          SliverToBoxAdapter(
-                            child: _buildSectionHeader(resultCount: items.length),
-                          ),
-                          if (items.isEmpty)
-                            SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: _buildEmptyState(),
-                            )
-                          else
-                            SliverPadding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                              sliver: SliverList.separated(
-                                itemCount: items.length,
-                                itemBuilder: (context, index) =>
-                                    _buildAnomaliTile(items[index], index),
-                                separatorBuilder: (context, index) =>
-                                    const SizedBox(height: 12),
-                              ),
-                            ),
-                          SliverToBoxAdapter(
-                            child: _buildPaginationFooter(),
-                          ),
-                        ],
+              ? _buildErrorState()
+              : RefreshIndicator(
+                  onRefresh: _refreshData,
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverToBoxAdapter(child: _buildHeroSection()),
+                      SliverToBoxAdapter(child: _buildSearchSection()),
+                      SliverToBoxAdapter(
+                        child: _buildSectionHeader(resultCount: items.length),
                       ),
-                    ),
+                      if (items.isEmpty)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _buildEmptyState(),
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          sliver: SliverList.separated(
+                            itemCount: items.length,
+                            itemBuilder: (context, index) =>
+                                _buildAnomaliTile(items[index], index),
+                            separatorBuilder: (context, index) =>
+                                const SizedBox(height: 12),
+                          ),
+                        ),
+                      SliverToBoxAdapter(child: _buildPaginationFooter()),
+                    ],
+                  ),
+                ),
         ),
       ),
     );
@@ -293,7 +293,10 @@ class _WilayahAnomaliPageState extends State<WilayahAnomaliPage> {
                   color: Colors.white.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Icon(Icons.warning_amber_rounded, color: Colors.white),
+                child: const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.white,
+                ),
               ),
               const SizedBox(width: 18),
               const Expanded(
@@ -534,7 +537,9 @@ class _WilayahAnomaliPageState extends State<WilayahAnomaliPage> {
             border: Border.all(
               color: hasCatatan
                   ? const Color(0xFFFFB74D).withValues(alpha: 0.6)
-                  : _statusColor(item.statusTindakLanjut).withValues(alpha: 0.2),
+                  : _statusColor(
+                      item.statusTindakLanjut,
+                    ).withValues(alpha: 0.2),
             ),
             boxShadow: [
               BoxShadow(
@@ -970,7 +975,8 @@ class _WilayahAnomaliPageState extends State<WilayahAnomaliPage> {
                                           : (v) {
                                               if (v == null) return;
                                               setSheetState(
-                                                  () => selectedStatus = v);
+                                                () => selectedStatus = v,
+                                              );
                                             },
                                     ),
                                     const SizedBox(height: 14),
@@ -992,29 +998,31 @@ class _WilayahAnomaliPageState extends State<WilayahAnomaliPage> {
                                             ? null
                                             : () async {
                                                 setSheetState(
-                                                    () => isSaving = true);
+                                                  () => isSaving = true,
+                                                );
                                                 try {
                                                   await _service
                                                       .upsertTindakLanjut(
-                                                    assignmentId:
-                                                        item.assignmentId,
-                                                    kategori: item.kategori,
-                                                    noAnomali: item.noAnomali,
-                                                    statusTindakLanjut:
-                                                        selectedStatus,
-                                                    catatanPetugas:
-                                                        noteController.text,
-                                                  );
+                                                        assignmentId:
+                                                            item.assignmentId,
+                                                        kategori: item.kategori,
+                                                        noAnomali:
+                                                            item.noAnomali,
+                                                        statusTindakLanjut:
+                                                            selectedStatus,
+                                                        catatanPetugas:
+                                                            noteController.text,
+                                                      );
                                                   if (!mounted ||
                                                       !sheetContext.mounted) {
                                                     return;
                                                   }
-                                                  Navigator.of(sheetContext)
-                                                      .pop();
+                                                  Navigator.of(
+                                                    sheetContext,
+                                                  ).pop();
                                                   await _refreshData();
                                                   if (!mounted) return;
-                                                  scaffoldMessenger
-                                                      .showSnackBar(
+                                                  scaffoldMessenger.showSnackBar(
                                                     const SnackBar(
                                                       content: Text(
                                                         'Status tindak lanjut berhasil diperbarui',
@@ -1023,12 +1031,13 @@ class _WilayahAnomaliPageState extends State<WilayahAnomaliPage> {
                                                   );
                                                 } catch (e) {
                                                   setSheetState(
-                                                      () => isSaving = false);
-                                                  scaffoldMessenger
-                                                      .showSnackBar(
+                                                    () => isSaving = false,
+                                                  );
+                                                  scaffoldMessenger.showSnackBar(
                                                     SnackBar(
                                                       content: Text(
-                                                          'Gagal menyimpan: $e'),
+                                                        'Gagal menyimpan: $e',
+                                                      ),
                                                       backgroundColor:
                                                           Colors.red,
                                                     ),
@@ -1041,13 +1050,14 @@ class _WilayahAnomaliPageState extends State<WilayahAnomaliPage> {
                                                 height: 18,
                                                 child:
                                                     CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  color: Colors.white,
-                                                ),
+                                                      strokeWidth: 2,
+                                                      color: Colors.white,
+                                                    ),
                                               )
                                             : const Icon(Icons.save_outlined),
                                         label: Text(
-                                            isSaving ? 'Menyimpan...' : 'Simpan'),
+                                          isSaving ? 'Menyimpan...' : 'Simpan',
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -1105,7 +1115,10 @@ class _WilayahAnomaliPageState extends State<WilayahAnomaliPage> {
 
   String _labelFor(String key) =>
       _fieldLabels[key] ??
-      key.split('_').map((w) => '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
+      key
+          .split('_')
+          .map((w) => '${w[0].toUpperCase()}${w.substring(1)}')
+          .join(' ');
 
   Widget _buildDetailTable(Map<String, dynamic> detail) {
     return Container(
@@ -1134,43 +1147,45 @@ class _WilayahAnomaliPageState extends State<WilayahAnomaliPage> {
           ),
           const SizedBox(height: 12),
           ...detail.entries.map((e) {
-                final rawValue = e.value?.toString() ?? '';
-                final mapped = _fieldOptions[e.key]?[rawValue];
-                final displayValue = mapped != null
-                    ? mapped.replaceFirst(RegExp(r'^\d+[\.\w]*\s*'), '')
-                    : rawValue.isEmpty ? '-' : rawValue;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 4,
-                        child: Text(
-                          _labelFor(e.key),
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.blueGrey[600],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+            final rawValue = e.value?.toString() ?? '';
+            final mapped = _fieldOptions[e.key]?[rawValue];
+            final displayValue = mapped != null
+                ? mapped.replaceFirst(RegExp(r'^\d+[\.\w]*\s*'), '')
+                : rawValue.isEmpty
+                ? '-'
+                : rawValue;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 4,
+                    child: Text(
+                      _labelFor(e.key),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.blueGrey[600],
+                        fontWeight: FontWeight.w500,
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 5,
-                        child: Text(
-                          displayValue,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF162F4D),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                );
-              }),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 5,
+                    child: Text(
+                      displayValue,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF162F4D),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );

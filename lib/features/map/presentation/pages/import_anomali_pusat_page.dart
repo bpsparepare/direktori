@@ -80,8 +80,10 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
 
   /// Label 1 scope untuk hasil/error: "Usaha (fileA.xlsx, fileB.xlsx)".
   String _scopeUploadLabel(String scope) {
-    final names =
-        _files.where((f) => f.scope == scope).map((f) => f.fileName).join(', ');
+    final names = _files
+        .where((f) => f.scope == scope)
+        .map((f) => f.fileName)
+        .join(', ');
     return '${_scopeLabel(scope)} ($names)';
   }
 
@@ -99,8 +101,10 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
     final grouped = AnomaliPusatImportService.gabungkanRowsPerScope(_files);
     for (final entry in grouped.entries) {
       try {
-        comparison[entry.key] =
-            await _service.compareRows(scope: entry.key, rows: entry.value);
+        comparison[entry.key] = await _service.compareRows(
+          scope: entry.key,
+          rows: entry.value,
+        );
       } catch (e) {
         error = '${_scopeUploadLabel(entry.key)}: gagal membandingkan -- $e';
         break;
@@ -247,8 +251,9 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(
-                onPressed:
-                    _isComparing || _isUploading || _isParsing ? null : _compare,
+                onPressed: _isComparing || _isUploading || _isParsing
+                    ? null
+                    : _compare,
                 icon: const Icon(Icons.compare_arrows_rounded),
                 label: Text(
                   _comparison == null
@@ -354,10 +359,14 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
     int? hilangAktif;
     int? hilangTotal;
     if (_comparison != null) {
-      hilangAktif =
-          _comparison!.values.fold(0, (sum, c) => sum! + c.hilangAktif);
-      hilangTotal =
-          _comparison!.values.fold(0, (sum, c) => sum! + c.countOf('hilang'));
+      hilangAktif = _comparison!.values.fold(
+        0,
+        (sum, c) => sum! + c.hilangAktif,
+      );
+      hilangTotal = _comparison!.values.fold(
+        0,
+        (sum, c) => sum! + c.countOf('hilang'),
+      );
     }
 
     final options = [
@@ -574,8 +583,10 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
           Row(
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(30),
@@ -679,9 +690,10 @@ class _ImportAnomaliPusatPageState extends State<ImportAnomaliPusatPage> {
   }
 
   Widget _buildCompareRowTile(AnomaliPusatCompareRow row) {
-    final wilayah = [row.namaKec, row.namaDesa]
-        .where((v) => v != null && v.isNotEmpty)
-        .join(' / ');
+    final wilayah = [
+      row.namaKec,
+      row.namaDesa,
+    ].where((v) => v != null && v.isNotEmpty).join(' / ');
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 8),

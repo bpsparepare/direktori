@@ -58,12 +58,15 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
       if (!mounted) return;
       setState(() {
         _role = profile?.role;
-        _wilayahOptions = wilayah
-            .map(_WilayahOption.fromMap)
-            .where((w) => w.id.isNotEmpty)
-            .toList()
-          ..sort((a, b) =>
-              a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+        _wilayahOptions =
+            wilayah
+                .map(_WilayahOption.fromMap)
+                .where((w) => w.id.isNotEmpty)
+                .toList()
+              ..sort(
+                (a, b) =>
+                    a.label.toLowerCase().compareTo(b.label.toLowerCase()),
+              );
         _items = items;
         _isLoading = false;
       });
@@ -123,15 +126,24 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
     final kecMap = <String, _KecGroup>{};
     for (final item in _filtered) {
       final kecName = item.nmKec.trim().isNotEmpty ? item.nmKec.trim() : _noKec;
-      final desaName =
-          item.nmDesa.trim().isNotEmpty ? item.nmDesa.trim() : _noDesa;
-      final slsName = RespondenSulitItem.formatSlsLabel(item.nmSls, item.subSls);
+      final desaName = item.nmDesa.trim().isNotEmpty
+          ? item.nmDesa.trim()
+          : _noDesa;
+      final slsName = RespondenSulitItem.formatSlsLabel(
+        item.nmSls,
+        item.subSls,
+      );
       final slsLabel = slsName.isNotEmpty ? slsName : _noSls;
 
       final kec = kecMap.putIfAbsent(kecName, () => _KecGroup(kecName));
-      final desa =
-          kec.desaMap.putIfAbsent(desaName, () => _DesaGroup(desaName));
-      desa.slsMap.putIfAbsent(slsLabel, () => _SlsGroup(slsLabel)).items.add(item);
+      final desa = kec.desaMap.putIfAbsent(
+        desaName,
+        () => _DesaGroup(desaName),
+      );
+      desa.slsMap
+          .putIfAbsent(slsLabel, () => _SlsGroup(slsLabel))
+          .items
+          .add(item);
     }
 
     int cmp(String a, String b, String fallback) {
@@ -285,24 +297,24 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-                ? _buildError()
-                : RefreshIndicator(
-                    onRefresh: _refresh,
-                    child: CustomScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: [
-                        SliverToBoxAdapter(child: _buildHeader()),
-                        SliverToBoxAdapter(child: _buildSearch()),
-                        if (_filtered.isEmpty)
-                          SliverFillRemaining(
-                            hasScrollBody: false,
-                            child: _buildEmpty(),
-                          )
-                        else
-                          ..._buildGroupedSlivers(),
-                      ],
-                    ),
-                  ),
+            ? _buildError()
+            : RefreshIndicator(
+                onRefresh: _refresh,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(child: _buildHeader()),
+                    SliverToBoxAdapter(child: _buildSearch()),
+                    if (_filtered.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _buildEmpty(),
+                      )
+                    else
+                      ..._buildGroupedSlivers(),
+                  ],
+                ),
+              ),
       ),
     );
   }
@@ -330,8 +342,10 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
               color: Colors.white.withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.report_problem_outlined,
-                color: Colors.white),
+            child: const Icon(
+              Icons.report_problem_outlined,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -392,8 +406,10 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
                     },
                   ),
             border: InputBorder.none,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 18,
+              vertical: 16,
+            ),
           ),
         ),
       ),
@@ -418,16 +434,17 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
         final desaCollapsed = _collapsedDesa.contains(desaKey);
         slivers.add(
           SliverToBoxAdapter(
-            child: _buildDesaHeader(desa,
-                collapseKey: desaKey, collapsed: desaCollapsed),
+            child: _buildDesaHeader(
+              desa,
+              collapseKey: desaKey,
+              collapsed: desaCollapsed,
+            ),
           ),
         );
         if (desaCollapsed) continue;
 
         for (final sls in desa.sls) {
-          slivers.add(
-            SliverToBoxAdapter(child: _buildSlsHeader(sls)),
-          );
+          slivers.add(SliverToBoxAdapter(child: _buildSlsHeader(sls)));
           slivers.add(
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
@@ -480,8 +497,11 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             child: Row(
               children: [
-                const Icon(Icons.location_city_rounded,
-                    size: 20, color: Color(0xFF0F4C81)),
+                const Icon(
+                  Icons.location_city_rounded,
+                  size: 20,
+                  color: Color(0xFF0F4C81),
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -528,8 +548,11 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
     );
   }
 
-  Widget _buildDesaHeader(_DesaGroup desa,
-      {required String collapseKey, required bool collapsed}) {
+  Widget _buildDesaHeader(
+    _DesaGroup desa, {
+    required String collapseKey,
+    required bool collapsed,
+  }) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 4, 16, 4),
       child: InkWell(
@@ -543,12 +566,19 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
           child: Row(
             children: [
-              Icon(collapsed ? Icons.chevron_right_rounded
-                  : Icons.expand_more_rounded,
-                  size: 18, color: Colors.blueGrey[400]),
+              Icon(
+                collapsed
+                    ? Icons.chevron_right_rounded
+                    : Icons.expand_more_rounded,
+                size: 18,
+                color: Colors.blueGrey[400],
+              ),
               const SizedBox(width: 4),
-              const Icon(Icons.holiday_village_outlined,
-                  size: 16, color: Color(0xFF2D77D0)),
+              const Icon(
+                Icons.holiday_village_outlined,
+                size: 16,
+                color: Color(0xFF2D77D0),
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -626,8 +656,11 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(
             children: [
-              const Icon(Icons.person_pin_circle_outlined,
-                  size: 22, color: Color(0xFF0F4C81)),
+              const Icon(
+                Icons.person_pin_circle_outlined,
+                size: 22,
+                color: Color(0xFF0F4C81),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -659,8 +692,11 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
               if (item.tindakLanjut.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(left: 8),
-                  child: Icon(Icons.checklist_rtl_rounded,
-                      size: 18, color: Colors.green[600]),
+                  child: Icon(
+                    Icons.checklist_rtl_rounded,
+                    size: 18,
+                    color: Colors.green[600],
+                  ),
                 ),
               const SizedBox(width: 4),
               Icon(Icons.chevron_right_rounded, color: Colors.blueGrey[300]),
@@ -719,13 +755,19 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
                 ],
                 if (item.penjelasan.isNotEmpty) ...[
                   const SizedBox(height: 14),
-                  _infoRow(Icons.sticky_note_2_outlined, 'Penjelasan',
-                      item.penjelasan),
+                  _infoRow(
+                    Icons.sticky_note_2_outlined,
+                    'Penjelasan',
+                    item.penjelasan,
+                  ),
                 ],
                 if (item.tindakLanjut.isNotEmpty) ...[
                   const SizedBox(height: 14),
-                  _infoRow(Icons.checklist_rtl_rounded, 'Tindak Lanjut',
-                      item.tindakLanjut),
+                  _infoRow(
+                    Icons.checklist_rtl_rounded,
+                    'Tindak Lanjut',
+                    item.tindakLanjut,
+                  ),
                 ],
                 const SizedBox(height: 16),
                 Wrap(
@@ -737,8 +779,10 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
                     if (isPml && item.pmlNama.isNotEmpty)
                       _tag('PML: ${item.pmlNama}', const Color(0xFFEA8600)),
                     if (item.createdByNama.isNotEmpty)
-                      _tag('Oleh: ${item.createdByNama}',
-                          const Color(0xFF5B6B7B)),
+                      _tag(
+                        'Oleh: ${item.createdByNama}',
+                        const Color(0xFF5B6B7B),
+                      ),
                   ],
                 ),
                 if (item.canEdit) ...[
@@ -881,16 +925,18 @@ class _RespondenSulitPageState extends State<RespondenSulitPage> {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(26),
               ),
-              child: const Icon(Icons.person_search_rounded,
-                  size: 36, color: Color(0xFF2D77D0)),
+              child: const Icon(
+                Icons.person_search_rounded,
+                size: 36,
+                color: Color(0xFF2D77D0),
+              ),
             ),
             const SizedBox(height: 18),
             Text(
               isSearching
                   ? 'Data tidak ditemukan'
                   : 'Belum ada responden sulit',
-              style:
-                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
             Text(
@@ -1129,8 +1175,10 @@ class _RespondenSulitFormSheetState extends State<_RespondenSulitFormSheet> {
                     controller: _alamatCtrl,
                     maxLines: 2,
                     textCapitalization: TextCapitalization.sentences,
-                    decoration:
-                        _decoration('Alamat', Icons.location_on_outlined),
+                    decoration: _decoration(
+                      'Alamat',
+                      Icons.location_on_outlined,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -1138,7 +1186,9 @@ class _RespondenSulitFormSheetState extends State<_RespondenSulitFormSheet> {
                     maxLines: 3,
                     textCapitalization: TextCapitalization.sentences,
                     decoration: _decoration(
-                        'Penjelasan', Icons.sticky_note_2_outlined),
+                      'Penjelasan',
+                      Icons.sticky_note_2_outlined,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -1146,7 +1196,9 @@ class _RespondenSulitFormSheetState extends State<_RespondenSulitFormSheet> {
                     maxLines: 3,
                     textCapitalization: TextCapitalization.sentences,
                     decoration: _decoration(
-                        'Tindak Lanjut', Icons.checklist_rtl_rounded),
+                      'Tindak Lanjut',
+                      Icons.checklist_rtl_rounded,
+                    ),
                   ),
                   const SizedBox(height: 20),
                   SizedBox(
@@ -1186,22 +1238,23 @@ class _RespondenSulitFormSheetState extends State<_RespondenSulitFormSheet> {
   Widget _buildWilayahField() {
     final selected = _kodeWilayah == null
         ? null
-        : widget.wilayahOptions
-            .cast<_WilayahOption?>()
-            .firstWhere((w) => w?.id == _kodeWilayah, orElse: () => null);
+        : widget.wilayahOptions.cast<_WilayahOption?>().firstWhere(
+            (w) => w?.id == _kodeWilayah,
+            orElse: () => null,
+          );
     return InkWell(
       borderRadius: BorderRadius.circular(14),
       onTap: _pickWilayah,
       child: InputDecorator(
         decoration: _decoration('Wilayah Kerja (opsional)', Icons.map_outlined)
             .copyWith(
-          suffixIcon: _kodeWilayah == null
-              ? const Icon(Icons.arrow_drop_down)
-              : IconButton(
-                  icon: const Icon(Icons.close_rounded, size: 20),
-                  onPressed: () => setState(() => _kodeWilayah = null),
-                ),
-        ),
+              suffixIcon: _kodeWilayah == null
+                  ? const Icon(Icons.arrow_drop_down)
+                  : IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      onPressed: () => setState(() => _kodeWilayah = null),
+                    ),
+            ),
         child: Text(
           selected?.label ?? '— Tidak dipilih —',
           maxLines: 1,
@@ -1260,11 +1313,13 @@ class _WilayahPickerSheetState extends State<_WilayahPickerSheet> {
     final filtered = q.isEmpty
         ? widget.options
         : widget.options
-            .where((w) => w.label.toLowerCase().contains(q))
-            .toList();
+              .where((w) => w.label.toLowerCase().contains(q))
+              .toList();
 
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.75,
@@ -1300,8 +1355,10 @@ class _WilayahPickerSheetState extends State<_WilayahPickerSheet> {
                       borderRadius: BorderRadius.circular(14),
                       borderSide: BorderSide.none,
                     ),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                   ),
                 ),
               ),
@@ -1335,8 +1392,10 @@ class _WilayahPickerSheetState extends State<_WilayahPickerSheet> {
                         itemBuilder: (context, index) {
                           final w = filtered[index];
                           return ListTile(
-                            leading: const Icon(Icons.map_outlined,
-                                color: Color(0xFF0F4C81)),
+                            leading: const Icon(
+                              Icons.map_outlined,
+                              color: Color(0xFF0F4C81),
+                            ),
                             title: Text(
                               w.label,
                               style: const TextStyle(fontSize: 14),

@@ -250,10 +250,7 @@ class _UsahaOrganikPageState extends State<UsahaOrganikPage> {
                 SizedBox(height: 8),
                 Text(
                   'Daftar usaha dari Google Sheets publik dengan pencarian dan cache lokal.',
-                  style: TextStyle(
-                    color: Colors.white,
-                    height: 1.45,
-                  ),
+                  style: TextStyle(color: Colors.white, height: 1.45),
                 ),
               ],
             ),
@@ -391,7 +388,9 @@ class _UsahaOrganikPageState extends State<UsahaOrganikPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFF2D77D0).withValues(alpha: 0.08)),
+        border: Border.all(
+          color: const Color(0xFF2D77D0).withValues(alpha: 0.08),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),

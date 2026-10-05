@@ -53,6 +53,34 @@ class MapPage extends StatelessWidget {
             return Center(child: Text(state.error ?? 'Terjadi kesalahan'));
           case MapStatus.success:
             final config = state.config!;
+
+            final hasPolygonBoundary =
+                state.selectedPolygons.isNotEmpty || state.polygon.isNotEmpty;
+            final outsideBoundsPlaces = <Place>[];
+            if (hasPolygonBoundary) {
+              final boundaryPolygons = state.selectedPolygons.isNotEmpty
+                  ? state.selectedPolygons.map((p) => p.points).toList()
+                  : [state.polygon];
+              // Pakai seluruh titik di SLS/sub-SLS terpilih (tanpa filter
+              // viewport) agar titik yang benar-benar jauh (misal luar negeri)
+              // tetap terdeteksi berada di luar batas polygon.
+              final poolPlaces = state.placesInSelectedBoundary.isNotEmpty
+                  ? state.placesInSelectedBoundary
+                  : state.places;
+              for (final place in poolPlaces) {
+                bool isInside = false;
+                for (final poly in boundaryPolygons) {
+                  if (MapUtils.isPointInPolygon(place.position, poly)) {
+                    isInside = true;
+                    break;
+                  }
+                }
+                if (!isInside) {
+                  outsideBoundsPlaces.add(place);
+                }
+              }
+            }
+
             return Scaffold(
               // appBar: AppBar(title: const Text('Direktori Map')),
               body: Stack(
@@ -62,6 +90,7 @@ class MapPage extends StatelessWidget {
                     places: state.places,
                     selectedPlace:
                         state.selectedPlace, // Pass selectedPlace to MapView
+                    highlightedPlaceId: state.highlightedPlaceId,
                     polygon: state.polygon,
                     assignmentPolygons: state.assignmentPolygons,
                     selectedPolygons:
@@ -118,37 +147,8 @@ class MapPage extends StatelessWidget {
                       );
                     },
                   ),
-                  // Tombol aktifkan mode edit posisi (muncul saat ada marker).
-                  if (coordinateTarget == null &&
-                      !state.markerEditMode &&
-                      state.places.isNotEmpty)
-                    Positioned(
-                      right: 16,
-                      bottom: 120,
-                      child: SafeArea(
-                        child: FloatingActionButton.extended(
-                          heroTag: 'map_marker_edit_mode',
-                          backgroundColor: const Color(0xFF6D28D9),
-                          foregroundColor: Colors.white,
-                          icon: const Icon(Icons.edit_location_alt_outlined),
-                          label: const Text('Edit Posisi'),
-                          onPressed: () {
-                            context.read<MapBloc>().add(
-                              const MarkerEditModeToggled(true),
-                            );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Mode edit aktif — geser marker untuk perbaiki posisi',
-                                ),
-                                behavior: SnackBarBehavior.floating,
-                                duration: Duration(seconds: 3),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
+                  // Tombol "Edit Posisi" kini menyatu di panel kontrol kanan
+                  // (MapControls), bukan FAB terpisah.
                   // Bar Simpan/Batal saat mode edit posisi aktif.
                   if (state.markerEditMode)
                     Positioned(
@@ -172,6 +172,52 @@ class MapPage extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (hasPolygonBoundary && outsideBoundsPlaces.isNotEmpty)
+                    Positioned(
+                      left: 16,
+                      bottom: 120,
+                      child: SafeArea(
+                        child: Material(
+                          color: Colors.orange.shade700,
+                          borderRadius: BorderRadius.circular(24),
+                          elevation: 4,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(24),
+                            onTap: () {
+                              _showOutsideBoundsSheet(
+                                context,
+                                outsideBoundsPlaces,
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.warning_amber_rounded,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '${outsideBoundsPlaces.length} titik di luar batas',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   // Coordinate mode overlay: center crosshair + actions
                   if (coordinateTarget != null) ...[
                     // Center crosshair icon (non-interactive)
@@ -1900,6 +1946,7 @@ class MapPage extends StatelessWidget {
 
   void _handleMapLongPress(BuildContext context, MapState state, LatLng point) {
     if (_isPointInsideVisiblePolygon(state, point)) {
+      _selectPolygonAtPoint(context, point);
       return;
     }
 
@@ -7105,6 +7152,160 @@ class MapPage extends StatelessWidget {
       },
     );
   }
+
+  Future<void> _showOutsideBoundsSheet(
+    BuildContext parentContext,
+    List<Place> outsidePlaces,
+  ) async {
+    await showModalBottomSheet(
+      context: parentContext,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.55,
+          minChildSize: 0.3,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(top: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          color: Colors.orange.shade700,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '${outsidePlaces.length} Titik di Luar Batas SLS',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      'Ketuk item untuk langsung menuju lokasi marker di peta.',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: ListView.separated(
+                      controller: scrollController,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 4,
+                        horizontal: 8,
+                      ),
+                      itemCount: outsidePlaces.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final place = outsidePlaces[index];
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          leading: CircleAvatar(
+                            backgroundColor: Colors.orange.shade100,
+                            child: Text(
+                              '${index + 1}',
+                              style: TextStyle(
+                                color: Colors.orange.shade800,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            radius: 18,
+                          ),
+                          title: Text(
+                            place.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (place.description.isNotEmpty)
+                                Text(
+                                  place.description,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${place.position.latitude.toStringAsFixed(5)}, ${place.position.longitude.toStringAsFixed(5)}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[500],
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ],
+                          ),
+                          trailing: const Icon(
+                            Icons.navigation_rounded,
+                            color: Colors.blue,
+                          ),
+                          onTap: () {
+                            Navigator.pop(context);
+                            // Geser saja ke marker, pertahankan level zoom saat
+                            // ini (tidak memaksa zoom 18).
+                            final currentZoom =
+                                mapController?.camera.zoom ?? 18.0;
+                            mapController?.move(place.position, currentZoom);
+                            // Tandai terpilih (highlight) TANPA membuka kartu
+                            // detail.
+                            parentContext.read<MapBloc>().add(
+                              PlaceHighlighted(place),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 }
 
 class _MapSessionDebugBadge extends StatelessWidget {
@@ -7210,9 +7411,7 @@ class _MarkerEditBarState extends State<_MarkerEditBar> {
               ? '$ok posisi marker tersimpan'
               : '$ok tersimpan, $failed gagal${err != null ? ': $err' : ''}',
         ),
-        backgroundColor: failed == 0
-            ? const Color(0xFF1D8F5A)
-            : Colors.orange,
+        backgroundColor: failed == 0 ? const Color(0xFF1D8F5A) : Colors.orange,
         behavior: SnackBarBehavior.floating,
       ),
     );

@@ -807,6 +807,8 @@ class _DokumentasiPageState extends State<DokumentasiPage> {
         return 'Bukti Paket Data';
       case 'fasih':
         return 'Fasih';
+      case 'uninstall':
+        return 'Uninstall';
       case 'lainnya':
         return 'Lainnya';
       default:

@@ -18,10 +18,6 @@ class UsahaOrganikItem {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'nama': nama,
-      'alamat': alamat,
-      'keterangan': keterangan,
-    };
+    return {'nama': nama, 'alamat': alamat, 'keterangan': keterangan};
   }
 }

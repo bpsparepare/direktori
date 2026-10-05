@@ -28,10 +28,11 @@ const List<_DocumentationCategoryOption> _categoryOptions = [
     'Pertemuan',
     Icons.handshake_rounded,
   ),
+  _DocumentationCategoryOption('fasih', 'Fasih', Icons.fact_check_rounded),
   _DocumentationCategoryOption(
-    'fasih',
-    'Fasih',
-    Icons.fact_check_rounded,
+    'uninstall',
+    'Uninstall',
+    Icons.delete_sweep_rounded,
   ),
   _DocumentationCategoryOption('lainnya', 'Lainnya', Icons.category_rounded),
   _DocumentationCategoryOption(

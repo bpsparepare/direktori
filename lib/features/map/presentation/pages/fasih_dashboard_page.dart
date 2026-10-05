@@ -109,7 +109,7 @@ enum _SortField { kumulatif, delta, week }
 
 enum _SortDir { asc, desc }
 
-enum _AdminViewMode { byPengawas, allPetugas }
+enum _AdminViewMode { byPengawas, allPetugas, openPengawas, submitting }
 
 enum _ViewMode { card, table, chart }
 
@@ -141,6 +141,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
   List<UnifiedRekapRow> _rows = [];
   int _totalAssignmentAll = 0;
   int _totalTerkirimAll = 0;
+  int _totalOpenAll = 0;
   int _totalDeltaToday = 0;
   int _activeUnitsToday = 0;
   int _totalDeltaWeek = 0;
@@ -155,6 +156,11 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
   double _textScale = 1.0;
   String? _tableSortKey;
   bool _tableSortAsc = true;
+  bool _openSortByName = false;
+  bool _openSortAsc = false;
+  String _submitSortKey = 'sisa';
+  bool _submitSortAsc = false;
+  bool _submitByPetugas = false;
 
   UnifiedRekapRow? _selectedPengawas;
   UnifiedRekapRow? _selectedPetugas;
@@ -179,18 +185,17 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
       final pengawasId = _selectedPengawas?.unitId;
       final petugasId = _selectedPetugas?.unitId;
 
-      // admin mode "Semua Petugas": abaikan drill pengawas untuk query
-      final effectivePengawasId =
-          (role == 'admin' &&
-              _adminViewMode == _AdminViewMode.allPetugas &&
-              _selectedPetugas == null)
-          ? null
-          : pengawasId;
-
+      // Mode daftar petugas: "Semua Petugas", atau tab Submitting yang sedang
+      // dipasang ke tampilan per petugas.
       final isAllPetugas =
           role == 'admin' &&
-          _adminViewMode == _AdminViewMode.allPetugas &&
-          _selectedPetugas == null;
+          _selectedPetugas == null &&
+          (_adminViewMode == _AdminViewMode.allPetugas ||
+              (_adminViewMode == _AdminViewMode.submitting &&
+                  _submitByPetugas));
+
+      // Mode daftar petugas: abaikan drill pengawas untuk query.
+      final effectivePengawasId = isAllPetugas ? null : pengawasId;
 
       final results = await Future.wait([
         _fetchRekap(effectivePengawasId, petugasId, isAllPetugas),
@@ -230,6 +235,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
         _rows = merged;
         _totalAssignmentAll = rekapPayload.summary.totalAssignments;
         _totalTerkirimAll = rekapPayload.summary.totalTerkirim;
+        _totalOpenAll = rekapPayload.summary.totalOpen;
         _totalDeltaToday = dailyPayload.summary.totalDelta;
         _activeUnitsToday = merged.where((r) => r.delta > 0).length;
         _totalDeltaWeek = weeklyPayload.summary.totalDelta;
@@ -251,10 +257,15 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
     bool allPetugas,
   ) {
     // RPC gabungan: role & pemilihan level ditentukan server-side dari auth.uid().
+    // targetDate agar kumulatif mengikuti tanggal terpilih (bukan snapshot terbaru).
     return _rekapService.fetchRekap(
       pengawasId: pengawasId,
       petugasId: petugasId,
       allPetugas: allPetugas,
+      targetDate: _isToday ? null : _targetDate,
+      // Ambil sebanyak mungkin (server cap 500) agar rincian status yang
+      // dijumlah di klien tidak terpotong paging & cocok dengan total server.
+      limit: 500,
     );
   }
 
@@ -438,13 +449,119 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
     return s.isNotEmpty && s != '-';
   }
 
-  String get _progressModeParam =>
+  String get _progressModeParam {
+    if (_role != 'admin' ||
+        _selectedPengawas != null ||
+        _selectedPetugas != null) {
+      return 'petugas';
+    }
+    if (_adminViewMode == _AdminViewMode.allPetugas) return 'petugas';
+    if (_adminViewMode == _AdminViewMode.submitting && _submitByPetugas) {
+      return 'petugas';
+    }
+    return 'pengawas';
+  }
+
+  /// Mode ringkas "Open per Pengawas": hanya kolom nama + jumlah OPEN.
+  bool get _isOpenPengawasView =>
       _role == 'admin' &&
-          _selectedPengawas == null &&
-          _selectedPetugas == null &&
-          _adminViewMode == _AdminViewMode.byPengawas
-      ? 'pengawas'
-      : 'petugas';
+      _selectedPengawas == null &&
+      _selectedPetugas == null &&
+      _adminViewMode == _AdminViewMode.openPengawas;
+
+  int _openCount(UnifiedRekapRow row) => row.statusCounts['OPEN'] ?? 0;
+
+  /// Mode "Submitting": progres + rincian status yang masih harus dikirim,
+  /// lengkap dengan perkiraan hari & tanggal selesai.
+  bool get _isSubmittingView =>
+      _role == 'admin' &&
+      _adminViewMode == _AdminViewMode.submitting &&
+      _selectedPetugas == null;
+
+  /// Submitting di level teratas (belum drill ke petugas satu pengawas).
+  bool get _isSubmittingRoot => _isSubmittingView && _selectedPengawas == null;
+
+  /// True untuk mode tabel ringkas (Open / Submitting) yang punya kontrol
+  /// sendiri, sehingga baris sort & pilihan tampilan disembunyikan.
+  bool get _isSimpleTableView => _isOpenPengawasView || _isSubmittingView;
+
+  int _statusOf(UnifiedRekapRow row, String key) => row.statusCounts[key] ?? 0;
+
+  /// Sisa yang belum disetujui pengawas: DRAFT Awal + REJECTED Pengawas +
+  /// DRAFT Revisi.
+  int _sisaSubmit(UnifiedRekapRow row) =>
+      _statusOf(row, 'DRAFT Awal') +
+      _statusOf(row, 'REJECTED Pengawas') +
+      _statusOf(row, 'DRAFT Revisi');
+
+  /// Rata-rata harian dari progres 7 hari terakhir.
+  double _avgDaily(UnifiedRekapRow row) => row.weeklyDelta / 7.0;
+
+  /// Perkiraan sisa hari kerja; null bila rata-rata harian belum positif.
+  int? _daysLeft(int sisa, double avgDaily) {
+    if (sisa <= 0) return 0;
+    if (avgDaily <= 0) return null;
+    return (sisa / avgDaily).ceil();
+  }
+
+  String _estimateLabel(int? days) {
+    if (days == null) return '-';
+    if (days == 0) return 'Selesai';
+    final d = _targetDate.add(Duration(days: days));
+    return '${d.day} ${_monthName(d.month)}';
+  }
+
+  double _submitSortValue(UnifiedRekapRow row) {
+    switch (_submitSortKey) {
+      case 'delta':
+        return row.delta.toDouble();
+      case 'week':
+        return row.weeklyDelta.toDouble();
+      case 'approved':
+        return _statusOf(row, 'APPROVED Pengawas').toDouble();
+      case 'awal':
+        return _statusOf(row, 'DRAFT Awal').toDouble();
+      case 'reject':
+        return _statusOf(row, 'REJECTED Pengawas').toDouble();
+      case 'revisi':
+        return _statusOf(row, 'DRAFT Revisi').toDouble();
+      case 'avg':
+        return _avgDaily(row);
+      case 'days':
+        // Tanpa estimasi (rata-rata 0) diletakkan paling akhir.
+        return (_daysLeft(_sisaSubmit(row), _avgDaily(row)) ?? 99999)
+            .toDouble();
+      case 'days_today':
+        return (_daysLeft(_sisaSubmit(row), row.delta.toDouble()) ?? 99999)
+            .toDouble();
+      default:
+        return _sisaSubmit(row).toDouble();
+    }
+  }
+
+  List<UnifiedRekapRow> get _submittingSortedRows {
+    final list = List<UnifiedRekapRow>.from(_rows);
+    final asc = _submitSortAsc ? 1 : -1;
+    list.sort((a, b) {
+      if (_submitSortKey == 'title') {
+        return a.title.compareTo(b.title) * asc;
+      }
+      final cmp = _submitSortValue(a).compareTo(_submitSortValue(b)) * asc;
+      return cmp != 0 ? cmp : a.title.compareTo(b.title);
+    });
+    return list;
+  }
+
+  List<UnifiedRekapRow> get _openSortedRows {
+    final list = List<UnifiedRekapRow>.from(_rows);
+    final asc = _openSortAsc ? 1 : -1;
+    list.sort((a, b) {
+      if (_openSortByName) return a.title.compareTo(b.title) * asc;
+      final cmp = _openCount(a).compareTo(_openCount(b)) * asc;
+      return cmp != 0 ? cmp : a.title.compareTo(b.title);
+    });
+    return list;
+  }
 
   String _formatSigned(int value) => value > 0 ? '+$value' : '$value';
 
@@ -465,8 +582,7 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
       (_role == 'admin' && _selectedPetugas == null);
 
   /// Baris level wilayah (SLS) dapat dibuka di peta bila callback tersedia.
-  bool get _canOpenSlsOnMap =>
-      _isWilayahLevel && widget.onOpenSlsOnMap != null;
+  bool get _canOpenSlsOnMap => _isWilayahLevel && widget.onOpenSlsOnMap != null;
 
   /// Baris bisa ditekan bila bisa di-drill ATAU bisa dibuka di peta.
   bool get _canTapRow => _canDrill || _canOpenSlsOnMap;
@@ -482,7 +598,9 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
       if (_role == 'pengawas') {
         _selectedPetugas = row;
       } else if (_role == 'admin' &&
-          _adminViewMode == _AdminViewMode.allPetugas) {
+          (_adminViewMode == _AdminViewMode.allPetugas ||
+              (_adminViewMode == _AdminViewMode.submitting &&
+                  _submitByPetugas))) {
         // Mode "Semua Petugas": baris = petugas, langsung ke wilayah kerjanya
         // tanpa singgah ke level pengawas.
         _selectedPetugas = row;
@@ -586,6 +704,10 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                         const SizedBox(height: 12),
                         if (_rows.isEmpty)
                           _buildEmpty()
+                        else if (_isOpenPengawasView)
+                          _buildOpenPengawasTable(_openSortedRows)
+                        else if (_isSubmittingView)
+                          _buildSubmittingTable(_submittingSortedRows)
                         else if (_viewMode == _ViewMode.table)
                           _buildTableView(_tableSortedRows)
                         else if (_viewMode == _ViewMode.chart)
@@ -678,13 +800,15 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
               final tiles = <Widget>[
                 _buildHeroStat(
                   width: tileW,
+                  // Total penuh termasuk OPEN (= SUM kolom `total` snapshot),
+                  // agar cocok dengan rincian di bawah yang menyertakan OPEN.
                   label: 'Total Kumulatif',
-                  value: '$_totalAssignmentAll',
+                  value: '${_totalAssignmentAll + _totalOpenAll}',
                   icon: Icons.assignment_rounded,
                   onTap: () => _showStatusDetail(
                     title: 'Detail Kumulatif',
                     totalLabel: 'Total Kumulatif',
-                    totalValue: _totalAssignmentAll,
+                    totalValue: _totalAssignmentAll + _totalOpenAll,
                     statuses: _aggregatedStatusCumul,
                   ),
                 ),
@@ -1245,9 +1369,13 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
   Widget _buildBreadcrumb() {
     final crumbs = <String>[];
     if (_role == 'admin') {
-      crumbs.add(
-        _adminViewMode == _AdminViewMode.allPetugas ? 'Petugas' : 'Pengawas',
-      );
+      crumbs.add(switch (_adminViewMode) {
+        _AdminViewMode.allPetugas => 'Petugas',
+        _AdminViewMode.openPengawas => 'Open Pengawas',
+        _AdminViewMode.submitting =>
+          _submitByPetugas ? 'Submitting Petugas' : 'Submitting Pengawas',
+        _AdminViewMode.byPengawas => 'Pengawas',
+      });
     }
     if (_role == 'pengawas') crumbs.add('Petugas');
     if (_selectedPengawas != null) crumbs.add(_selectedPengawas!.title);
@@ -1317,49 +1445,117 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
                     _loadData();
                   },
                 ),
+                const SizedBox(width: 6),
+                _buildToggleChip(
+                  label: 'Submitting',
+                  selected: _adminViewMode == _AdminViewMode.submitting,
+                  onTap: () {
+                    if (_adminViewMode == _AdminViewMode.submitting) return;
+                    setState(() {
+                      _adminViewMode = _AdminViewMode.submitting;
+                      _submitSortKey = 'sisa';
+                      _submitSortAsc = false;
+                    });
+                    _loadData();
+                  },
+                ),
+                const SizedBox(width: 6),
+                _buildToggleChip(
+                  label: 'Open Pengawas',
+                  selected: _adminViewMode == _AdminViewMode.openPengawas,
+                  onTap: () {
+                    if (_adminViewMode == _AdminViewMode.openPengawas) return;
+                    setState(() {
+                      _adminViewMode = _AdminViewMode.openPengawas;
+                      _openSortByName = false;
+                      _openSortAsc = false;
+                    });
+                    _loadData();
+                  },
+                ),
               ],
             ),
           ),
           const SizedBox(height: 8),
         ],
-        Row(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _buildToggleChip(
-                      label: 'Terkirim',
-                      selected: _sortField == _SortField.kumulatif,
-                      onTap: () =>
-                          setState(() => _sortField = _SortField.kumulatif),
+        if (_isSimpleTableView)
+          Row(
+            children: [
+              if (_isSubmittingRoot)
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildToggleChip(
+                          label: 'Per Pengawas',
+                          selected: !_submitByPetugas,
+                          onTap: () {
+                            if (!_submitByPetugas) return;
+                            setState(() => _submitByPetugas = false);
+                            _loadData();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        _buildToggleChip(
+                          label: 'Per Petugas',
+                          selected: _submitByPetugas,
+                          onTap: () {
+                            if (_submitByPetugas) return;
+                            setState(() => _submitByPetugas = true);
+                            _loadData();
+                          },
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 6),
-                    _buildToggleChip(
-                      label: 'Hari Ini',
-                      selected: _sortField == _SortField.delta,
-                      onTap: () =>
-                          setState(() => _sortField = _SortField.delta),
-                    ),
-                    const SizedBox(width: 6),
-                    _buildToggleChip(
-                      label: '7 Hari',
-                      selected: _sortField == _SortField.week,
-                      onTap: () => setState(() => _sortField = _SortField.week),
-                    ),
-                  ],
+                  ),
+                )
+              else
+                const Spacer(),
+              const SizedBox(width: 6),
+              _buildTextScaleToggle(),
+            ],
+          )
+        else
+          Row(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildToggleChip(
+                        label: 'Terkirim',
+                        selected: _sortField == _SortField.kumulatif,
+                        onTap: () =>
+                            setState(() => _sortField = _SortField.kumulatif),
+                      ),
+                      const SizedBox(width: 6),
+                      _buildToggleChip(
+                        label: 'Hari Ini',
+                        selected: _sortField == _SortField.delta,
+                        onTap: () =>
+                            setState(() => _sortField = _SortField.delta),
+                      ),
+                      const SizedBox(width: 6),
+                      _buildToggleChip(
+                        label: '7 Hari',
+                        selected: _sortField == _SortField.week,
+                        onTap: () =>
+                            setState(() => _sortField = _SortField.week),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 6),
-            _buildTextScaleToggle(),
-            const SizedBox(width: 6),
-            _buildSortToggle(),
-            const SizedBox(width: 6),
-            _buildViewModeToggle(),
-          ],
-        ),
+              const SizedBox(width: 6),
+              _buildTextScaleToggle(),
+              const SizedBox(width: 6),
+              _buildSortToggle(),
+              const SizedBox(width: 6),
+              _buildViewModeToggle(),
+            ],
+          ),
       ],
     );
   }
@@ -1736,6 +1932,606 @@ class _FasihDashboardPageState extends State<FasihDashboardPage> {
   }
 
   // ── Table view ────────────────────────────────────────────────────────────────
+
+  // ── Tabel Submitting ────────────────────────────────────────────────────────
+  // Progres harian/mingguan + rincian status yang masih harus dikirim, dengan
+  // dua dasar perkiraan selesai: rata-rata 7 hari dan capaian hari ini.
+  // Baris dapat di-expand untuk melihat seluruh angka tanpa geser samping.
+
+  Widget _buildSubmittingTable(List<UnifiedRekapRow> rows) {
+    const double hPad = 24.0;
+    // Lebar minimum tiap kolom (ikut skala teks). Saat layar lebih lebar dari
+    // total minimum, sisa ruang dibagi proporsional agar tabel penuh selebar
+    // area; saat lebih sempit, tabel bisa digeser mendatar.
+    final double minNameW = 150.0 * _textScale;
+    final double minNumW = 58.0 * _textScale;
+    final double minEstW = 78.0 * _textScale;
+
+    const headerStyle = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      color: Color(0xFF64748B),
+    );
+    const activeColor = Color(0xFF0F4C81);
+    const numStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w600);
+
+    int sumOf(int Function(UnifiedRekapRow) pick) =>
+        rows.fold<int>(0, (acc, r) => acc + pick(r));
+
+    final tDelta = sumOf((r) => r.delta);
+    final tWeek = sumOf((r) => r.weeklyDelta);
+    final tApproved = sumOf((r) => _statusOf(r, 'APPROVED Pengawas'));
+    final tAwal = sumOf((r) => _statusOf(r, 'DRAFT Awal'));
+    final tReject = sumOf((r) => _statusOf(r, 'REJECTED Pengawas'));
+    final tRevisi = sumOf((r) => _statusOf(r, 'DRAFT Revisi'));
+    final tSisa = tAwal + tReject + tRevisi;
+    final tAvg = tWeek / 7.0;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double minTotal = hPad + minNameW + minNumW * 10 + minEstW * 2;
+        final double tableW = max(constraints.maxWidth, minTotal);
+        // Bobot kolom: nama paling lebar, kolom tanggal sedikit lebih lebar
+        // dari kolom angka biasa.
+        const double nameUnits = 150.0 / 58.0;
+        const double estUnits = 78.0 / 58.0;
+        final double unit = (tableW - hPad) / (nameUnits + 10 + estUnits * 2);
+        final double nameW = unit * nameUnits;
+        final double numW = unit;
+        final double estW = unit * estUnits;
+
+        Widget th(
+          String label,
+          String key,
+          double w, {
+          bool leftAlign = false,
+        }) {
+          final active = _submitSortKey == key;
+          return GestureDetector(
+            onTap: () => setState(() {
+              if (_submitSortKey == key) {
+                _submitSortAsc = !_submitSortAsc;
+              } else {
+                _submitSortKey = key;
+                _submitSortAsc =
+                    key == 'title' || key == 'days' || key == 'days_today';
+              }
+            }),
+            child: SizedBox(
+              width: w,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: leftAlign
+                    ? Alignment.centerLeft
+                    : Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: active
+                          ? headerStyle.copyWith(color: activeColor)
+                          : headerStyle,
+                    ),
+                    if (active) ...[
+                      const SizedBox(width: 2),
+                      Icon(
+                        _submitSortAsc
+                            ? Icons.arrow_upward_rounded
+                            : Icons.arrow_downward_rounded,
+                        size: 10,
+                        color: activeColor,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        Widget td(double w, String text, {TextStyle? style}) {
+          return SizedBox(
+            width: w,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                text,
+                maxLines: 1,
+                softWrap: false,
+                style: style ?? numStyle,
+              ),
+            ),
+          );
+        }
+
+        Widget dataRow({
+          required Widget name,
+          required int delta,
+          required int week,
+          required int approved,
+          required int awal,
+          required int reject,
+          required int revisi,
+          required int sisa,
+          required double avgWeek,
+          required double avgToday,
+          Color? background,
+          bool bold = false,
+        }) {
+          final base = bold
+              ? numStyle.copyWith(fontWeight: FontWeight.w800)
+              : numStyle;
+          final daysWeek = _daysLeft(sisa, avgWeek);
+          final daysToday = _daysLeft(sisa, avgToday);
+          return Container(
+            color: background,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            child: Row(
+              children: [
+                SizedBox(width: nameW, child: name),
+                td(
+                  numW,
+                  _formatSigned(delta),
+                  style: base.copyWith(
+                    color: delta > 0
+                        ? const Color(0xFF10B981)
+                        : Colors.grey[400],
+                  ),
+                ),
+                td(
+                  numW,
+                  _formatSigned(week),
+                  style: base.copyWith(
+                    color: week > 0
+                        ? const Color(0xFF0E7490)
+                        : Colors.grey[400],
+                  ),
+                ),
+                td(
+                  numW,
+                  '$approved',
+                  style: base.copyWith(color: const Color(0xFF059669)),
+                ),
+                td(numW, '$awal', style: base),
+                td(numW, '$reject', style: base),
+                td(numW, '$revisi', style: base),
+                td(
+                  numW,
+                  '$sisa',
+                  style: base.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: sisa > 0
+                        ? const Color(0xFFEF4444)
+                        : Colors.grey[400],
+                  ),
+                ),
+                td(
+                  numW,
+                  avgWeek > 0 ? avgWeek.toStringAsFixed(1) : '0',
+                  style: base.copyWith(color: Colors.blueGrey[600]),
+                ),
+                td(
+                  numW,
+                  daysWeek == null ? '-' : '$daysWeek',
+                  style: base.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: daysWeek == null
+                        ? Colors.grey[400]
+                        : const Color(0xFFB45309),
+                  ),
+                ),
+                td(
+                  estW,
+                  _estimateLabel(daysWeek),
+                  style: base.copyWith(color: const Color(0xFF0F4C81)),
+                ),
+                td(
+                  numW,
+                  daysToday == null ? '-' : '$daysToday',
+                  style: base.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: daysToday == null
+                        ? Colors.grey[400]
+                        : const Color(0xFF7C3AED),
+                  ),
+                ),
+                td(
+                  estW,
+                  _estimateLabel(daysToday),
+                  style: base.copyWith(color: const Color(0xFF6D28D9)),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: tableW,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          color: const Color(0xFFF1F5F9),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            children: [
+                              th('Nama', 'title', nameW, leftAlign: true),
+                              th('Hari Ini', 'delta', numW),
+                              th('7 Hari', 'week', numW),
+                              th('Approved', 'approved', numW),
+                              th('Draft Awal', 'awal', numW),
+                              th('Rejected', 'reject', numW),
+                              th('Draft Revisi', 'revisi', numW),
+                              th('Total Sisa', 'sisa', numW),
+                              th('Rata²/Hari', 'avg', numW),
+                              th('Sisa Hari (7h)', 'days', numW),
+                              SizedBox(
+                                width: estW,
+                                child: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    'Selesai (7h)',
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    style: headerStyle,
+                                  ),
+                                ),
+                              ),
+                              th('Sisa Hari (Hr Ini)', 'days_today', numW),
+                              SizedBox(
+                                width: estW,
+                                child: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    'Selesai (Hr Ini)',
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    style: headerStyle,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        for (int i = 0; i < rows.length; i++) ...[
+                          if (i > 0)
+                            Divider(
+                              height: 1,
+                              color: Colors.blueGrey.withValues(alpha: 0.08),
+                            ),
+                          _buildSubmittingRow(rows[i], dataRow: dataRow),
+                        ],
+                        Divider(
+                          height: 1,
+                          color: Colors.blueGrey.withValues(alpha: 0.15),
+                        ),
+                        dataRow(
+                          background: const Color(0xFFF8FAFC),
+                          bold: true,
+                          name: const Text(
+                            'TOTAL',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF475569),
+                            ),
+                          ),
+                          delta: tDelta,
+                          week: tWeek,
+                          approved: tApproved,
+                          awal: tAwal,
+                          reject: tReject,
+                          revisi: tRevisi,
+                          sisa: tSisa,
+                          avgWeek: tAvg,
+                          avgToday: tDelta.toDouble(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Ketuk baris pengawas untuk melihat daftar petugasnya. '
+              'Total Sisa = Draft Awal + Rejected + Draft Revisi. '
+              'Rata²/Hari = progres 7 hari ÷ 7; kolom "(7h)" memakai angka itu, '
+              'kolom "(Hr Ini)" memakai capaian hari ini sebagai laju harian. '
+              'Sisa Hari = Total Sisa ÷ laju, dibulatkan ke atas, dihitung dari '
+              '${_targetDate.day} ${_monthName(_targetDate.month)} '
+              '${_targetDate.year}. Tanda "-" berarti lajunya belum positif '
+              'sehingga belum bisa diperkirakan.',
+              style: TextStyle(
+                fontSize: 10.5,
+                height: 1.4,
+                color: Colors.blueGrey[400],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Satu baris tabel Submitting. Baris pengawas dapat ditekan untuk melihat
+  /// daftar petugas di bawahnya.
+  Widget _buildSubmittingRow(
+    UnifiedRekapRow row, {
+    required Widget Function({
+      required Widget name,
+      required int delta,
+      required int week,
+      required int approved,
+      required int awal,
+      required int reject,
+      required int revisi,
+      required int sisa,
+      required double avgWeek,
+      required double avgToday,
+      Color? background,
+      bool bold,
+    })
+    dataRow,
+  }) {
+    final sisa = _sisaSubmit(row);
+    final canOpen = _canDrill;
+
+    final content = dataRow(
+      name: Row(
+        children: [
+          Expanded(
+            child: Text(
+              row.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+          if (canOpen)
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 16,
+              color: Colors.blueGrey[300],
+            ),
+        ],
+      ),
+      delta: row.delta,
+      week: row.weeklyDelta,
+      approved: _statusOf(row, 'APPROVED Pengawas'),
+      awal: _statusOf(row, 'DRAFT Awal'),
+      reject: _statusOf(row, 'REJECTED Pengawas'),
+      revisi: _statusOf(row, 'DRAFT Revisi'),
+      sisa: sisa,
+      avgWeek: _avgDaily(row),
+      avgToday: row.delta.toDouble(),
+    );
+
+    if (!canOpen) return content;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _handleRowTap(row),
+      child: content,
+    );
+  }
+
+  // ── Tabel ringkas: Open per Pengawas ────────────────────────────────────────
+  // Hanya dua kolom (nama pengawas + jumlah OPEN), tanpa drill-down. Lebar
+  // kolom nama dibatasi agar angka Open tetap berdekatan dengan namanya.
+
+  Widget _buildOpenPengawasTable(List<UnifiedRekapRow> rows) {
+    const headerStyle = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      color: Color(0xFF64748B),
+    );
+    const activeColor = Color(0xFF0F4C81);
+    const double hPad = 24.0; // 12 kiri + 12 kanan
+    const double gap = 8.0;
+    final totalOpen = rows.fold<int>(0, (sum, r) => sum + _openCount(r));
+    // Lebar kolom angka mengikuti jumlah digit terbesar & skala teks aktif,
+    // supaya angka tidak terpotong/turun baris saat tulisan diperbesar.
+    final digits = totalOpen.toString().length.clamp(2, 6);
+    final double numW = (14.0 + 9.5 * digits) * _textScale;
+
+    Widget header(String label, bool byName, {bool leftAlign = false}) {
+      final active = _openSortByName == byName;
+      return GestureDetector(
+        onTap: () => setState(() {
+          if (_openSortByName == byName) {
+            _openSortAsc = !_openSortAsc;
+          } else {
+            _openSortByName = byName;
+            _openSortAsc = byName;
+          }
+        }),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: leftAlign ? Alignment.centerLeft : Alignment.centerRight,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: leftAlign
+                ? MainAxisAlignment.start
+                : MainAxisAlignment.end,
+            children: [
+              Text(
+                label,
+                style: active
+                    ? headerStyle.copyWith(color: activeColor)
+                    : headerStyle,
+              ),
+              if (active) ...[
+                const SizedBox(width: 2),
+                Icon(
+                  _openSortAsc
+                      ? Icons.arrow_upward_rounded
+                      : Icons.arrow_downward_rounded,
+                  size: 10,
+                  color: activeColor,
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final available = constraints.maxWidth - hPad - gap - numW;
+            final nameW = available <= 140.0
+                ? available
+                : (constraints.maxWidth * 0.55).clamp(140.0, available);
+
+            Widget line({
+              required Widget name,
+              required Widget value,
+              Color? background,
+            }) {
+              return Container(
+                color: background,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(width: nameW, child: name),
+                    const SizedBox(width: gap),
+                    SizedBox(width: numW, child: value),
+                  ],
+                ),
+              );
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  color: const Color(0xFFF1F5F9),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: nameW,
+                        child: header('Nama Pengawas', true, leftAlign: true),
+                      ),
+                      const SizedBox(width: gap),
+                      SizedBox(width: numW, child: header('Open', false)),
+                    ],
+                  ),
+                ),
+                for (int i = 0; i < rows.length; i++) ...[
+                  if (i > 0)
+                    Divider(
+                      height: 1,
+                      color: Colors.blueGrey.withValues(alpha: 0.08),
+                    ),
+                  line(
+                    name: Text(
+                      rows[i].title,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    value: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        '${_openCount(rows[i])}',
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: _openCount(rows[i]) > 0
+                              ? const Color(0xFFEF4444)
+                              : Colors.grey[400],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                line(
+                  background: const Color(0xFFF8FAFC),
+                  name: const Text(
+                    'Total Open',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF475569),
+                    ),
+                  ),
+                  value: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      '$totalOpen',
+                      maxLines: 1,
+                      softWrap: false,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF0F4C81),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
 
   Widget _buildTableView(List<UnifiedRekapRow> rows) {
     // Collect all status keys sorted by aggregate total desc

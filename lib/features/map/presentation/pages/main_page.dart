@@ -15,8 +15,11 @@ import 'import_anomali_wilayah_aset_page.dart';
 import 'import_anomali_wilayah_pendapatan_page.dart';
 import 'import_anomali_wilayah_profesi_page.dart';
 import 'responden_sulit_page.dart';
+import 'submit_page.dart';
 import 'lembar_kerja_page.dart';
 import 'bukti_dukung_page.dart';
+import 'se_pdrb_comparison_page.dart';
+import 'revisit_page.dart';
 import '../widgets/documentation_upload_dialog.dart';
 import '../bloc/map_bloc.dart';
 import '../bloc/map_event.dart';
@@ -24,7 +27,9 @@ import '../bloc/map_state.dart';
 import '../../data/repositories/map_repository_impl.dart';
 import '../../data/services/anomali_service.dart';
 import '../../data/services/groundcheck_supabase_service.dart';
+import '../../data/services/revisit_service.dart';
 import '../../domain/entities/place.dart';
+import '../../domain/entities/polygon_data.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 
 class MainPage extends StatefulWidget {
@@ -46,6 +51,7 @@ class _MainPageState extends State<MainPage> {
   List<Place> _searchResults = [];
   List<Place> _allPlaces = [];
   String? _se2026Role;
+  bool _canOpenRevisit = false;
 
   final AnomalyService _anomaliService = AnomalyService();
   int _anomaliNotif = 0;
@@ -75,6 +81,8 @@ class _MainPageState extends State<MainPage> {
         _se2026Role = role;
       });
     }
+    final revisit = await RevisitService().fetchContext();
+    if (mounted) setState(() => _canOpenRevisit = revisit.canOpen);
   }
 
   void _loadPlaces() async {
@@ -297,6 +305,22 @@ class _MainPageState extends State<MainPage> {
     _loadAnomaliNotif();
   }
 
+  /// Pindah ke tab Jelajah dan pilih SLS [sls16] (kode wilayah 16 digit) di
+  /// peta: memicu polygon + titik assignment SLS tsb. Polygon SLS di-key 14
+  /// digit; 16 digit dipakai untuk memuat titik sub-SLS persis.
+  void _selectSlsOnMap(String sls16) {
+    setState(() {
+      _selectedIndex = 0;
+      _bottomNavIndex = 0;
+    });
+    final idsls = sls16.length >= 14 ? sls16.substring(0, 14) : sls16;
+    context.read<MapBloc>().add(
+      PolygonSelected(
+        PolygonData(points: const [], idsls: idsls, idsubsls: sls16),
+      ),
+    );
+  }
+
   Future<void> _openDocumentationUploadFromExplore() async {
     final entry = await showDocumentationUploadDialog(context);
     if (!mounted || entry == null) return;
@@ -385,15 +409,43 @@ class _MainPageState extends State<MainPage> {
                 ListTile(
                   leading: const Icon(Icons.fact_check_outlined),
                   title: const Text('Lembar Kerja'),
-                  onTap: () {
+                  onTap: () async {
                     Navigator.of(context).pop();
-                    Navigator.of(context).push(
+                    final result = await Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => const LembarKerjaPage(),
                       ),
                     );
+                    // Lembar Kerja mengembalikan kode SLS (16 digit) bila
+                    // pengguna memilih satu SLS -> buka di tab Jelajah.
+                    if (mounted &&
+                        result is String &&
+                        result.trim().length >= 14) {
+                      _selectSlsOnMap(result.trim());
+                    }
                   },
                 ),
+                ListTile(
+                  leading: const Icon(Icons.pending_actions_outlined),
+                  title: const Text('Submit'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SubmitPage()),
+                    );
+                  },
+                ),
+                if (_canOpenRevisit)
+                  ListTile(
+                    leading: const Icon(Icons.replay_circle_filled_rounded),
+                    title: const Text('Revisit'),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const RevisitPage()),
+                      );
+                    },
+                  ),
                 ListTile(
                   leading: const Icon(Icons.person_search_rounded),
                   title: const Text('Responden Sulit'),
@@ -419,6 +471,18 @@ class _MainPageState extends State<MainPage> {
                       );
                     },
                   ),
+                ListTile(
+                  leading: const Icon(Icons.compare_rounded),
+                  title: const Text('Perbandingan SE & PDRB'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const SePdrbComparisonPage(),
+                      ),
+                    );
+                  },
+                ),
                 if (_se2026Role == 'admin')
                   _buildDrawerMenuItem(
                     icon: Icons.query_stats_rounded,
@@ -427,8 +491,9 @@ class _MainPageState extends State<MainPage> {
                   ),
                 if (_se2026Role == 'admin')
                   Theme(
-                    data: Theme.of(context)
-                        .copyWith(dividerColor: Colors.transparent),
+                    data: Theme.of(
+                      context,
+                    ).copyWith(dividerColor: Colors.transparent),
                     child: ExpansionTile(
                       leading: const Icon(Icons.upload_file_rounded),
                       title: const Text('Impor Anomali'),

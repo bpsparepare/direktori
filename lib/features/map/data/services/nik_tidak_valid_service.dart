@@ -73,7 +73,8 @@ class AnggotaItem {
 class NikTidakValidService {
   final SupabaseClient _client = SupabaseConfig.client;
   static const String _cacheKey = 'nik_tidak_valid_cache_v2';
-  static const String _cacheUpdatedAtKey = 'nik_tidak_valid_cache_updated_at_v2';
+  static const String _cacheUpdatedAtKey =
+      'nik_tidak_valid_cache_updated_at_v2';
 
   Future<List<NikTidakValidItem>> loadCachedEntries() async {
     try {
@@ -96,9 +97,13 @@ class NikTidakValidService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
-          _cacheKey, jsonEncode(entries.map((e) => e.toJson()).toList()));
+        _cacheKey,
+        jsonEncode(entries.map((e) => e.toJson()).toList()),
+      );
       await prefs.setString(
-          _cacheUpdatedAtKey, DateTime.now().toIso8601String());
+        _cacheUpdatedAtKey,
+        DateTime.now().toIso8601String(),
+      );
     } catch (_) {}
     return entries;
   }

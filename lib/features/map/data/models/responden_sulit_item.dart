@@ -49,7 +49,8 @@ class RespondenSulitItem {
       penjelasan: (json['penjelasan'] ?? '').toString(),
       tindakLanjut: (json['tindak_lanjut'] ?? '').toString(),
       canEdit: json['can_edit'] == true,
-      updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? '') ??
+      updatedAt:
+          DateTime.tryParse(json['updated_at']?.toString() ?? '') ??
           DateTime.now(),
     );
   }
@@ -57,9 +58,11 @@ class RespondenSulitItem {
   /// Label wilayah singkat (SLS + sub-SLS / desa / kecamatan) untuk chip.
   String get wilayahLabel {
     final sls = formatSlsLabel(nmSls, subSls);
-    final parts = [sls, nmDesa, nmKec]
-        .where((value) => value.trim().isNotEmpty)
-        .toList();
+    final parts = [
+      sls,
+      nmDesa,
+      nmKec,
+    ].where((value) => value.trim().isNotEmpty).toList();
     return parts.isEmpty ? '' : parts.join(' · ');
   }
 

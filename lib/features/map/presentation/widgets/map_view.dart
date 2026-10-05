@@ -19,6 +19,9 @@ class MapView extends StatefulWidget {
   final MapConfig config;
   final List<Place> places;
   final Place? selectedPlace; // Add selectedPlace parameter
+  // Id titik yang di-highlight visual TANPA membuka panel. Marker dianggap
+  // "terpilih" visual jika cocok dengan selectedPlace.id ATAU highlightedPlaceId.
+  final String? highlightedPlaceId;
   final List<LatLng> polygon;
   final List<PolygonData> assignmentPolygons;
   final List<PolygonData> selectedPolygons; // Add selectedPolygons
@@ -48,6 +51,7 @@ class MapView extends StatefulWidget {
     required this.config,
     required this.places,
     this.selectedPlace, // Add to constructor
+    this.highlightedPlaceId,
     required this.polygon,
     this.assignmentPolygons = const [],
     this.selectedPolygons = const [], // Add to constructor
@@ -502,14 +506,24 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     Place p, {
     required bool isSelected,
     bool dragging = false,
+    bool outside = false,
   }) {
     final fontSize = _baseFontSize;
     final showMarkerNumber = _markerLabelMode == MarkerLabelMode.nomor;
-    final baseColor = dragging
-        ? Colors.deepPurple
-        : (showMarkerNumber
-              ? Colors.black
-              : (isSelected ? Colors.blue : Colors.red));
+    // Saat sebuah SLS dipilih: hijau bila di dalam batas, merah bila di luar.
+    final bool hasRegion = widget.polygon.isNotEmpty;
+    final Color baseColor;
+    if (dragging) {
+      baseColor = Colors.deepPurple;
+    } else if (isSelected) {
+      baseColor = Colors.blue;
+    } else if (hasRegion) {
+      baseColor = outside ? Colors.red : const Color(0xFF1D8F5A);
+    } else if (showMarkerNumber) {
+      baseColor = Colors.black;
+    } else {
+      baseColor = Colors.red;
+    }
     final markerLabel = showMarkerNumber && p.noBang != null
         ? p.noBang.toString()
         : p.name;
@@ -518,7 +532,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
             width: isSelected ? 26 : 22,
             height: isSelected ? 26 : 22,
             decoration: BoxDecoration(
-              color: dragging ? Colors.deepPurple : Colors.black,
+              color: baseColor,
               shape: BoxShape.circle,
               border: Border.all(
                 color: dragging
@@ -1146,8 +1160,10 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                           ButtonSegment(
                             value: 'pengawas',
                             label: Text('Pengawas'),
-                            icon: Icon(Icons.supervisor_account_outlined,
-                                size: 16),
+                            icon: Icon(
+                              Icons.supervisor_account_outlined,
+                              size: 16,
+                            ),
                           ),
                         ],
                         selected: {dim},
@@ -1218,6 +1234,8 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
         : 120;
     final double labelHeight = _scaledHeight(fontSize);
     final List<Place> renderList = _placesForRender(widget.places);
+    // Titik di luar batas SLS terpilih (untuk penanda warna merah).
+    final Set<String> outsideIds = _outsideIdsFor(renderList);
     final bool showMarkers = _showDirectoryMarkers || _showGroundcheckMarkers;
 
     return Stack(
@@ -1289,23 +1307,26 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
             ),
             if (widget.showAssignmentPolygons &&
                 widget.assignmentPolygons.isNotEmpty)
-              PolygonLayer(
-                polygons: widget.assignmentPolygons
-                    .where(_isAssignmentVisible)
-                    .map((p) {
-                  return Polygon(
-                    points: p.points,
-                    color: _assignmentFillColor(p),
-                    borderColor: _assignmentBorderColor(p),
-                    borderStrokeWidth: 2,
-                    label: _assignmentPolygonLabel(p),
-                    labelStyle: const TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  );
-                }).toList(),
+              IgnorePointer(
+                child: PolygonLayer(
+                  polygons: widget.assignmentPolygons
+                      .where(_isAssignmentVisible)
+                      .map((p) {
+                        return Polygon(
+                          points: p.points,
+                          color: _assignmentFillColor(p),
+                          borderColor: _assignmentBorderColor(p),
+                          borderStrokeWidth: 2,
+                          label: _assignmentPolygonLabel(p),
+                          labelStyle: const TextStyle(
+                            color: Colors.black,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        );
+                      })
+                      .toList(),
+                ),
               ),
             if (widget.selectedPolygons.isNotEmpty)
               PolygonLayer(
@@ -1381,7 +1402,9 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               widget.markerEditMode
                   ? DragMarkers(
                       markers: renderList.map((p) {
-                        final isSelected = widget.selectedPlace?.id == p.id;
+                        final isSelected =
+                            widget.selectedPlace?.id == p.id ||
+                            widget.highlightedPlaceId == p.id;
                         return DragMarker(
                           key: ValueKey('drag-${p.id}'),
                           point: p.position,
@@ -1394,13 +1417,16 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                                 p,
                                 isSelected: isSelected,
                                 dragging: isDragging,
+                                outside: outsideIds.contains(p.id),
                               ),
                         );
                       }).toList(),
                     )
                   : MarkerLayer(
                       markers: renderList.map((p) {
-                        final isSelected = widget.selectedPlace?.id == p.id;
+                        final isSelected =
+                            widget.selectedPlace?.id == p.id ||
+                            widget.highlightedPlaceId == p.id;
                         return Marker(
                           key: ValueKey(p.id),
                           point: p.position,
@@ -1410,7 +1436,11 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
                             behavior: HitTestBehavior.opaque,
                             onTap: () => widget.onPlaceTap(p),
                             onLongPress: () {},
-                            child: _buildMarkerChild(p, isSelected: isSelected),
+                            child: _buildMarkerChild(
+                              p,
+                              isSelected: isSelected,
+                              outside: outsideIds.contains(p.id),
+                            ),
                           ),
                         );
                       }).toList(),
@@ -1632,8 +1662,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
         // Dokumentasi (kanan-bawah).
         if (widget.showAssignmentPolygons &&
             widget.assignmentPolygons.isNotEmpty &&
-            (widget.colorAssignmentByStatus ||
-                _hasMultiplePetugasOrPengawas()))
+            (widget.colorAssignmentByStatus || _hasMultiplePetugasOrPengawas()))
           Positioned(
             left: 12,
             bottom: 24,
@@ -1784,6 +1813,30 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     );
   }
 
+  // Cache id titik yang berada DI LUAR polygon SLS terpilih, di-memo per
+  // identitas (polygon & daftar titik) agar tidak dihitung ulang saat pan/zoom.
+  List<LatLng>? _outsidePolyRef;
+  List<Place>? _outsideSrcRef;
+  Set<String> _outsideIdsCache = <String>{};
+
+  Set<String> _outsideIdsFor(List<Place> list) {
+    if (identical(_outsidePolyRef, widget.polygon) &&
+        identical(_outsideSrcRef, list)) {
+      return _outsideIdsCache;
+    }
+    final poly = widget.polygon;
+    final ids = <String>{};
+    if (poly.length >= 3) {
+      for (final p in list) {
+        if (!MapUtils.isPointInPolygon(p.position, poly)) ids.add(p.id);
+      }
+    }
+    _outsidePolyRef = poly;
+    _outsideSrcRef = list;
+    _outsideIdsCache = ids;
+    return ids;
+  }
+
   List<Place> _placesForRender(List<Place> input) {
     // 1. Filter by Polygon (Single or Multiple)
     List<Place> filteredByPolygon = input;
@@ -1796,10 +1849,10 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
         });
       }).toList();
     } else if (widget.polygon.isNotEmpty) {
-      // Filter for Single Polygon (SLS)
-      filteredByPolygon = input.where((p) {
-        return MapUtils.isPointInPolygon(p.position, widget.polygon);
-      }).toList();
+      // Single Polygon (SLS): JANGAN difilter. Tampilkan semua titik agar yang
+      // berada di LUAR batas juga terlihat (ditandai merah di marker), sedangkan
+      // yang di dalam batas hijau.
+      filteredByPolygon = input;
     }
 
     // Special Case: Single Polygon (SLS) - Show 100% (No Capping)

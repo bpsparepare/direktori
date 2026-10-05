@@ -199,9 +199,12 @@ class _FasihDailyPageState extends State<FasihDailyPage> {
   Widget _buildHeroSection() {
     final summary = _payload.summary;
     final deltaPositive = summary.totalDelta >= 0;
-    final deltaColor =
-        deltaPositive ? const Color(0xFF10B981) : const Color(0xFFEF4444);
-    final deltaIcon = deltaPositive ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded;
+    final deltaColor = deltaPositive
+        ? const Color(0xFF10B981)
+        : const Color(0xFFEF4444);
+    final deltaIcon = deltaPositive
+        ? Icons.arrow_upward_rounded
+        : Icons.arrow_downward_rounded;
     final roleLabel = (_profile?.role ?? '-').toUpperCase();
 
     return Container(
@@ -341,10 +344,7 @@ class _FasihDailyPageState extends State<FasihDailyPage> {
         children: [
           IconButton(
             onPressed: _prevDay,
-            icon: const Icon(
-              Icons.chevron_left_rounded,
-              color: Colors.white,
-            ),
+            icon: const Icon(Icons.chevron_left_rounded, color: Colors.white),
           ),
           Expanded(
             child: GestureDetector(
@@ -535,26 +535,29 @@ class _FasihDailyPageState extends State<FasihDailyPage> {
                       Wrap(
                         spacing: 6,
                         runSpacing: 4,
-                        children: row.statusCountsToday.entries.take(4).map(
-                          (e) => Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              '${e.key}: ${e.value}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF475569),
+                        children: row.statusCountsToday.entries
+                            .take(4)
+                            .map(
+                              (e) => Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  '${e.key}: ${e.value}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF475569),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                        ).toList(),
+                            )
+                            .toList(),
                       ),
                     ],
                   ],
@@ -671,8 +674,18 @@ class _FasihDailyPageState extends State<FasihDailyPage> {
   String _monthName(int month) {
     const names = [
       '',
-      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-      'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des',
     ];
     return names[month];
   }

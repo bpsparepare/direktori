@@ -65,11 +65,7 @@ class AnomaliPusatPerubahanKolom {
   final String? lama;
   final String? baru;
 
-  const AnomaliPusatPerubahanKolom({
-    required this.field,
-    this.lama,
-    this.baru,
-  });
+  const AnomaliPusatPerubahanKolom({required this.field, this.lama, this.baru});
 
   factory AnomaliPusatPerubahanKolom.fromMap(Map<String, dynamic> map) {
     return AnomaliPusatPerubahanKolom(
@@ -119,9 +115,12 @@ class AnomaliPusatCompareRow {
       isAktif: map['is_aktif'] as bool? ?? true,
       perubahan: rawPerubahan is List
           ? rawPerubahan
-              .map((e) => AnomaliPusatPerubahanKolom.fromMap(
-                  Map<String, dynamic>.from(e as Map)))
-              .toList()
+                .map(
+                  (e) => AnomaliPusatPerubahanKolom.fromMap(
+                    Map<String, dynamic>.from(e as Map),
+                  ),
+                )
+                .toList()
           : const [],
     );
   }
@@ -180,8 +179,9 @@ class AnomaliPusatImportService {
     'nama kepala keluarga': 'keluarga',
   };
 
-  static final RegExp _kategoriPattern =
-      RegExp(r'Anomali\s+(?:Data\s+)?(\d+)\s*\(([^)]*)\)');
+  static final RegExp _kategoriPattern = RegExp(
+    r'Anomali\s+(?:Data\s+)?(\d+)\s*\(([^)]*)\)',
+  );
 
   /// Baca 1 file excel, deteksi otomatis jenis datanya (usaha/keluarga) dari
   /// header kolom ("Nama Usaha" vs "Nama KRT"), lalu parse semua barisnya.
@@ -294,13 +294,15 @@ class AnomaliPusatImportService {
     for (final file in files) {
       final rows = byScope.putIfAbsent(file.scope, () => {});
       for (final row in file.rows) {
-        final key = '${row['assignment_id']}||${row['nama_subjek']}||'
+        final key =
+            '${row['assignment_id']}||${row['nama_subjek']}||'
             '${row['kategori_kode']}';
         rows[key] = row;
       }
     }
     return {
-      for (final entry in byScope.entries) entry.key: entry.value.values.toList(),
+      for (final entry in byScope.entries)
+        entry.key: entry.value.values.toList(),
     };
   }
 
@@ -317,8 +319,11 @@ class AnomaliPusatImportService {
     );
 
     final parsed = (response as List)
-        .map((e) =>
-            AnomaliPusatCompareRow.fromMap(Map<String, dynamic>.from(e as Map)))
+        .map(
+          (e) => AnomaliPusatCompareRow.fromMap(
+            Map<String, dynamic>.from(e as Map),
+          ),
+        )
         .toList();
 
     return AnomaliPusatCompareResult(scope: scope, rows: parsed);
@@ -336,11 +341,7 @@ class AnomaliPusatImportService {
 
     final response = await _client.rpc(
       'import_anomali_pusat_batch',
-      params: {
-        'p_scope': scope,
-        'p_rows': rows,
-        'p_mode': mode.rpcValue,
-      },
+      params: {'p_scope': scope, 'p_rows': rows, 'p_mode': mode.rpcValue},
     );
 
     final result = (response is List && response.isNotEmpty)

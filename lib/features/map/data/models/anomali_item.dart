@@ -62,8 +62,8 @@ class AnomalyItem {
       statusAnomali: (json['status_anomali'] ?? '').toString(),
       detail: parseDetail(json['detail']),
       temuanId: json['temuan_id'] is int ? json['temuan_id'] as int : null,
-      statusTindakLanjut:
-          (json['status_tindak_lanjut'] ?? 'belum_diperiksa').toString(),
+      statusTindakLanjut: (json['status_tindak_lanjut'] ?? 'belum_diperiksa')
+          .toString(),
       catatanPetugas: (json['catatan_petugas'] ?? '').toString(),
       diperiksaOleh: (json['diperiksa_oleh'] ?? '').toString(),
       diperiksaAt: parseDate(json['diperiksa_at']),
@@ -71,8 +71,7 @@ class AnomalyItem {
   }
 
   bool get sudahDitindaklanjuti =>
-      statusTindakLanjut.isNotEmpty &&
-      statusTindakLanjut != 'belum_diperiksa';
+      statusTindakLanjut.isNotEmpty && statusTindakLanjut != 'belum_diperiksa';
 
   bool get isFatal => statusAnomali.toLowerCase().contains('fatal');
 

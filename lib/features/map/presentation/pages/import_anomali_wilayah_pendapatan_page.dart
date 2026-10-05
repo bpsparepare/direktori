@@ -35,13 +35,14 @@ class _ImportAnomaliWilayahPendapatanPageState
   Future<void> _openFasih(String assignmentId) async {
     if (assignmentId.isEmpty) return;
     final uri = Uri.tryParse(
-        'https://fasih-sm.bps.go.id/app/assignment/$_fasihSurveyId/$assignmentId/edit');
+      'https://fasih-sm.bps.go.id/app/assignment/$_fasihSurveyId/$assignmentId/edit',
+    );
     if (uri == null) return;
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tidak bisa membuka Fasih')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Tidak bisa membuka Fasih')));
     }
   }
 
@@ -62,7 +63,9 @@ class _ImportAnomaliWilayahPendapatanPageState
   }
 
   Future<void> _tampilkan() async {
-    final batas = num.tryParse(_batasController.text.replaceAll('.', '').trim());
+    final batas = num.tryParse(
+      _batasController.text.replaceAll('.', '').trim(),
+    );
     if (batas == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Isi nilai ambang pendapatan dulu.')),
@@ -95,8 +98,7 @@ class _ImportAnomaliWilayahPendapatanPageState
   }
 
   Future<void> _masukkan() async {
-    final chosen =
-        _items.where((e) => _selected.contains(e.key)).toList();
+    final chosen = _items.where((e) => _selected.contains(e.key)).toList();
     if (chosen.isEmpty) return;
     setState(() => _isSaving = true);
     final messenger = ScaffoldMessenger.of(context);
@@ -186,9 +188,7 @@ class _ImportAnomaliWilayahPendapatanPageState
                 child: TextField(
                   controller: _batasController,
                   keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                  ],
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: InputDecoration(
                     labelText: _jenis == 'tinggi'
                         ? 'Batas bawah (pendapatan ≥ ...)'
@@ -205,8 +205,10 @@ class _ImportAnomaliWilayahPendapatanPageState
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _accent,
                   foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                 ),
                 icon: const Icon(Icons.search_rounded, size: 18),
                 label: const Text('Tampilkan'),
@@ -317,10 +319,13 @@ class _ImportAnomaliWilayahPendapatanPageState
                         if (item.sudahAnomali)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFD97706)
-                                  .withValues(alpha: 0.14),
+                              color: const Color(
+                                0xFFD97706,
+                              ).withValues(alpha: 0.14),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: const Text(

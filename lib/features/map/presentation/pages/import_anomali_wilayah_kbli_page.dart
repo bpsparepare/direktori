@@ -31,13 +31,14 @@ class _ImportAnomaliWilayahKbliPageState
   Future<void> _openFasih(String assignmentId) async {
     if (assignmentId.isEmpty) return;
     final uri = Uri.tryParse(
-        'https://fasih-sm.bps.go.id/app/assignment/$_fasihSurveyId/$assignmentId/edit');
+      'https://fasih-sm.bps.go.id/app/assignment/$_fasihSurveyId/$assignmentId/edit',
+    );
     if (uri == null) return;
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tidak bisa membuka Fasih')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Tidak bisa membuka Fasih')));
     }
   }
 
@@ -81,8 +82,7 @@ class _ImportAnomaliWilayahKbliPageState
       );
       return null;
     }
-    final all = _kbli.values.toList()
-      ..sort((a, b) => a.kode.compareTo(b.kode));
+    final all = _kbli.values.toList()..sort((a, b) => a.kode.compareTo(b.kode));
     final media = MediaQuery.of(context);
     var query = '';
     return showDialog<KbliInfo>(
@@ -90,17 +90,22 @@ class _ImportAnomaliWilayahKbliPageState
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setLocal) {
           final q = query.trim().toLowerCase();
-          final filtered = (q.isEmpty
-                  ? all
-                  : all.where((e) =>
-                      e.kode.contains(q) ||
-                      e.judul.toLowerCase().contains(q) ||
-                      e.deskripsi.toLowerCase().contains(q)))
-              .take(150)
-              .toList();
+          final filtered =
+              (q.isEmpty
+                      ? all
+                      : all.where(
+                          (e) =>
+                              e.kode.contains(q) ||
+                              e.judul.toLowerCase().contains(q) ||
+                              e.deskripsi.toLowerCase().contains(q),
+                        ))
+                  .take(150)
+                  .toList();
           return Dialog(
             insetPadding: EdgeInsets.symmetric(
-                horizontal: media.size.width * 0.05, vertical: 32),
+              horizontal: media.size.width * 0.05,
+              vertical: 32,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -109,9 +114,13 @@ class _ImportAnomaliWilayahKbliPageState
                   child: Row(
                     children: [
                       const Expanded(
-                        child: Text('Cari KBLI',
-                            style: TextStyle(
-                                fontSize: 17, fontWeight: FontWeight.w800)),
+                        child: Text(
+                          'Cari KBLI',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
                       IconButton(
                         onPressed: () => Navigator.of(dialogContext).pop(),
@@ -135,8 +144,9 @@ class _ImportAnomaliWilayahKbliPageState
                 ),
                 Flexible(
                   child: ConstrainedBox(
-                    constraints:
-                        BoxConstraints(maxHeight: media.size.height * 0.55),
+                    constraints: BoxConstraints(
+                      maxHeight: media.size.height * 0.55,
+                    ),
                     child: filtered.isEmpty
                         ? const Padding(
                             padding: EdgeInsets.all(24),
@@ -151,18 +161,22 @@ class _ImportAnomaliWilayahKbliPageState
                               final e = filtered[index];
                               return ListTile(
                                 dense: true,
-                                title: Text('${e.kode} · ${e.judul}',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13)),
+                                title: Text(
+                                  '${e.kode} · ${e.judul}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                  ),
+                                ),
                                 subtitle: e.deskripsi.isEmpty
                                     ? null
-                                    : Text(e.deskripsi,
+                                    : Text(
+                                        e.deskripsi,
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontSize: 11)),
-                                onTap: () =>
-                                    Navigator.of(dialogContext).pop(e),
+                                        style: const TextStyle(fontSize: 11),
+                                      ),
+                                onTap: () => Navigator.of(dialogContext).pop(e),
                               );
                             },
                           ),
@@ -180,7 +194,8 @@ class _ImportAnomaliWilayahKbliPageState
     final picked = await _cariKbli();
     if (picked == null || !mounted) return;
     await Clipboard.setData(
-        ClipboardData(text: '${picked.kode} - ${picked.judul}'));
+      ClipboardData(text: '${picked.kode} - ${picked.judul}'),
+    );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Disalin: ${picked.kode} - ${picked.judul}')),
@@ -230,8 +245,12 @@ class _ImportAnomaliWilayahKbliPageState
 
   List<UsahaKbliItem> get _viewItems {
     final list = [..._items];
-    list.sort((a, b) =>
-        _sortKey(a, _sortColumnIndex).compareTo(_sortKey(b, _sortColumnIndex)));
+    list.sort(
+      (a, b) => _sortKey(
+        a,
+        _sortColumnIndex,
+      ).compareTo(_sortKey(b, _sortColumnIndex)),
+    );
     if (!_sortAscending) {
       return list.reversed.toList();
     }
@@ -292,22 +311,27 @@ class _ImportAnomaliWilayahKbliPageState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(item.namaSubjek,
-                  style: const TextStyle(fontWeight: FontWeight.w800)),
+              Text(
+                item.namaSubjek,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
               const SizedBox(height: 8),
               _kv('Petugas', item.namaPetugas),
               _kv('Wilayah', item.wilayahLabel),
-              _kv('KBLI',
-                  '${item.kbli}${_kbliInfo(item.kbli) != null ? ' - ${_kbliInfo(item.kbli)!.judul}' : ''}'),
+              _kv(
+                'KBLI',
+                '${item.kbli}${_kbliInfo(item.kbli) != null ? ' - ${_kbliInfo(item.kbli)!.judul}' : ''}',
+              ),
               if (_kbliInfo(item.kbli)?.deskripsi.isNotEmpty ?? false)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Text(
                     _kbliInfo(item.kbli)!.deskripsi,
                     style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.blueGrey[600],
-                        height: 1.4),
+                      fontSize: 12,
+                      color: Colors.blueGrey[600],
+                      height: 1.4,
+                    ),
                   ),
                 ),
               _kv('Kategori', item.kategori),
@@ -324,7 +348,8 @@ class _ImportAnomaliWilayahKbliPageState
                   onPressed: () async {
                     final picked = await _cariKbli();
                     if (picked == null) return;
-                    final add = 'KBLI seharusnya ${picked.kode} '
+                    final add =
+                        'KBLI seharusnya ${picked.kode} '
                         '(${picked.judul})';
                     final cur = controller.text.trim();
                     controller.text = cur.isEmpty ? add : '$cur\n$add';
@@ -374,7 +399,8 @@ class _ImportAnomaliWilayahKbliPageState
       if (!mounted) return;
       messenger.showSnackBar(
         const SnackBar(
-            content: Text('Anomali KBLI ditandai & catatan dikirim.')),
+          content: Text('Anomali KBLI ditandai & catatan dikirim.'),
+        ),
       );
       await _loadPage(_page);
     } catch (e) {
@@ -517,8 +543,9 @@ class _ImportAnomaliWilayahKbliPageState
           style: const TextStyle(fontSize: 13, color: Color(0xFF10243E)),
           children: [
             TextSpan(
-                text: '$k: ',
-                style: const TextStyle(fontWeight: FontWeight.w700)),
+              text: '$k: ',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
             TextSpan(text: v.isEmpty ? '-' : v),
           ],
         ),
@@ -580,8 +607,10 @@ class _ImportAnomaliWilayahKbliPageState
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _accent,
                   foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 14,
+                  ),
                 ),
                 child: const Text('Cari'),
               ),
@@ -636,14 +665,15 @@ class _ImportAnomaliWilayahKbliPageState
         labelText: label,
         isDense: true,
         border: const OutlineInputBorder(),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       ),
       items: options
-          .map((o) => DropdownMenuItem(
-                value: o,
-                child: Text(o, overflow: TextOverflow.ellipsis),
-              ))
+          .map(
+            (o) => DropdownMenuItem(
+              value: o,
+              child: Text(o, overflow: TextOverflow.ellipsis),
+            ),
+          )
           .toList(),
       onChanged: (v) => onChanged(v ?? value),
     );
@@ -675,8 +705,10 @@ class _ImportAnomaliWilayahKbliPageState
     final rows = _viewItems;
     if (rows.isEmpty) {
       return Center(
-        child: Text('Tidak ada usaha ditemukan.',
-            style: TextStyle(color: Colors.blueGrey[600])),
+        child: Text(
+          'Tidak ada usaha ditemukan.',
+          style: TextStyle(color: Colors.blueGrey[600]),
+        ),
       );
     }
     return Column(
@@ -751,8 +783,7 @@ class _ImportAnomaliWilayahKbliPageState
       showCheckboxColumn: _batchMode,
       dataRowMinHeight: 48,
       dataRowMaxHeight: 92,
-      headingRowColor:
-          WidgetStatePropertyAll(_accent.withValues(alpha: 0.08)),
+      headingRowColor: WidgetStatePropertyAll(_accent.withValues(alpha: 0.08)),
       columnSpacing: 22,
       columns: [
         const DataColumn(label: Text('No')),
@@ -767,9 +798,7 @@ class _ImportAnomaliWilayahKbliPageState
         const DataColumn(label: Text('Fasih')),
         const DataColumn(label: Text('Aksi')),
       ],
-      rows: [
-        for (var i = 0; i < rows.length; i++) _buildDataRow(rows[i], i),
-      ],
+      rows: [for (var i = 0; i < rows.length; i++) _buildDataRow(rows[i], i)],
     );
   }
 
@@ -806,16 +835,19 @@ class _ImportAnomaliWilayahKbliPageState
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(it.kbli.isEmpty ? '-' : it.kbli,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 13)),
+                Text(
+                  it.kbli.isEmpty ? '-' : it.kbli,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
                 if (info != null && info.judul.isNotEmpty)
                   Text(
                     info.judul,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.blueGrey[600]),
+                    style: TextStyle(fontSize: 11, color: Colors.blueGrey[600]),
                   ),
               ],
             ),
@@ -824,13 +856,15 @@ class _ImportAnomaliWilayahKbliPageState
         DataCell(_cell(it.kegUtama, width: 170)),
         DataCell(_cell(it.produk, width: 170)),
         DataCell(_cell(it.statusText, width: 130)),
-        DataCell(IconButton(
-          icon: const Icon(Icons.open_in_new_rounded, size: 18),
-          color: const Color(0xFF1F6FEB),
-          tooltip: 'Buka di Fasih',
-          visualDensity: VisualDensity.compact,
-          onPressed: () => _openFasih(it.assignmentId),
-        )),
+        DataCell(
+          IconButton(
+            icon: const Icon(Icons.open_in_new_rounded, size: 18),
+            color: const Color(0xFF1F6FEB),
+            tooltip: 'Buka di Fasih',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _openFasih(it.assignmentId),
+          ),
+        ),
         DataCell(
           it.sudahAnomali
               ? TextButton.icon(
@@ -844,7 +878,9 @@ class _ImportAnomaliWilayahKbliPageState
                   style: FilledButton.styleFrom(
                     backgroundColor: _accent,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 4),
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
                     minimumSize: const Size(0, 32),
                   ),
                   child: const Text('Tandai'),

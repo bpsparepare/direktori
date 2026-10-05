@@ -81,14 +81,15 @@ class XlsxReader {
     for (final f in archive.files) {
       if (f.name == 'xl/worksheets/sheet1.xml') return f;
     }
-    final candidates = archive.files
-        .where(
-          (f) =>
-              f.name.startsWith('xl/worksheets/sheet') &&
-              f.name.endsWith('.xml'),
-        )
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
+    final candidates =
+        archive.files
+            .where(
+              (f) =>
+                  f.name.startsWith('xl/worksheets/sheet') &&
+                  f.name.endsWith('.xml'),
+            )
+            .toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
     return candidates.isEmpty ? null : candidates.first;
   }
 
