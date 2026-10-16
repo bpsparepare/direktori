@@ -60,6 +60,40 @@ async function refreshWithGoogle(
   return { ok: googleResponse.ok, status: googleResponse.status, data };
 }
 
+type OAuthClient = { id: string; secret: string };
+
+/// Client OAuth yang tersedia, client Web lebih dulu. Client yang sama
+/// tidak dicoba dua kali.
+function oauthClients(): OAuthClient[] {
+  const daftar: OAuthClient[] = [];
+  for (const [idKey, secretKey] of [
+    ["GOOGLE_AUTH_CLIENT_ID", "GOOGLE_AUTH_CLIENT_SECRET"],
+    ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+  ]) {
+    const id = Deno.env.get(idKey)?.trim() ?? "";
+    const secret = Deno.env.get(secretKey)?.trim() ?? "";
+    if (id.length > 0 && secret.length > 0 && !daftar.some((c) => c.id === id)) {
+      daftar.push({ id, secret });
+    }
+  }
+  return daftar;
+}
+
+/// Refresh dengan tiap client sampai berhasil. Client berikutnya hanya
+/// dicoba bila Google membalas `unauthorized_client` (token diterbitkan
+/// client lain); galat lain (mis. `invalid_grant`) langsung dikembalikan.
+async function refreshWithAnyClient(
+  clients: OAuthClient[],
+  refreshToken: string,
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  let result = { ok: false, status: 500, data: {} as Record<string, unknown> };
+  for (const client of clients) {
+    result = await refreshWithGoogle(client.id, client.secret, refreshToken);
+    if (result.ok || result.data["error"] !== "unauthorized_client") break;
+  }
+  return result;
+}
+
 /// Urutan pemilihan token sama dengan aplikasi sebelumnya:
 /// 1. token pribadi milik user pemanggil,
 /// 2. akun kantor utama (google_email),
@@ -120,18 +154,17 @@ Deno.serve(async (req: Request) => {
     return json({ error: "method_not_allowed" }, 405);
   }
 
-  // Refresh token Drive diterbitkan oleh client Web ("BPS Kota Parepare Web")
-  // yang disimpan di GOOGLE_AUTH_CLIENT_*. GOOGLE_CLIENT_* adalah client
-  // Desktop (Bolt - Backoffice) dan hanya jadi fallback.
-  const clientId = (Deno.env.get("GOOGLE_AUTH_CLIENT_ID") ??
-    Deno.env.get("GOOGLE_CLIENT_ID"))?.trim() ?? "";
-  const clientSecret = (Deno.env.get("GOOGLE_AUTH_CLIENT_SECRET") ??
-    Deno.env.get("GOOGLE_CLIENT_SECRET"))?.trim() ?? "";
-  if (clientId.length === 0 || clientSecret.length === 0) {
+  // Refresh token hanya bisa ditukar oleh client OAuth yang menerbitkannya.
+  // Akun yang dihubungkan dari web direktori memakai client Web
+  // ("BPS Kota Parepare Web", GOOGLE_AUTH_CLIENT_*); yang dihubungkan dari
+  // aplikasi Bolt memakai client Desktop ("Bolt - Backoffice",
+  // GOOGLE_CLIENT_*). Keduanya dicoba berurutan.
+  const clients = oauthClients();
+  if (clients.length === 0) {
     return json(
       {
         error: "missing_google_oauth_config",
-        message: "GOOGLE_AUTH_CLIENT_ID / GOOGLE_AUTH_CLIENT_SECRET belum diatur",
+        message: "GOOGLE_AUTH_CLIENT_* / GOOGLE_CLIENT_* belum diatur",
       },
       500,
     );
@@ -151,11 +184,7 @@ Deno.serve(async (req: Request) => {
     if (legacyRefreshToken.length === 0) {
       return json({ error: "missing_refresh_token" }, 400);
     }
-    const result = await refreshWithGoogle(
-      clientId,
-      clientSecret,
-      legacyRefreshToken,
-    );
+    const result = await refreshWithAnyClient(clients, legacyRefreshToken);
     if (!result.ok) {
       console.error("google-drive-refresh legacy: refresh gagal", {
         status: result.status,
@@ -247,7 +276,7 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  const result = await refreshWithGoogle(clientId, clientSecret, refreshToken);
+  const result = await refreshWithAnyClient(clients, refreshToken);
   if (!result.ok) {
     console.error("google-drive-refresh: refresh ditolak Google", {
       ...meta,
