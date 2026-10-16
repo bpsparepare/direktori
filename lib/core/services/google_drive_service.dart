@@ -17,62 +17,25 @@ class GoogleDriveException implements Exception {
 }
 
 class GoogleDriveService {
-  static const String _refreshFunctionName = 'google-drive-refresh';
+  static const String _tokenFunctionName = 'google-drive-refresh';
+  static const String _defaultTokenError =
+      'Token Google Drive kadaluarsa. Mohon hubungkan ulang akun Google Drive.';
 
-  GoogleDriveService({
-    SupabaseClient? client,
-    this.primaryCompanyEmail = 'bps737273@gmail.com',
-  }) : _supabaseClient = client ?? SupabaseConfig.client;
+  GoogleDriveService({SupabaseClient? client})
+    : _supabaseClient = client ?? SupabaseConfig.client;
 
   final SupabaseClient _supabaseClient;
-  final String primaryCompanyEmail;
-  Map<String, dynamic>? _lastSelectedTokenMeta;
   final Map<String, String> _folderIdCache = {};
 
-  DateTime? _tryParseTokenExpiry(String? raw) {
-    if (raw == null || raw.trim().isEmpty) return null;
-
-    var normalized = raw.contains('T') ? raw : raw.replaceFirst(' ', 'T');
-    if (RegExp(r'[+-]\d\d$').hasMatch(normalized)) {
-      normalized =
-          '${normalized.substring(0, normalized.length - 3)}'
-          '${normalized.substring(normalized.length - 3)}:00';
-    } else if (normalized.endsWith('+00')) {
-      normalized = '$normalized:00';
-    }
-
-    final parsed = DateTime.tryParse(normalized);
-    if (parsed == null) {
-      debugPrint('GoogleDriveService: token_expiry tidak bisa diparse: $raw');
-    }
-    return parsed;
-  }
-
-  void _setAndLogTokenMeta({
-    required String source,
-    required Map<String, dynamic> tokenData,
-  }) {
-    final refreshToken = tokenData['refresh_token']?.toString();
-    _lastSelectedTokenMeta = {
-      'source': source,
-      'id': tokenData['id']?.toString(),
-      'google_email': tokenData['google_email']?.toString(),
-      'token_expiry': tokenData['token_expiry']?.toString(),
-      'has_refresh_token': refreshToken != null && refreshToken.isNotEmpty,
-      'is_shared_company_account': tokenData['is_shared_company_account'],
-    };
-    debugPrint(
-      'GoogleDriveService: token_source=$source '
-      'email=${_lastSelectedTokenMeta?['google_email']} '
-      'is_shared=${_lastSelectedTokenMeta?['is_shared_company_account']} '
-      'has_refresh=${_lastSelectedTokenMeta?['has_refresh_token']} '
-      'expiry=${_lastSelectedTokenMeta?['token_expiry']} '
-      'id=${_lastSelectedTokenMeta?['id']}',
-    );
-  }
+  /// Access token terakhir dari server; dipakai ulang sampai mendekati expiry
+  /// supaya tidak memanggil Edge Function di setiap request Drive.
+  String? _cachedAccessToken;
+  DateTime? _cachedExpiry;
+  Map<String, dynamic>? _lastTokenMeta;
+  String? _lastTokenError;
 
   void _logOpTokenMeta(String op) {
-    final meta = _lastSelectedTokenMeta;
+    final meta = _lastTokenMeta;
     if (meta == null) {
       debugPrint('GoogleDriveService: $op token_meta=none');
       return;
@@ -82,193 +45,67 @@ class GoogleDriveService {
       'GoogleDriveService: $op token_source=${meta['source']} '
       'email=${meta['google_email']} '
       'is_shared=${meta['is_shared_company_account']} '
-      'has_refresh=${meta['has_refresh_token']} '
-      'expiry=${meta['token_expiry']} id=${meta['id']}',
+      'refreshed=${meta['refreshed']} '
+      'expiry=${meta['expires_at']} id=${meta['token_id']}',
     );
   }
 
-  Future<Map<String, dynamic>?> _loadTokenData() async {
-    Map<String, dynamic>? tokenData;
-    final authUser = _supabaseClient.auth.currentUser;
-
-    if (authUser != null) {
-      try {
-        final appUser = await _supabaseClient
-            .from('users')
-            .select('id')
-            .eq('auth_uid', authUser.id)
-            .maybeSingle();
-
-        final internalUserId = appUser?['id']?.toString();
-        if (internalUserId != null && internalUserId.isNotEmpty) {
-          tokenData = await _supabaseClient
-              .from('google_account_tokens')
-              .select(
-                'id, access_token, refresh_token, token_expiry, user_id, '
-                'google_email, is_shared_company_account, updated_at',
-              )
-              .eq('user_id', internalUserId)
-              .or(
-                'is_shared_company_account.is.null,'
-                'is_shared_company_account.eq.false',
-              )
-              .order('updated_at', ascending: false)
-              .limit(1)
-              .maybeSingle();
-
-          if (tokenData != null) {
-            _setAndLogTokenMeta(source: 'personal', tokenData: tokenData);
-          }
-        }
-      } catch (e) {
-        debugPrint('GoogleDriveService: gagal baca token personal: $e');
-      }
-    }
-
-    if (tokenData == null) {
-      try {
-        tokenData = await _supabaseClient
-            .from('google_account_tokens')
-            .select(
-              'id, access_token, refresh_token, token_expiry, user_id, '
-              'google_email, is_shared_company_account, updated_at',
-            )
-            .eq('google_email', primaryCompanyEmail)
-            .limit(1)
-            .maybeSingle();
-
-        if (tokenData != null) {
-          _setAndLogTokenMeta(source: 'primary_email', tokenData: tokenData);
-        }
-      } catch (e) {
-        debugPrint('GoogleDriveService: gagal baca token primary email: $e');
-      }
-    }
-
-    if (tokenData == null) {
-      try {
-        tokenData = await _supabaseClient
-            .from('google_account_tokens')
-            .select(
-              'id, access_token, refresh_token, token_expiry, user_id, '
-              'google_email, is_shared_company_account, updated_at',
-            )
-            .eq('is_shared_company_account', true)
-            .order('updated_at', ascending: false)
-            .limit(1)
-            .maybeSingle();
-
-        if (tokenData != null) {
-          _setAndLogTokenMeta(source: 'shared_flag', tokenData: tokenData);
-        }
-      } catch (e) {
-        debugPrint('GoogleDriveService: gagal baca token shared: $e');
-      }
-    }
-
-    return tokenData;
-  }
-
+  /// Ambil access token Google Drive lewat Edge Function `google-drive-refresh`.
+  ///
+  /// Pemilihan akun, refresh, dan penyimpanan token dilakukan di server dengan
+  /// service role, sehingga `refresh_token` tidak pernah sampai ke aplikasi.
+  /// Mengembalikan null bila gagal; alasannya disimpan di [_lastTokenError].
   Future<String?> getAccessToken({bool forceRefresh = false}) async {
-    try {
-      final tokenData = await _loadTokenData();
-      if (tokenData == null) return null;
-
-      final accessTokenRaw = tokenData['access_token']?.toString() ?? '';
-      var accessToken = accessTokenRaw;
-      final refreshToken = tokenData['refresh_token']?.toString();
-      final tokenExpiry = _tryParseTokenExpiry(
-        tokenData['token_expiry']?.toString(),
-      );
-      final tokenId = tokenData['id']?.toString();
-      final now = DateTime.now();
-      const buffer = Duration(minutes: 5);
-
-      final shouldRefresh =
-          forceRefresh ||
-          (tokenExpiry != null && now.isAfter(tokenExpiry.subtract(buffer)));
-
-      if (shouldRefresh) {
-        if (refreshToken == null || refreshToken.isEmpty) {
-          debugPrint(
-            'GoogleDriveService: token perlu refresh tetapi refresh_token kosong',
-          );
-          return tokenExpiry != null && now.isBefore(tokenExpiry)
-              ? accessToken
-              : null;
-        }
-
-        final refreshed = await _refreshAccessToken(refreshToken);
-        final refreshedToken = refreshed?.accessToken ?? '';
-        if (refreshedToken.isEmpty) {
-          return null;
-        }
-
-        accessToken = refreshedToken;
-        if (tokenId != null && tokenId.isNotEmpty) {
-          await _supabaseClient
-              .from('google_account_tokens')
-              .update({
-                'access_token': refreshedToken,
-                'updated_at': DateTime.now().toIso8601String(),
-                'token_expiry': DateTime.now()
-                    .add(Duration(seconds: refreshed?.expiresIn ?? 3500))
-                    .toIso8601String(),
-              })
-              .eq('id', tokenId);
-        }
-      } else if (accessToken.isEmpty) {
-        return null;
-      } else if (tokenExpiry != null && now.isAfter(tokenExpiry)) {
-        return null;
-      }
-
-      return accessToken;
-    } catch (e) {
-      debugPrint('GoogleDriveService: gagal mendapatkan access token: $e');
-      return null;
+    final cached = _cachedAccessToken;
+    final cachedExpiry = _cachedExpiry;
+    if (!forceRefresh &&
+        cached != null &&
+        cachedExpiry != null &&
+        DateTime.now().isBefore(
+          cachedExpiry.subtract(const Duration(minutes: 1)),
+        )) {
+      return cached;
     }
-  }
 
-  Future<_RefreshedGoogleToken?> _refreshAccessToken(
-    String refreshToken,
-  ) async {
-    final authUser = _supabaseClient.auth.currentUser;
-    if (authUser == null) {
-      debugPrint(
-        'GoogleDriveService: refresh token via function but auth user null',
-      );
-      return null;
-    }
+    _cachedAccessToken = null;
+    _cachedExpiry = null;
+    _lastTokenError = null;
 
     try {
       final response = await _supabaseClient.functions.invoke(
-        _refreshFunctionName,
-        body: {'refresh_token': refreshToken},
+        _tokenFunctionName,
+        body: {'mode': 'access_token', 'force_refresh': forceRefresh},
       );
       final data = response.data;
       if (data is! Map) {
-        debugPrint(
-          'GoogleDriveService: refresh token function return invalid payload',
-        );
+        debugPrint('GoogleDriveService: token function payload tidak valid');
         return null;
       }
 
       final accessToken = data['access_token']?.toString() ?? '';
       if (accessToken.isEmpty) {
-        debugPrint(
-          'GoogleDriveService: refresh token function missing access_token',
-        );
+        debugPrint('GoogleDriveService: token function tanpa access_token');
         return null;
       }
 
-      final expiresIn = (data['expires_in'] as num?)?.toInt() ?? 3500;
-      return _RefreshedGoogleToken(
-        accessToken: accessToken,
-        expiresIn: expiresIn,
+      _lastTokenMeta = Map<String, dynamic>.from(data)..remove('access_token');
+      _logOpTokenMeta('getAccessToken');
+      _cachedAccessToken = accessToken;
+      _cachedExpiry = DateTime.tryParse(data['expires_at']?.toString() ?? '');
+      return accessToken;
+    } on FunctionException catch (e) {
+      final details = e.details;
+      if (details is Map) {
+        _lastTokenMeta = Map<String, dynamic>.from(details);
+        final message = details['message']?.toString();
+        if (message != null && message.isNotEmpty) _lastTokenError = message;
+      }
+      debugPrint(
+        'GoogleDriveService: token function gagal (${e.status}): $details',
       );
+      return null;
     } catch (e) {
-      debugPrint('GoogleDriveService: exception saat refresh via function: $e');
+      debugPrint('GoogleDriveService: gagal mendapatkan access token: $e');
       return null;
     }
   }
@@ -279,9 +116,7 @@ class GoogleDriveService {
   ) async {
     var token = await getAccessToken();
     if (token == null || token.isEmpty) {
-      throw const GoogleDriveException(
-        'Token Google Drive kadaluarsa. Mohon hubungkan ulang akun Google Drive.',
-      );
+      throw GoogleDriveException(_lastTokenError ?? _defaultTokenError);
     }
 
     _logOpTokenMeta(opName);
@@ -557,14 +392,4 @@ class GoogleDriveService {
   String _escapeDriveQueryLiteral(String value) {
     return value.replaceAll("'", r"\'");
   }
-}
-
-class _RefreshedGoogleToken {
-  final String accessToken;
-  final int expiresIn;
-
-  const _RefreshedGoogleToken({
-    required this.accessToken,
-    required this.expiresIn,
-  });
 }
