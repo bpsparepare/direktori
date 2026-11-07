@@ -4,6 +4,7 @@ import '../../data/models/revisit_models.dart';
 import '../../data/services/revisit_service.dart';
 import '../widgets/revisit_widgets.dart';
 import 'revisit_admin_tabs.dart';
+import 'revisit_laporan_doc_dialog.dart';
 import 'revisit_laporan_form_page.dart';
 import 'revisit_reject_tab.dart';
 
@@ -73,7 +74,7 @@ class _RevisitPageState extends State<RevisitPage> {
     if (tabs.isEmpty) {
       return Scaffold(
         backgroundColor: revisitBackground,
-        appBar: _appBar(),
+        appBar: _appBar(isAdmin: ctx.isAdmin),
         body: const Center(
           child: Padding(
             padding: EdgeInsets.all(32),
@@ -91,6 +92,7 @@ class _RevisitPageState extends State<RevisitPage> {
       child: Scaffold(
         backgroundColor: revisitBackground,
         appBar: _appBar(
+          isAdmin: ctx.isAdmin,
           bottom: TabBar(
             isScrollable: tabs.length > 3,
             tabAlignment: tabs.length > 3 ? TabAlignment.start : null,
@@ -105,11 +107,57 @@ class _RevisitPageState extends State<RevisitPage> {
     );
   }
 
-  AppBar _appBar({PreferredSizeWidget? bottom}) {
+  AppBar _appBar({PreferredSizeWidget? bottom, bool isAdmin = false}) {
     return AppBar(
       title: const Text('Revisit'),
       backgroundColor: revisitPrimary,
       foregroundColor: Colors.white,
+      actions: [
+        if (isAdmin) ...[
+          TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
+            icon: const Icon(Icons.table_view_rounded),
+            label: const Text('List Harian'),
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => const RevisitLaporanDocDialog(
+                jenis: RevisitKeluaran.listHarian,
+              ),
+            ),
+          ),
+          TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
+            icon: const Icon(Icons.picture_as_pdf_rounded),
+            label: const Text('SPD'),
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) =>
+                  const RevisitLaporanDocDialog(jenis: RevisitKeluaran.spd),
+            ),
+          ),
+          TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
+            icon: const Icon(Icons.description_outlined),
+            label: const Text('SPD 1 Hal'),
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) =>
+                  const RevisitLaporanDocDialog(jenis: RevisitKeluaran.spd1),
+            ),
+          ),
+          TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
+            icon: const Icon(Icons.description_rounded),
+            label: const Text('Buat Laporan'),
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) =>
+                  const RevisitLaporanDocDialog(jenis: RevisitKeluaran.laporan),
+            ),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ],
       bottom: bottom,
     );
   }

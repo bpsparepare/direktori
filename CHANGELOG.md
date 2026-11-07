@@ -1,5 +1,42 @@
 # Catatan Rilis — Direktori BPS Parepare
 
+## v3.4.2+36 — 2026-11-05
+
+Rilis ini menambah saringan laporan dan isian penyisiran SLS pada menu **Revisit**.
+
+### ✨ Fitur Baru
+- **Saring laporan menurut jumlah didata (admin).** Di Buat Laporan Revisit ada pilihan "Laporan yang diambil": semua laporan, hanya yang didata 0, atau hanya yang didata 0–2. Berlaku untuk Buat Laporan, Unduh PDF, dan Cek Pejabat; nama folder/dokumen diberi tanda, mis. "(didata 0-2)".
+- **Penyisiran SLS.** Form laporan petugas dan dialog edit admin kini memuat nama jalan/perumahan yang disisir dan jumlah bangunan. Isinya tercetak di Hasil Kegiatan: "Setelah konfirmasi dengan ketua SLS, dilakukan pola penyisiran di jalan/perumahan … dengan jumlah bangunan sekitar …" (kosong = titik-titik untuk diisi tangan).
+
+### 🗄️ Database
+- Migrasi `20261105120000_revisit_laporan_penyisiran.sql` (sudah diterapkan).
+
+## v3.4.1+35 — 2026-10-18
+
+Rilis pemeliharaan keamanan: aplikasi memakai kunci akses Supabase yang baru. Kunci lama akan segera dinonaktifkan, jadi **versi sebelum 3.4.1 tidak akan bisa terhubung ke server** — perbarui ke versi ini.
+
+### 🔧 Peningkatan
+- Kunci koneksi Supabase diganti ke kunci *publishable* yang baru. Tidak ada perubahan tampilan atau cara pakai.
+
+## v3.4.0+34 — 2026-10-12
+
+Rilis ini melengkapi menu **Revisit** dengan pembuatan dokumen administrasi untuk admin: laporan perjalanan dinas, list harian translok, dan SPD.
+
+### ✨ Fitur Baru
+- **Buat Laporan (admin).** Laporan Perjalanan Dinas dibuat otomatis sebagai Google Docs, satu dokumen per petugas, satu laporan per hari ke- yang masing-masing mulai di halaman baru. Format mengikuti contoh laporan (data umum, uraian pekerjaan, foto dokumentasi dua per baris, pejabat yang ditemui, legalitas). Bagian C dan D selalu dalam satu halaman.
+- **List Harian (Excel).** Daftar translok dari jadwal alokasi: NIP lama peserta, tujuan ke-, asal, tujuan (kode kecamatan), tanggal berangkat/pulang, satu baris per orang per hari. Dilengkapi sheet "Cek Petugas" untuk melihat petugas yang belum ada.
+- **SPD (PDF).** Surat Perjalanan Dinas 2 halaman per perjalanan, dan **SPD 1 Hal** (satu halaman, satu per orang per hari). Nomor SPD berurutan dan bulannya mengikuti tanggal perjalanan.
+- **Pilih beberapa petugas** sekaligus pada List Harian, SPD, dan Buat Laporan.
+- **Pejabat yang ditemui.** Form laporan petugas kini memuat nama & jabatan pejabat (untuk visum), yang langsung tercetak di laporan.
+- **Kelola dari Rekap (admin).** Detail jadwal bisa diklik untuk melihat laporannya; jadwal alokasi dan laporan yang tidak dipakai bisa dihapus.
+
+### 🔧 Peningkatan
+- Tanggal laporan mengikuti jadwal hari ke- (hari 1–14 = 17–30 September, hari 15–18 = 5–8 Oktober), bukan tanggal input.
+- Foto laporan diambil dari thumbnail Drive dan diunduh beberapa sekaligus sehingga pembuatan dokumen lebih cepat.
+
+### 🗄️ Database
+- Jalankan migrasi `20261012120000_revisit_laporan_pejabat.sql` agar nama & jabatan pejabat bisa disimpan.
+
 ## v3.3.0+32 — 2026-10-01
 
 Rilis ini menghadirkan menu **Revisit**: kunjungan ulang SLS oleh tim khusus, lengkap dengan alokasi jadwal, laporan berfoto, rekap progres, dan penandaan reject.

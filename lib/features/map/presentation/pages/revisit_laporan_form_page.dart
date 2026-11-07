@@ -55,6 +55,13 @@ class _RevisitLaporanFormPageState extends State<RevisitLaporanFormPage> {
   final TextEditingController _belumController = TextEditingController();
   final TextEditingController _submitController = TextEditingController();
   final TextEditingController _catatanController = TextEditingController();
+  // Pejabat yang ditemui (dicetak di laporan untuk visum).
+  final TextEditingController _pejabatNamaController = TextEditingController();
+  final TextEditingController _pejabatJabatanController =
+      TextEditingController();
+  // Penyisiran SLS (dicetak di Hasil Kegiatan laporan).
+  final TextEditingController _jalanController = TextEditingController();
+  final TextEditingController _bangunanController = TextEditingController();
 
   late DateTime _tanggal;
   String? _status;
@@ -82,6 +89,8 @@ class _RevisitLaporanFormPageState extends State<RevisitLaporanFormPage> {
     if (_kosong(_submitController)) 'jumlah submit',
     if (_kosong(_belumController)) 'potensi belum didata',
     if (_kosong(_catatanController)) 'catatan',
+    if (_kosong(_pejabatNamaController)) 'nama pejabat',
+    if (_kosong(_pejabatJabatanController)) 'jabatan pejabat',
   ];
   String? _progress;
 
@@ -99,6 +108,10 @@ class _RevisitLaporanFormPageState extends State<RevisitLaporanFormPage> {
     _belumController.dispose();
     _submitController.dispose();
     _catatanController.dispose();
+    _pejabatNamaController.dispose();
+    _pejabatJabatanController.dispose();
+    _jalanController.dispose();
+    _bangunanController.dispose();
     super.dispose();
   }
 
@@ -136,6 +149,10 @@ class _RevisitLaporanFormPageState extends State<RevisitLaporanFormPage> {
         _existingFoto = List.of(existing?.foto ?? const []);
         _loading = false;
       });
+      if (existing != null) {
+        await _loadPejabat(existing.id);
+        await _loadPenyisiran(existing.id);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -248,6 +265,36 @@ class _RevisitLaporanFormPageState extends State<RevisitLaporanFormPage> {
     }
   }
 
+  /// Nama & jabatan pejabat laporan yang sudah ada. Gagal dibaca (mis.
+  /// database belum diperbarui) tidak menghalangi pengisian laporan.
+  Future<void> _loadPejabat(String laporanId) async {
+    try {
+      final p = (await _service.fetchPejabat([laporanId]))[laporanId];
+      if (!mounted || p == null) return;
+      setState(() {
+        _pejabatNamaController.text = p.nama;
+        _pejabatJabatanController.text = p.jabatan;
+      });
+    } catch (e) {
+      debugPrint('[RevisitLaporanForm] baca pejabat gagal: $e');
+    }
+  }
+
+  /// Nama jalan & jumlah bangunan laporan yang sudah ada. Gagal dibaca
+  /// tidak menghalangi pengisian laporan.
+  Future<void> _loadPenyisiran(String laporanId) async {
+    try {
+      final p = (await _service.fetchPenyisiran([laporanId]))[laporanId];
+      if (!mounted || p == null) return;
+      setState(() {
+        _jalanController.text = p.jalan;
+        _bangunanController.text = p.bangunan?.toString() ?? '';
+      });
+    } catch (e) {
+      debugPrint('[RevisitLaporanForm] baca penyisiran gagal: $e');
+    }
+  }
+
   Future<void> _simpan() async {
     final kurang = _belumDiisi;
     if (kurang.isNotEmpty) {
@@ -289,6 +336,36 @@ class _RevisitLaporanFormPageState extends State<RevisitLaporanFormPage> {
           extension: foto.extension,
         );
         _newFoto.removeAt(0);
+      }
+
+      // Disimpan setelah foto: bila gagal (mis. database belum diperbarui),
+      // laporan & foto sudah aman dan petugas cukup menekan simpan lagi.
+      if (mounted) {
+        setState(() => _progress = 'Menyimpan pejabat yang ditemui…');
+      }
+      try {
+        await _service.simpanPejabat(
+          laporanId,
+          nama: _pejabatNamaController.text,
+          jabatan: _pejabatJabatanController.text,
+        );
+      } catch (e) {
+        throw Exception(
+          'Laporan & foto tersimpan, tetapi nama/jabatan pejabat gagal '
+          'disimpan: $e',
+        );
+      }
+      try {
+        await _service.simpanPenyisiran(
+          laporanId,
+          jalan: _jalanController.text,
+          bangunan: int.tryParse(_bangunanController.text.trim()),
+        );
+      } catch (e) {
+        throw Exception(
+          'Laporan & foto tersimpan, tetapi nama jalan/jumlah bangunan gagal '
+          'disimpan: $e',
+        );
       }
 
       if (!mounted) return;
@@ -452,6 +529,10 @@ class _RevisitLaporanFormPageState extends State<RevisitLaporanFormPage> {
                     ),
                     const SizedBox(height: 10),
                     _buildCatatan(),
+                    const SizedBox(height: 14),
+                    _buildPenyisiran(),
+                    const SizedBox(height: 14),
+                    _buildPejabat(),
                   ]),
                 ],
               ),
@@ -636,6 +717,7 @@ class _RevisitLaporanFormPageState extends State<RevisitLaporanFormPage> {
     String label,
     TextEditingController controller, {
     String? keterangan,
+    bool wajib = true,
   }) {
     return Row(
       children: [
@@ -683,12 +765,94 @@ class _RevisitLaporanFormPageState extends State<RevisitLaporanFormPage> {
               hintText: 'isi angka',
               isDense: true,
               border: const OutlineInputBorder(),
-              enabledBorder: _cekWajib && _kosong(controller)
+              enabledBorder: wajib && _cekWajib && _kosong(controller)
                   ? const OutlineInputBorder(
                       borderSide: BorderSide(color: _merah, width: 1.5),
                     )
                   : null,
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Jalan/perumahan yang disisir & perkiraan jumlah bangunan; dicetak di
+  /// Hasil Kegiatan laporan (kosong = titik-titik).
+  Widget _buildPenyisiran() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Penyisiran SLS',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _jalanController,
+          enabled: !_saving,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Nama jalan/perumahan',
+            hintText: 'mis. Jl. Bau Massepe / Perumahan Griya Lumpue',
+            isDense: true,
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 10),
+        _angkaField(
+          'Jumlah bangunan',
+          _bangunanController,
+          keterangan: 'Perkiraan bangunan yang disisir',
+          wajib: false,
+        ),
+      ],
+    );
+  }
+
+  /// Pejabat yang ditemui (mis. lurah/ketua RT); dicetak di bagian C
+  /// laporan perjalanan dinas untuk diberi visum.
+  Widget _buildPejabat() {
+    InputDecoration dekor(String label, String hint, bool kosong) =>
+        InputDecoration(
+          labelText: label,
+          hintText: hint,
+          isDense: true,
+          border: const OutlineInputBorder(),
+          errorText: _cekWajib && kosong ? '$label wajib diisi' : null,
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Pejabat yang ditemui (untuk visum)',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _pejabatNamaController,
+          enabled: !_saving,
+          textCapitalization: TextCapitalization.words,
+          onChanged: (_) {
+            if (_cekWajib) setState(() {});
+          },
+          decoration: dekor(
+            'Nama pejabat *',
+            'mis. Hj. Yenny Hirawati Yusuf, S.E',
+            _kosong(_pejabatNamaController),
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _pejabatJabatanController,
+          enabled: !_saving,
+          onChanged: (_) {
+            if (_cekWajib) setState(() {});
+          },
+          decoration: dekor(
+            'Jabatan *',
+            'mis. Lurah Lumpue / Ketua RT 002',
+            _kosong(_pejabatJabatanController),
           ),
         ),
       ],

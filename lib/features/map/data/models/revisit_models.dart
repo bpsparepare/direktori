@@ -378,6 +378,10 @@ class RevisitLaporan {
   final DateTime? updatedAt;
   final List<RevisitFoto> foto;
 
+  /// Jalan yang disisir & jumlah bangunan. Tidak ikut get laporan; diisi
+  /// lewat [denganPenyisiran] saat menyusun dokumen.
+  final RevisitPenyisiran penyisiran;
+
   const RevisitLaporan({
     required this.id,
     required this.kodeSls,
@@ -397,7 +401,30 @@ class RevisitLaporan {
     required this.catatan,
     required this.updatedAt,
     required this.foto,
+    this.penyisiran = RevisitPenyisiran.kosongan,
   });
+
+  RevisitLaporan denganPenyisiran(RevisitPenyisiran p) => RevisitLaporan(
+    id: id,
+    kodeSls: kodeSls,
+    nmKec: nmKec,
+    nmDesa: nmDesa,
+    nmSls: nmSls,
+    petugasId: petugasId,
+    petugasNama: petugasNama,
+    petugasRole: petugasRole,
+    petugasTim: petugasTim,
+    hariKe: hariKe,
+    tanggal: tanggal,
+    status: status,
+    jumlahDidata: jumlahDidata,
+    jumlahSubmit: jumlahSubmit,
+    jumlahBelumDidata: jumlahBelumDidata,
+    catatan: catatan,
+    updatedAt: updatedAt,
+    foto: foto,
+    penyisiran: p,
+  );
 
   factory RevisitLaporan.fromJson(Map<String, dynamic> json) {
     final rawFoto = json['foto'];
@@ -429,6 +456,50 @@ class RevisitLaporan {
   }
 
   String get slsLabel => revisitSlsLabel(kodeSls, nmSls);
+}
+
+/// Penyisiran SLS: nama jalan/perumahan yang disisir dan perkiraan jumlah
+/// bangunan (dicetak di Hasil Kegiatan laporan).
+class RevisitPenyisiran {
+  final String jalan;
+  final int? bangunan;
+
+  const RevisitPenyisiran({required this.jalan, required this.bangunan});
+
+  static const RevisitPenyisiran kosongan = RevisitPenyisiran(
+    jalan: '',
+    bangunan: null,
+  );
+
+  bool get kosong => jalan.trim().isEmpty && bangunan == null;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RevisitPenyisiran &&
+      other.jalan.trim() == jalan.trim() &&
+      other.bangunan == bangunan;
+
+  @override
+  int get hashCode => Object.hash(jalan.trim(), bangunan);
+}
+
+/// Pejabat yang ditemui saat revisit (dicetak di laporan untuk visum).
+class RevisitPejabat {
+  final String nama;
+  final String jabatan;
+
+  const RevisitPejabat({required this.nama, required this.jabatan});
+
+  bool get kosong => nama.trim().isEmpty && jabatan.trim().isEmpty;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RevisitPejabat &&
+      other.nama.trim() == nama.trim() &&
+      other.jabatan.trim() == jabatan.trim();
+
+  @override
+  int get hashCode => Object.hash(nama.trim(), jabatan.trim());
 }
 
 /// Total usaha/keluarga didata dari sekumpulan laporan.

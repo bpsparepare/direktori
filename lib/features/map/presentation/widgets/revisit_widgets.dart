@@ -182,12 +182,20 @@ class RevisitLaporanCard extends StatelessWidget {
   final bool showTanggal;
   final VoidCallback? onTap;
 
+  /// Bila diisi, tampil tombol hapus (dipakai admin di Rekap).
+  final VoidCallback? onDelete;
+
+  /// Bila diisi, tampil tombol edit progres (dipakai admin di Rekap).
+  final VoidCallback? onEdit;
+
   const RevisitLaporanCard({
     super.key,
     required this.laporan,
     this.showPetugas = false,
     this.showTanggal = false,
     this.onTap,
+    this.onDelete,
+    this.onEdit,
   });
 
   @override
@@ -234,6 +242,26 @@ class RevisitLaporanCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   RevisitStatusBadge(status: laporan.status),
+                  if (onEdit != null)
+                    IconButton(
+                      tooltip: 'Edit progres',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        color: Color(0xFF0F4C81),
+                      ),
+                      onPressed: onEdit,
+                    ),
+                  if (onDelete != null)
+                    IconButton(
+                      tooltip: 'Hapus laporan',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(
+                        Icons.delete_outline_rounded,
+                        color: Colors.red,
+                      ),
+                      onPressed: onDelete,
+                    ),
                 ],
               ),
               const SizedBox(height: 8),
