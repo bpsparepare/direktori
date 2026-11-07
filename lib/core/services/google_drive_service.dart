@@ -380,6 +380,105 @@ class GoogleDriveService {
     _throwGoogleApiError(response, action: 'Mengubah akses file');
   }
 
+  /// Membuat Google Doc dari berkas DOCX (Drive mengonversi saat impor;
+  /// tabel, gambar, dan jeda halaman ikut terbawa). Sengaja TIDAK dibagikan
+  /// ke publik: dokumen berisi data pribadi.
+  Future<String> createGoogleDocFromDocx({
+    required String folderId,
+    required String name,
+    required Uint8List docx,
+  }) async {
+    final response = await _authorizedRequest('createGoogleDoc', (token) async {
+      final uri = Uri.parse(
+        'https://www.googleapis.com/upload/drive/v3/files'
+        '?uploadType=multipart'
+        '&supportsAllDrives=true'
+        '&fields=id,webViewLink',
+      );
+      final request = http.MultipartRequest('POST', uri);
+      request.headers['Authorization'] = 'Bearer $token';
+
+      final metadata = jsonEncode({
+        'name': name,
+        'parents': [folderId],
+        'mimeType': 'application/vnd.google-apps.document',
+      });
+
+      request.files.add(
+        http.MultipartFile.fromString(
+          'metadata',
+          metadata,
+          contentType: MediaType('application', 'json', {'charset': 'UTF-8'}),
+        ),
+      );
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          docx,
+          filename: '$name.docx',
+          contentType: MediaType(
+            'application',
+            'vnd.openxmlformats-officedocument.wordprocessingml.document',
+          ),
+        ),
+      );
+
+      final streamed = await request.send();
+      return http.Response.fromStream(streamed);
+    });
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return data['webViewLink']?.toString() ?? '';
+    }
+
+    _throwGoogleApiError(response, action: 'Membuat Google Docs');
+  }
+
+  /// Thumbnail file (mis. foto) dengan sisi terpanjang [ukuran] px. Jauh
+  /// lebih kecil dan cepat daripada file asli, dan sudah diputar sesuai EXIF.
+  /// `null` bila Drive tidak punya thumbnail untuk file ini.
+  Future<Uint8List?> downloadThumbnailBytes(
+    String fileId, {
+    int ukuran = 1000,
+  }) async {
+    final meta = await _authorizedRequest('thumbnailLink', (token) {
+      final uri = Uri.https('www.googleapis.com', '/drive/v3/files/$fileId', {
+        'fields': 'thumbnailLink',
+        'supportsAllDrives': 'true',
+      });
+      return http.get(uri, headers: {'Authorization': 'Bearer $token'});
+    });
+    if (meta.statusCode != 200) return null;
+    final link =
+        (jsonDecode(meta.body) as Map<String, dynamic>)['thumbnailLink']
+            ?.toString();
+    if (link == null || link.isEmpty) return null;
+
+    final berukuran = RegExp(r'=s\d+$').hasMatch(link)
+        ? link.replaceFirst(RegExp(r'=s\d+$'), '=s$ukuran')
+        : '$link=s$ukuran';
+    final response = await http.get(Uri.parse(berukuran));
+    if (response.statusCode != 200) return null;
+    return response.bodyBytes;
+  }
+
+  /// Mengunduh isi file Drive (mis. foto) sebagai byte.
+  Future<Uint8List> downloadFileBytes(String fileId) async {
+    final response = await _authorizedRequest('downloadFile', (token) {
+      final uri = Uri.https(
+        'www.googleapis.com',
+        '/drive/v3/files/$fileId',
+        {'alt': 'media', 'supportsAllDrives': 'true'},
+      );
+      return http.get(uri, headers: {'Authorization': 'Bearer $token'});
+    });
+
+    if (response.statusCode == 200) return response.bodyBytes;
+
+    _throwGoogleApiError(response, action: 'Mengunduh file');
+  }
+
   String _mimeTypeForFileName(String fileName) {
     final lower = fileName.toLowerCase();
     if (lower.endsWith('.pdf')) return 'application/pdf';

@@ -38,8 +38,8 @@ class RevisitContext {
 /// Google Drive (folder `Revisit/<tanggal>`), metadata-nya di Supabase.
 class RevisitService {
   /// Folder induk yang sama dengan menu Dokumentasi.
-  static const String _driveRootFolderId = '1lOWg2mW4px6VsWuBE2if1o4LLYZfggAk';
-  static const String _driveFolderName = 'Revisit';
+  static const String driveRootFolderId = '1lOWg2mW4px6VsWuBE2if1o4LLYZfggAk';
+  static const String driveFolderName = 'Revisit';
 
   /// Ukuran halaman = batas max-rows PostgREST (default Supabase 1000).
   static const int _pageSize = 1000;
@@ -279,6 +279,102 @@ class RevisitService {
     return (response as Map)['id'].toString();
   }
 
+  /// Admin: ubah laporan petugas mana pun (berdasarkan id). SLS, petugas,
+  /// dan hari ke- tetap.
+  Future<void> editLaporanAdmin(
+    String laporanId, {
+    required DateTime tanggal,
+    required String status,
+    required int jumlahDidata,
+    required int jumlahSubmit,
+    required int jumlahBelumDidata,
+    required String catatan,
+  }) async {
+    final response = await _client.rpc(
+      'update_revisit_laporan_admin',
+      params: {
+        'p_id': laporanId,
+        'p_tanggal': revisitDateParam(tanggal),
+        'p_status': status,
+        'p_jumlah_dicek': jumlahDidata,
+        'p_jumlah_submit': jumlahSubmit,
+        'p_jumlah_belum': jumlahBelumDidata,
+        'p_catatan': catatan,
+      },
+    );
+    _throwIfError(response);
+  }
+
+  /// Simpan nama & jabatan pejabat yang ditemui (untuk visum laporan).
+  Future<void> simpanPejabat(
+    String laporanId, {
+    required String nama,
+    required String jabatan,
+  }) async {
+    final response = await _client.rpc(
+      'set_revisit_laporan_pejabat',
+      params: {'p_id': laporanId, 'p_nama': nama, 'p_jabatan': jabatan},
+    );
+    _throwIfError(response);
+  }
+
+  /// Nama & jabatan pejabat per id laporan (yang belum diisi tidak ada).
+  Future<Map<String, RevisitPejabat>> fetchPejabat(
+    List<String> laporanIds,
+  ) async {
+    final hasil = <String, RevisitPejabat>{};
+    for (var i = 0; i < laporanIds.length; i += 500) {
+      final rows = await _client.rpc(
+        'get_revisit_laporan_pejabat',
+        params: {'p_ids': laporanIds.skip(i).take(500).toList()},
+      );
+      if (rows is! List) continue;
+      for (final r in rows.whereType<Map>()) {
+        final p = RevisitPejabat(
+          nama: (r['pejabat_nama'] ?? '').toString(),
+          jabatan: (r['pejabat_jabatan'] ?? '').toString(),
+        );
+        if (!p.kosong) hasil[r['id'].toString()] = p;
+      }
+    }
+    return hasil;
+  }
+
+  /// Simpan nama jalan yang disisir & jumlah bangunan (untuk laporan).
+  Future<void> simpanPenyisiran(
+    String laporanId, {
+    required String jalan,
+    required int? bangunan,
+  }) async {
+    final response = await _client.rpc(
+      'set_revisit_laporan_penyisiran',
+      params: {'p_id': laporanId, 'p_jalan': jalan, 'p_bangunan': bangunan},
+    );
+    _throwIfError(response);
+  }
+
+  /// Nama jalan & jumlah bangunan per id laporan (yang belum diisi tidak ada).
+  Future<Map<String, RevisitPenyisiran>> fetchPenyisiran(
+    List<String> laporanIds,
+  ) async {
+    final hasil = <String, RevisitPenyisiran>{};
+    for (var i = 0; i < laporanIds.length; i += 500) {
+      final rows = await _client.rpc(
+        'get_revisit_laporan_penyisiran',
+        params: {'p_ids': laporanIds.skip(i).take(500).toList()},
+      );
+      if (rows is! List) continue;
+      for (final r in rows.whereType<Map>()) {
+        final p = RevisitPenyisiran(
+          jalan: (r['penyisiran_jalan'] ?? '').toString(),
+          bangunan: (r['jumlah_bangunan'] as num?)?.toInt(),
+        );
+        if (!p.kosong) hasil[r['id'].toString()] = p;
+      }
+    }
+    return hasil;
+  }
+
   Future<void> hapusLaporan(RevisitLaporan laporan) async {
     for (final foto in laporan.foto) {
       await _deleteDriveFileQuietly(foto.driveFileId);
@@ -299,8 +395,8 @@ class RevisitService {
     required String extension,
   }) async {
     final revisitFolder = await _driveService.ensureFolderInParent(
-      _driveRootFolderId,
-      _driveFolderName,
+      driveRootFolderId,
+      driveFolderName,
     );
     final dateFolder = await _driveService.ensureFolderInParent(
       revisitFolder,
